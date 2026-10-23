@@ -1,0 +1,25 @@
+{
+  "data": {
+    "user": {
+      "projectsV2": {
+        "pageInfo": { "hasNextPage": false, "endCursor": "user_end" },
+        "nodes": [
+          {
+            "id": "PVT_kwHOAGoDWs4BoZ5m",
+            "number": 4,
+            "title": "Orca Task Telemetry — Development Roadmap",
+            "url": "https://github.com/users/hangndat/projects/4",
+            "closed": false
+          },
+          {
+            "id": "PVT_kwHOAGoDWs4BnWK7",
+            "number": 2,
+            "title": "Side project board",
+            "url": "https://github.com/users/hangndat/projects/2",
+            "closed": true
+          }
+        ]
+      }
+    }
+  }
+}

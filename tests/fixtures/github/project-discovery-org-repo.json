@@ -1,0 +1,14 @@
+{
+  "data": {
+    "repository": {
+      "owner": {
+        "__typename": "Organization",
+        "login": "acme-corp"
+      },
+      "projectsV2": {
+        "pageInfo": { "hasNextPage": false, "endCursor": "repo_end" },
+        "nodes": []
+      }
+    }
+  }
+}

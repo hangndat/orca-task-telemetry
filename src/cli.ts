@@ -12,7 +12,7 @@ import { checkNodeVersion } from './node-version.js';
 
 const INTERNAL_TEST_COMMAND = '__internal_test_unexpected_error';
 
-export function runCli(argv: string[]): number {
+export async function runCli(argv: string[]): Promise<number> {
   const nodeCheck = checkNodeVersion(process.version);
   if (!nodeCheck.ok) {
     const err = nodeVersionError(nodeCheck.message);
@@ -79,7 +79,7 @@ export function runCli(argv: string[]): number {
   }
 
   try {
-    const result = routeCommand(command, rest, { json, wantsHelp });
+    const result = await routeCommand(command, rest, { json, wantsHelp });
     return finishRoute(result, json);
   } catch (err) {
     if (err instanceof CliError) {
@@ -90,13 +90,15 @@ export function runCli(argv: string[]): number {
   }
 }
 
-function main(argv: string[]): number {
+async function main(argv: string[]): Promise<number> {
   try {
-    return runCli(argv);
+    return await runCli(argv);
   } catch (err) {
     const json = argv.includes('--json');
     return emitUnexpectedError(err, json);
   }
 }
 
-process.exitCode = main(process.argv.slice(2));
+void main(process.argv.slice(2)).then((code) => {
+  process.exitCode = code;
+});

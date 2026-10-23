@@ -2,18 +2,19 @@ import { runDoctor, collectDoctorData } from '../doctor.js';
 import { notImplemented, usageError, unknownCommand } from '../errors.js';
 import { commandHelpText } from './help.js';
 import { writeJsonSuccess } from './output.js';
+import { runProjects } from './projects.js';
 
-const STUB_COMMANDS = new Set(['init', 'projects', 'collect', 'link']);
+const STUB_COMMANDS = new Set(['init', 'collect', 'link']);
 
 const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'project', 'unmapped']);
 
 export type RouteResult = { kind: 'ok'; data?: unknown } | { kind: 'text'; write: () => void };
 
-export function routeCommand(
+export async function routeCommand(
   command: string,
   restPositionals: string[],
-  options: { json: boolean; wantsHelp: boolean },
-): RouteResult {
+  options: { json: boolean; wantsHelp: boolean; cwd?: string },
+): Promise<RouteResult> {
   const { json, wantsHelp } = options;
 
   if (wantsHelp) {
@@ -35,6 +36,13 @@ export function routeCommand(
         runDoctor();
       },
     };
+  }
+
+  if (command === 'projects') {
+    return runProjects(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
   }
 
   if (STUB_COMMANDS.has(command)) {

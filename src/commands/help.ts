@@ -1,11 +1,11 @@
 const VERSION = '0.1.0';
 
-const IMPLEMENTED = new Set(['doctor']);
+const IMPLEMENTED = new Set(['doctor', 'projects']);
 
 const TOP_LEVEL = [
   { name: 'doctor', summary: 'Check local tools (implemented)' },
   { name: 'init', summary: 'Initialize telemetry profile (not implemented)' },
-  { name: 'projects', summary: 'List GitHub Projects (not implemented)' },
+  { name: 'projects', summary: 'List GitHub Projects for the current repository' },
   { name: 'collect', summary: 'Collect Orca/CodeBurn usage (not implemented)' },
   { name: 'link', summary: 'Link a session to an issue (not implemented)' },
   { name: 'report', summary: 'Usage reports (not implemented)' },
@@ -55,6 +55,17 @@ export function commandHelpText(command: string): string {
       lines.push(`  ${sub.name.padEnd(22)} ${sub.summary}`);
     }
     return `${lines.join('\n')}\n`;
+  }
+  if (command === 'projects') {
+    return [
+      'orca-telemetry projects — list GitHub Projects for the current repository',
+      '',
+      'Usage:',
+      '  orca-telemetry projects [--remote <name>] [--json]',
+      '',
+      'Resolves the Git repository in the current directory, verifies the GitHub',
+      'repository with gh, and lists Projects V2 linked to the repo and owner.',
+    ].join('\n') + '\n';
   }
   if (command === 'doctor') {
     return [

@@ -1,0 +1,18 @@
+{
+  "data": {
+    "organization": {
+      "projectsV2": {
+        "pageInfo": { "hasNextPage": false, "endCursor": "org_end" },
+        "nodes": [
+          {
+            "id": "PVT_org_closed",
+            "number": 9,
+            "title": "Archived roadmap",
+            "url": "https://github.com/orgs/acme-corp/projects/9",
+            "closed": true
+          }
+        ]
+      }
+    }
+  }
+}
