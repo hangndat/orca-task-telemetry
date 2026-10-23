@@ -1,0 +1,59 @@
+{
+  "id": "f7d2098c-97d1-4305-a739-67a56b1b8b8c",
+  "ok": true,
+  "result": {
+    "worktree": {
+      "id": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326::<HOME>/orca/workspaces/orca-task-telemetry/Foundation",
+      "identity": {
+        "key": "wt2:local:ae2ad861-4c17-44b7-b3c3-c9930cba919d",
+        "executionHostId": "local",
+        "instanceId": "ae2ad861-4c17-44b7-b3c3-c9930cba919d"
+      },
+      "instanceId": "ae2ad861-4c17-44b7-b3c3-c9930cba919d",
+      "repoId": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326",
+      "projectId": "github:hangndat/orca-task-telemetry",
+      "hostId": "local",
+      "projectHostSetupId": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326",
+      "creatorProvenance": {
+        "kind": "host"
+      },
+      "path": "<HOME>/orca/workspaces/orca-task-telemetry/Foundation",
+      "head": "8b6e58a9d43c4f6e6fd381afc3c46b0452894cfc",
+      "branch": "refs/heads/hangndat/Foundation",
+      "isBare": false,
+      "isMainWorktree": false,
+      "displayName": "Foundation",
+      "displayNameMode": "fixed",
+      "comment": "",
+      "linkedIssue": null,
+      "linkedPR": null,
+      "linkedLinearIssue": null,
+      "linkedLinearIssueWorkspaceId": null,
+      "linkedLinearIssueOrganizationUrlKey": null,
+      "linkedGitLabMR": null,
+      "linkedGitLabIssue": null,
+      "linkedBitbucketPR": null,
+      "linkedAzureDevOpsPR": null,
+      "linkedGiteaPR": null,
+      "linkedWorkItem": null,
+      "linkedItems": [],
+      "linkedTaskSourceContext": null,
+      "isArchived": false,
+      "isUnread": false,
+      "isPinned": false,
+      "sortOrder": 1792767297380,
+      "lastActivityAt": 1792767304251,
+      "createdAt": 1792762834015,
+      "createdWithAgent": "claude",
+      "baseRef": "refs/remotes/origin/main",
+      "workspaceStatus": "in-progress",
+      "kind": "worktree",
+      "name": "Foundation",
+      "repo": "orca-task-telemetry"
+    },
+    "references": []
+  },
+  "_meta": {
+    "runtimeId": "9d821662-c628-49db-a168-99fa7b7636fc"
+  }
+}

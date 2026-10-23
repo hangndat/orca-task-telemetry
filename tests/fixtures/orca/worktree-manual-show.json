@@ -1,0 +1,59 @@
+{
+  "id": "65e0231d-987d-4ae6-9042-6e5d75c2f35f",
+  "ok": true,
+  "result": {
+    "worktree": {
+      "id": "909e450c-287a-413f-ad47-10304625422c::<HOME>/SideProject/ticket-solution",
+      "identity": {
+        "key": "wt2:local:4a1a505b-4616-4958-91e3-3a9d4236e694",
+        "executionHostId": "local",
+        "instanceId": "4a1a505b-4616-4958-91e3-3a9d4236e694"
+      },
+      "instanceId": "4a1a505b-4616-4958-91e3-3a9d4236e694",
+      "repoId": "909e450c-287a-413f-ad47-10304625422c",
+      "projectId": "github:hangndat/ticket-solution",
+      "hostId": "local",
+      "projectHostSetupId": "909e450c-287a-413f-ad47-10304625422c",
+      "path": "<HOME>/SideProject/ticket-solution",
+      "head": "b2faa48a1ce443c8fc6c849cb74a06a57f8b0c37",
+      "branch": "refs/heads/main",
+      "isBare": false,
+      "isMainWorktree": true,
+      "displayName": "main",
+      "displayNameMode": "automatic",
+      "comment": "",
+      "linkedIssue": null,
+      "linkedPR": null,
+      "linkedLinearIssue": null,
+      "linkedLinearIssueWorkspaceId": null,
+      "linkedLinearIssueOrganizationUrlKey": null,
+      "linkedGitLabMR": null,
+      "linkedGitLabIssue": null,
+      "linkedBitbucketPR": null,
+      "linkedAzureDevOpsPR": null,
+      "linkedGiteaPR": null,
+      "linkedWorkItem": null,
+      "linkedTaskSourceContext": null,
+      "isArchived": false,
+      "isUnread": false,
+      "isPinned": false,
+      "sortOrder": 1792767296380,
+      "lastActivityAt": 1792763185085,
+      "workspaceStatus": "in-progress",
+      "parentWorktreeId": null,
+      "childWorktreeIds": [],
+      "lineage": null,
+      "git": {
+        "path": "<HOME>/SideProject/ticket-solution",
+        "head": "b2faa48a1ce443c8fc6c849cb74a06a57f8b0c37",
+        "branch": "refs/heads/main",
+        "isBare": false,
+        "isMainWorktree": true
+      },
+      "linkedItems": []
+    }
+  },
+  "_meta": {
+    "runtimeId": "9d821662-c628-49db-a168-99fa7b7636fc"
+  }
+}

@@ -1,0 +1,186 @@
+{
+  "id": "6828414b-27a1-4192-8ccf-bcc9c35131d5",
+  "ok": true,
+  "result": {
+    "dispatch": {
+      "id": "ctx_005f2513ac06",
+      "runId": "run_1a060327fe49",
+      "taskId": "task_6be81dd44e83",
+      "task_id": "task_6be81dd44e83",
+      "contractVersion": 1,
+      "assigneeHandle": "term_ae8bb970-3623-4db9-ae44-3f04a6484f6f",
+      "assigneePaneKey": "bc4910dd-afcd-4c9c-863c-83ec46403a0b:4a19954f-6341-4efc-a1e3-225b8021d5a4",
+      "processIncarnation": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326::<HOME>/orca/workspaces/orca-task-telemetry/Foundation@@161803f0:18f16a59-8d29-4bf2-90d8-b774907ef80d",
+      "capabilityRevokedAt": "2026-10-23T14:54:19.099Z",
+      "retryOfDispatchId": null,
+      "creatorDispatchId": null,
+      "hostScope": {
+        "kind": "local",
+        "hostId": "local"
+      },
+      "status": "completed",
+      "failureCount": 0,
+      "lastFailure": null,
+      "terminationReason": null,
+      "depth": 1,
+      "dispatchedAt": "2026-10-23 14:50:59",
+      "completedAt": "2026-10-23T14:54:19.099Z",
+      "createdAt": "2026-10-23 14:50:59",
+      "lastHeartbeatAt": null
+    },
+    "worker": {
+      "dispatchId": "ctx_005f2513ac06",
+      "runtimeEpoch": "9d821662-c628-49db-a168-99fa7b7636fc",
+      "state": "succeeded",
+      "stage": "settled",
+      "worktreeId": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326::<HOME>/orca/workspaces/orca-task-telemetry/Foundation",
+      "agentTerminalHandle": "term_ae8bb970-3623-4db9-ae44-3f04a6484f6f",
+      "setupState": "not_applicable",
+      "effects": [
+        {
+          "kind": "worktree",
+          "action": "reused",
+          "id": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326::<HOME>/orca/workspaces/orca-task-telemetry/Foundation"
+        },
+        {
+          "kind": "setup",
+          "action": "not_applicable",
+          "state": "not_applicable"
+        },
+        {
+          "kind": "terminal",
+          "role": "agent",
+          "action": "created",
+          "id": "term_ae8bb970-3623-4db9-ae44-3f04a6484f6f",
+          "surface": "visible"
+        },
+        {
+          "kind": "dispatch_input",
+          "role": "agent",
+          "id": "term_ae8bb970-3623-4db9-ae44-3f04a6484f6f",
+          "state": "accepted"
+        }
+      ],
+      "residualResources": [
+        {
+          "kind": "terminal",
+          "role": "agent",
+          "action": "created",
+          "id": "term_ae8bb970-3623-4db9-ae44-3f04a6484f6f",
+          "surface": "visible"
+        }
+      ],
+      "startOptions": {
+        "worktree": "path:<HOME>/orca/workspaces/orca-task-telemetry/Foundation",
+        "mode": {
+          "mode": "terminal",
+          "preferred": "structured",
+          "reason": "agent_without_structured_session",
+          "detail": "Your default is a structured chat session, but this agent has no structured session; started a terminal agent worker instead."
+        },
+        "resolvedWorktreeId": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326::<HOME>/orca/workspaces/orca-task-telemetry/Foundation",
+        "name": null,
+        "repo": null,
+        "baseBranch": null,
+        "terminal": null,
+        "agent": "cursor",
+        "launch": {
+          "requested": {
+            "agent": "cursor",
+            "model": null,
+            "effort": null
+          },
+          "effective": {
+            "agent": "cursor",
+            "model": null,
+            "effort": null
+          }
+        },
+        "timeoutMs": 60000,
+        "setup": "not_applicable",
+        "setupSource": "existing_worktree"
+      },
+      "lastError": null,
+      "createdAt": "2026-10-23 14:50:59",
+      "updatedAt": "2026-10-23T14:54:19.099Z"
+    },
+    "projection": {
+      "id": "ctx_005f2513ac06",
+      "dispatchId": "ctx_005f2513ac06",
+      "taskId": "task_6be81dd44e83",
+      "runId": "run_1a060327fe49",
+      "role": "worker",
+      "parent": null,
+      "provider": null,
+      "host": {
+        "kind": "local",
+        "id": "local"
+      },
+      "workspace": {
+        "id": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326::<HOME>/orca/workspaces/orca-task-telemetry/Foundation",
+        "kind": "folder_or_worktree"
+      },
+      "stage": {
+        "worker": "succeeded",
+        "dispatch": "completed",
+        "detail": "settled",
+        "activity": "unknown"
+      },
+      "outcome": "succeeded",
+      "liveness": {
+        "verdict": "unverifiable",
+        "reason": "missing_status"
+      },
+      "evidence": {
+        "durable": true,
+        "liveStatus": "unavailable",
+        "lastObservedAt": null
+      },
+      "resource": {
+        "state": "absent",
+        "reason": "not_materialized"
+      },
+      "nextAction": {
+        "kind": "none",
+        "argv": []
+      },
+      "attention": {
+        "categories": [
+          "unverifiable",
+          "root_completion"
+        ],
+        "requiresAction": true
+      }
+    },
+    "terminal": {
+      "handle": "term_ae8bb970-3623-4db9-ae44-3f04a6484f6f",
+      "ptyId": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326::<HOME>/orca/workspaces/orca-task-telemetry/Foundation@@161803f0",
+      "incarnationId": "18f16a59-8d29-4bf2-90d8-b774907ef80d",
+      "orphaned": false,
+      "worktreeId": "80511ff3-b702-48d3-a1bf-bf9b1c5d0326::<HOME>/orca/workspaces/orca-task-telemetry/Foundation",
+      "worktreePath": "<HOME>/orca/workspaces/orca-task-telemetry/Foundation",
+      "branch": "refs/heads/hangndat/Foundation",
+      "tabId": "bc4910dd-afcd-4c9c-863c-83ec46403a0b",
+      "leafId": "4a19954f-6341-4efc-a1e3-225b8021d5a4",
+      "title": "\u2819 Cursor Agent",
+      "connected": true,
+      "writable": true,
+      "lastOutputAt": 1792767332928,
+      "preview": "<REDACTED>",
+      "executionHostId": "local",
+      "agentIdentity": "cursor",
+      "paneRuntimeId": 1,
+      "rendererGraphEpoch": 0,
+      "agentWait": null
+    },
+    "observation": {
+      "status": "live",
+      "exactWorker": true,
+      "agentWait": null
+    },
+    "terminalResource": null
+  },
+  "_meta": {
+    "runtimeId": "9d821662-c628-49db-a168-99fa7b7636fc"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "3827dd79-66d6-44c4-91b2-c0903d051428",
+  "ok": true,
+  "result": {
+    "run": {
+      "id": "run_1a060327fe49",
+      "objective": "Tri\u1ec3n khai MVP orca-task-telemetry theo GitHub Project #4 (hangndat/orca-task-telemetry); coordinator ch\u1ec9 \u0111i\u1ec1u ph\u1ed1i; m\u1ed7i\u2026",
+      "coordinator_handle": null,
+      "consumer_generation": 1,
+      "legacy": 0,
+      "created_at": "2026-10-23T14:38:46Z",
+      "updated_at": "2026-10-23T14:38:46Z"
+    }
+  },
+  "_meta": {
+    "runtimeId": "9d821662-c628-49db-a168-99fa7b7636fc"
+  }
+}

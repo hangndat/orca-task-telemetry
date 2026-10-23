@@ -1,0 +1,17 @@
+{
+  "id": "a8fccfe9-6b63-428a-8689-ff807fe958f3",
+  "ok": true,
+  "result": {
+    "kind": "reference_matches",
+    "query": "https://github.com/hangndat/orca-task-telemetry/issues/64",
+    "scope": {
+      "source": "stored-metadata",
+      "includeArchived": false
+    },
+    "truncated": false,
+    "matches": []
+  },
+  "_meta": {
+    "runtimeId": "9d821662-c628-49db-a168-99fa7b7636fc"
+  }
+}

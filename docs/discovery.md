@@ -367,3 +367,126 @@ Trong cùng query `ProjectItems`, field `rateLimit` trên response GraphQL (khô
 | `organization.projectsV2` | Chưa chạy live |
 | `REDACTED` content | Chưa quan sát |
 | `read:project` vs scope `project` trên token | Hiển thị OAuth khác message lỗi khi thiếu quyền |
+
+## Orca CLI
+
+### Cài đặt và phạm vi (AC1)
+
+| Mục | Giá trị |
+| --- | --- |
+| Binary | `/Applications/Orca.app/Contents/Resources/bin/orca` |
+| Phiên bản live | **1.4.237** (`orca --version`, `status --json` → `runtime.appVersion`) |
+| Mục tiêu MVP | Metadata **chỉ-đọc** cho Run / Task / Dispatch / supervised worker / worktree / reference |
+
+Fixture: `tests/fixtures/orca/` (README + JSON đã redact).
+
+### Bảng lệnh — read vs mutate (theo `--help`, AC1)
+
+| Lệnh | `--json` | Phân loại | Ghi chú collector |
+| --- | --- | --- | --- |
+| `orca --version` | — | read | Phiên bản CLI |
+| `orca status` | có | read | App/runtime readiness; `caller.orcaSessionId` khi agent chạy trong Orca session |
+| `orca agent-context` | có | read | Schema registry; **không cần app chạy** |
+| `orca worktree list` | có | read | Liệt kê worktree Orca-managed (đa host) |
+| `orca worktree show` | có | read | Chi tiết một worktree (`--worktree` selector) |
+| `orca worktree current` | có | read | Worktree cho cwd hiện tại |
+| `orca worktree ps` | có | read | Tóm tắt orchestration theo worktree |
+| `orca worktree create` / `set` / `rm` | — | **mutate** | Không chạy |
+| `orca repo list` | có | read | Repo đăng ký trong Orca |
+| `orca repo show` | có | read | Metadata một repo |
+| `orca repo add` / `set` / `set-base-ref` / `search-refs` | một số có `--json` | add/set = **mutate**; `search-refs` | **Chưa xác minh** `search-refs` — không chạy |
+| `orca project list` | có | read | Durable projects |
+| `orca project setups` / `setup-*` | — | **mutate** | Không chạy |
+| `orca reference list` | có | read | Issue/PR gắn workspace |
+| `orca reference find` | có | read | Tìm workspace theo URL issue (full `https://…`) |
+| `orca reference add` / `remove` | — | **mutate** | Không chạy |
+| `orca orchestration run-list` | có | read | Danh sách Run |
+| `orca orchestration run-show` | có | read | `--id <run_id>` (không dùng positional) |
+| `orca orchestration run-current` | có | read | Run gắn coordinator terminal |
+| `orca orchestration task-list` | có | read | Cần `--run <run_id>` khi terminal không bind Run; `--brief` cắt spec |
+| `orca orchestration worker-list` | có | read | Accounting terminal; filter `--run`, `--terminal-state` |
+| `orca orchestration worker-show` | có | read | `--dispatch <dispatch_id>` |
+| `orca orchestration dispatch-show` | có | read | `--task <task_id>`; **không** dùng `--preamble` trong collector (tránh spec đầy đủ) |
+| `orca orchestration send` / `check` / `reply` / `ask` | — | **mutate** / mailbox | **Cấm** collector (kể cả `check`) |
+| `orca orchestration worker-start` / `stop` / `abandon` / `release` / `retain` / `worker-read` | — | **mutate** / IO | Không chạy |
+| `orca orchestration task-create` / `task-update` / `dispatch` | — | **mutate** | Không chạy |
+| `orca orchestration run-create` / `run-use` / `reset` | — | **mutate** | Không chạy |
+| `orca orchestration gate-list` | có | **chưa xác minh** | Help chỉ nói “List” — worker không chạy |
+| `orca orchestration inbox` | có | **chưa xác minh** | Help “Show messages” — worker không chạy |
+
+### JSON mẫu (AC2)
+
+| Artifact | Fixture | Live lệnh |
+| --- | --- | --- |
+| Run supervised | `run-show.json` | `run-show --id run_1a060327fe49` |
+| Task (spec cắt) | `task-supervised-brief.json` | `task-list --run run_1a060327fe49 --brief` |
+| Dispatch settled | `dispatch-show.json`, `worker-show-settled.json` | `dispatch-show --task …`; `worker-show --dispatch ctx_005f2513ac06` |
+| Worker accounting | `worker-list-snippet.json` | `worker-list --run run_1a060327fe49` |
+| Worktree thủ công | `worktree-manual-show.json`, `worktree-manual-ps-row.json` | `worktree show` + `worktree ps` trên `ticket-solution` |
+| Reference / issue link | `reference-list-empty.json`, `reference-find-no-match.json` | Foundation chưa gắn reference; find #64 trả `matches: []` |
+| Runtime | `status-trimmed.json`, `agent-context-snippets.json` | `status --json`; mẫu từ `agent-context --json` |
+
+### ID ổn định và liên kết (AC3)
+
+| ID / trường | Mẫu / format | Nullable | Liên kết |
+| --- | --- | --- | --- |
+| `run_id` / `runId` | `run_<hex>` | Không trên Run | Cha của tasks/dispatches |
+| `task_id` / `taskId` | `task_<hex>` | Không trên Task | `dispatch-show`, `worker-show` |
+| `dispatch_id` / `dispatchId` | `ctx_<hex>` | Không trên Dispatch | `worker-show`, `worker-list` |
+| `agentTerminalHandle` / `assignee_handle` | `term_<uuid>` | Có khi chưa gán terminal | Cùng dispatch |
+| `worktreeId` / `workspace.id` | `{repoId}::{absolutePath}` | — | `worker.resource.worktreeId` ↔ `terminal.worktreeId` |
+| `repoId` | UUID | Không trên worktree row | Tiền tố của `worktreeId` |
+| `hostId` / `executionHostId` | `local` (mẫu) | — | `hostScope.kind` |
+| `runtimeId` | UUID trong `_meta` / `runtimeEpoch` | Có khi runtime unreachable | Phiên runtime Orca |
+| `process_incarnation` / `processIncarnation` | `worktreeId@@…:incarnationUuid` | Có | Gắn terminal/process với worktree |
+| `creator_orca_session_id` | `claude_<uuid>` (Orca coordinator session) | Có trên worker assignee | **Không** phải Claude Code/Codex usage `sessionId` |
+| `projection.provider` | `{ id: "cursor", model: null }` hoặc `null` | Thường null khi settled | Provider IDE, không UUID session |
+| `terminal.agentIdentity` | `"cursor"` | Có | Agent product, không session UUID |
+
+**Provider session ID (Claude/Codex UUID):** trên các lệnh read-only đã chạy, **không** thấy field export Claude Code / Codex `sessionId`. `worker-show` settled: `projection.provider: null`, `setup.reason: agent_without_structured_session`. **Gap** cho MVP parser nếu cần map usage CodeBurn ↔ Orca dispatch.
+
+### Runtime không khả dụng (AC4)
+
+| Nguồn | Hành vi |
+| --- | --- |
+| `agent-context --help` | “Pure local read … **works without a running Orca app**” |
+| `status --json` (live) | `app.running`, `runtime.reachable`, `runtime.state` (`ready` khi app mở) |
+| `orchestration task-list` không bind Run | Lỗi `run_required` (“No Run is bound…”) — **không** tắt app để thử |
+
+**Gap:** message/exit khi Orca desktop **tắt hẳn** chưa quan sát trên worker (theo task). Collector nên coi `status --json` + `runtime.reachable` là gate trước orchestration queries.
+
+### Allowlist đề xuất cho collector (AC5 — T18)
+
+Chỉ các argv sau (cùng binary `orca`, tùy chọn `--json`, `--pairing-code` / `--environment` khi cần remote):
+
+1. `orca --version`
+2. `orca status` `[--json]`
+3. `orca agent-context` `[--json]`
+4. `orca worktree list` `[--json]` `[--repo …]` `[--limit …]`
+5. `orca worktree show --worktree <selector>` `[--json]`
+6. `orca worktree current` `[--json]`
+7. `orca worktree ps` `[--json]` `[--limit …]`
+8. `orca repo list` `[--json]`
+9. `orca repo show --repo <selector>` `[--json]`
+10. `orca project list` `[--json]`
+11. `orca reference list --worktree <selector>` `[--json]`
+12. `orca reference find --query <https-url>` `[--json]` `[--worktree|--repo …]` `[--limit …]`
+13. `orca orchestration run-list` `[--json]` `[--limit …]` `[--cursor …]`
+14. `orca orchestration run-show --id <run_id>` `[--json]`
+15. `orca orchestration run-current` `[--json]`
+16. `orca orchestration task-list --run <run_id>` `[--json]` `[--brief]` `[--status …]`
+17. `orca orchestration worker-list` `[--json]` `[--run <run_id>]` `[--terminal-state …]` `[--limit …]`
+18. `orca orchestration worker-show --dispatch <dispatch_id>` `[--json]`
+19. `orca orchestration dispatch-show --task <task_id>` `[--json]` (không `--preamble`)
+
+**Cấm tuyệt đối:** mọi subcommand không có trong danh sách; đặc biệt `orchestration send|check|reply|ask`, `worker-start|stop|…`, `task-create|update`, `dispatch`, `run-create|run-use|reset`, `worktree create|set|rm`, `reference add|remove`, `repo add|set`, `gate-*`, `inbox`, `terminal *`, `agent launch`, v.v.
+
+### Gaps (AC5)
+
+| Gap | Ghi chú |
+| --- | --- |
+| Provider usage `sessionId` | Không có trong JSON read-only đã thử |
+| `gate-list`, `inbox`, `repo search-refs` | Chưa phân loại/chạy |
+| Runtime app stopped | Chưa quan sát lỗi cụ thể |
+| `reference find` bare issue key | Help: cần full URL; `#64` shorthand không hợp lệ |
+| Task `spec` đầy đủ | Chỉ qua `task-list` không `--brief` — tránh trong collector |

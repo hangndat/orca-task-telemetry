@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "commandCount": 287,
+  "commands": [
+    {
+      "command": "status",
+      "path": [
+        "status"
+      ],
+      "aliases": [],
+      "argumentMode": "parsed",
+      "summary": "Show app/runtime/graph readiness",
+      "usage": "orca status [--json]",
+      "flags": [
+        "help",
+        "json",
+        "pairing-code",
+        "environment"
+      ],
+      "positionalArgs": [],
+      "examples": [
+        "orca status",
+        "orca status --json"
+      ],
+      "notes": [
+        "caller.orcaSessionId is this agent's Orca session ID, as Orca resolved it, when the agent runs as an Orca session; otherwise caller is omitted."
+      ]
+    },
+    {
+      "command": "orchestration worker-show",
+      "path": [
+        "orchestration",
+        "worker-show"
+      ],
+      "aliases": [],
+      "argumentMode": "parsed",
+      "summary": "Inspect one supervised worker Dispatch",
+      "usage": "orca orchestration worker-show --dispatch <dispatch_id> [--json]",
+      "flags": [
+        "help",
+        "json",
+        "pairing-code",
+        "environment",
+        "dispatch"
+      ],
+      "positionalArgs": [],
+      "examples": [],
+      "notes": [
+        "A Dispatch created by orchestration dispatch is shown as unsupervised and reports the exact adopted terminal when its identity is still provable.",
+        "observation.agentWait names a worker parked on a prompt only a human can answer, with the evidence that proved it (hook, prompt-text, or title). Null means Orca looked and found no wait. An absent field means it never looked \u2014 an older host, an unverifiable worker identity, an unreadable pane, or an agent probe that did not answer in time \u2014 and never means the worker is not waiting. A waiting worker is healthy, not failed."
+      ]
+    },
+    {
+      "command": "orchestration dispatch-show",
+      "path": [
+        "orchestration",
+        "dispatch-show"
+      ],
+      "aliases": [],
+      "argumentMode": "parsed",
+      "summary": "Show dispatch context for a task",
+      "usage": "orca orchestration dispatch-show --task <task_id> [--preamble] [--from <handle>] [--json]",
+      "flags": [
+        "help",
+        "json",
+        "pairing-code",
+        "environment",
+        "task",
+        "preamble",
+        "from"
+      ],
+      "positionalArgs": [],
+      "examples": [],
+      "notes": []
+    },
+    {
+      "command": "worktree list",
+      "path": [
+        "worktree",
+        "list"
+      ],
+      "aliases": [],
+      "argumentMode": "parsed",
+      "summary": "List Orca-managed worktrees",
+      "usage": "orca worktree list [--repo <selector>] [--limit <n>] [--json]",
+      "flags": [
+        "help",
+        "json",
+        "pairing-code",
+        "environment",
+        "repo",
+        "limit"
+      ],
+      "positionalArgs": [],
+      "examples": [],
+      "notes": [
+        "Each row carries the execution host that owns it (`host=`), and the trailing `scope:` line names every host the page covers plus the ones it does not.",
+        "A host named under `not covered` may still have workspaces; an empty answer for it is not evidence that it has none. A paired server is annotated with the `--environment` flag that reaches it; this machine and its SSH targets are reached through the same runtime, so no flag selects them.",
+        "The row cap is shared across hosts, so a host whose rows sort last is not starved out of the page."
+      ]
+    }
+  ]
+}
