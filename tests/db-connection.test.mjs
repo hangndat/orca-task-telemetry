@@ -39,11 +39,11 @@ test('T26: fresh database migrates and reopen is no-op', () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('T26: WAL mode and foreign keys enabled', () => {
+test('T26: DELETE journal mode and foreign keys enabled', () => {
   const { dir, dbPath } = tempDbPath();
   const handle = openTelemetryDatabase({ dbPath });
   const journal = handle.db.prepare('PRAGMA journal_mode').get().journal_mode;
-  assert.equal(journal.toLowerCase(), 'wal');
+  assert.equal(journal.toLowerCase(), 'delete');
   const fk = handle.db.prepare('PRAGMA foreign_keys').get().foreign_keys;
   assert.equal(fk, 1);
   handle.close();

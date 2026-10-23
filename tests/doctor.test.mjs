@@ -118,6 +118,7 @@ function runNodeReadonlySmoke(nodeSpecifier) {
   }).trim();
 }
 
-test('read-only snapshot helper on Node 24.0.0', () => {
-  assert.equal(runNodeReadonlySmoke('node@24.0.0'), 'ok');
+test('read-only native helper on Node 24.0.0', () => {
+  const out = runNodeReadonlySmoke('node@24.0.0');
+  assert.equal(out.split('\n').pop(), 'ok');
 });

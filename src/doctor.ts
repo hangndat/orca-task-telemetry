@@ -8,6 +8,7 @@ import { createDefaultPathEnv, resolveAppPaths } from './paths.js';
 import { getProfile } from './profiles.js';
 import { readUserVersionReadOnly } from './db/read-only.js';
 import { SUPPORTED_SCHEMA_VERSION } from './db/migrate.js';
+import { CliError } from './errors.js';
 import type { ResolveRepositoryOptions } from './repo.js';
 import { resolveRepository } from './repo.js';
 
@@ -242,32 +243,48 @@ export async function runDoctorChecks(
   }
   if (dbPath) {
     const reader = deps.readDbUserVersion ?? readUserVersionReadOnly;
-    const version = await Promise.resolve(reader(dbPath));
-    if (version === null) {
-      checks.push({
-        id: 'database',
-        status: 'warn',
-        message: 'Telemetry database does not exist yet.',
-        remedy: 'Run orca-telemetry collect after init.',
-      });
-    } else if (version > SUPPORTED_SCHEMA_VERSION) {
+    try {
+      const version = await Promise.resolve(reader(dbPath));
+      if (version === null) {
+        checks.push({
+          id: 'database',
+          status: 'warn',
+          message: 'Telemetry database does not exist yet.',
+          remedy: 'Run orca-telemetry collect after init.',
+        });
+      } else if (version > SUPPORTED_SCHEMA_VERSION) {
+        checks.push({
+          id: 'database',
+          status: 'fail',
+          message: `Database schema v${version} is newer than supported v${SUPPORTED_SCHEMA_VERSION}.`,
+          remedy: 'Upgrade orca-task-telemetry to a newer release.',
+        });
+      } else if (version < SUPPORTED_SCHEMA_VERSION) {
+        checks.push({
+          id: 'database',
+          status: 'warn',
+          message: `Database schema v${version} will migrate on next collect.`,
+          remedy: 'Run orca-telemetry collect to apply migrations.',
+        });
+      } else {
+        checks.push({
+          id: 'database',
+          status: 'pass',
+          message: `Database schema version ${version} is current.`,
+        });
+      }
+    } catch (err) {
+      const message =
+        err instanceof CliError ? err.message : 'Could not read telemetry database.';
+      const remedy =
+        err instanceof CliError && err.hint
+          ? err.hint
+          : 'Check database permissions and retry.';
       checks.push({
         id: 'database',
         status: 'fail',
-        message: `Database schema v${version} is newer than supported v${SUPPORTED_SCHEMA_VERSION}.`,
-        remedy: 'Upgrade orca-task-telemetry to a newer release.',
-      });
-    } else if (version < SUPPORTED_SCHEMA_VERSION) {
-      checks.push({
-        id: 'database',
-        status: 'warn',
-        message: `Database schema v${version} will migrate on next collect.`,
-      });
-    } else {
-      checks.push({
-        id: 'database',
-        status: 'pass',
-        message: `Database schema version ${version} is current.`,
+        message,
+        remedy,
       });
     }
   }

@@ -20,4 +20,4 @@ if (before !== after) {
   throw new Error(`home inventory changed: ${before} -> ${after}`);
 }
 rmSync(dir, { recursive: true, force: true });
-process.stdout.write('ok\n');
+process.stdout.write(`${process.version}\nok\n`);

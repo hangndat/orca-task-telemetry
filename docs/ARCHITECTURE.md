@@ -36,6 +36,13 @@ Session Claude/Codex từ CodeBurn --> Collector mức sử dụng
 
 Không có daemon, webhook, dịch vụ từ xa, thao tác sửa đổi GitHub, Claude hook, can thiệp vào agent, phân tích nguồn dữ liệu tùy ý hoặc thay đổi vòng đời thực thi. `collect` phải được gọi tường minh. `link` phải được gọi tường minh và được xác minh.
 
+## SQLite journal và đọc nhất quán (MVP)
+
+- **Writer** (`collect`, `link`, migration): mở DB telemetry với `journal_mode=DELETE` và `foreign_keys=ON`. SQLite chuyển DB schema1 cũ từ WAL sang DELETE trên đường writer có quyền ghi; không xóa sidecar hay copy file thủ công.
+- **Reader** (`report`, `doctor` probe): mở `readOnly` trực tiếp trên file DB DELETE, không tạo `-wal`/`-shm` mới cạnh home. Báo cáo giữ một read transaction (`BEGIN DEFERRED`) xuyên suốt các query trong một lần chạy.
+- **Legacy WAL**: nếu còn file `-wal` cạnh DB (chưa được writer chuẩn hóa), đường đọc từ chối trước khi mở SQLite và hướng dẫn chạy `collect`. Doctor vẫn trả structured check `database` (không thay bằng lỗi collect-style `db_schema_drift` exit 4).
+- **Schema**: writer kiểm tra `user_version` tương lai trước khi đổi journal/migrate; reader báo cáo dùng `assertSchemaCurrent`, doctor chỉ đọc `user_version` để chẩn đoán.
+
 ## Các rủi ro cần làm rõ khi khảo sát
 
 - Phân trang và quyền truy cập GitHub Projects GraphQL.

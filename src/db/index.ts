@@ -5,6 +5,7 @@ export {
 } from './connection.js';
 export {
   openReadOnlyTelemetryDb,
+  preflightReadOnlySource,
   readUserVersionReadOnly,
   type ReadOnlyTelemetryHandle,
 } from './read-only.js';

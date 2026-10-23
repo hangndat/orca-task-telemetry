@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { dbError, dbPathError } from './errors.js';
-import { assertSchemaCurrent, migrateDatabase } from './migrate.js';
+import {
+  assertSchemaCurrent,
+  migrateDatabase,
+  SUPPORTED_SCHEMA_VERSION,
+} from './migrate.js';
+import { dbSchemaError } from './errors.js';
 
 export type OpenDatabaseOptions = {
   dbPath: string;
@@ -78,14 +83,25 @@ function restrictDatabaseFileMode(dbPath: string): void {
   }
 }
 
+function readUserVersionBeforeMigrate(db: DatabaseSync): number {
+  const row = db.prepare('PRAGMA user_version').get() as
+    | { user_version: number }
+    | undefined;
+  const version = row?.user_version;
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 0) {
+    throw dbSchemaError('PRAGMA user_version returned invalid value.');
+  }
+  return version;
+}
+
 function configurePragmas(db: DatabaseSync): void {
   db.exec('PRAGMA foreign_keys = ON');
-  const journal = db.prepare('PRAGMA journal_mode = WAL').get() as
+  const journal = db.prepare('PRAGMA journal_mode = DELETE').get() as
     | { journal_mode: string }
     | undefined;
   const mode = journal?.journal_mode?.toLowerCase();
-  if (mode !== 'wal') {
-    throw dbError(`Expected WAL journal mode, got ${mode ?? 'unknown'}.`);
+  if (mode !== 'delete') {
+    throw dbError(`Expected DELETE journal mode, got ${mode ?? 'unknown'}.`);
   }
 }
 
@@ -99,6 +115,13 @@ export function openTelemetryDatabase(
   ensureDatabaseDirectory(options.dbPath);
   const db = new DatabaseSync(options.dbPath);
   try {
+    db.exec('PRAGMA foreign_keys = ON');
+    const versionBeforeJournal = readUserVersionBeforeMigrate(db);
+    if (versionBeforeJournal > SUPPORTED_SCHEMA_VERSION) {
+      throw dbSchemaError(
+        `Database schema version ${versionBeforeJournal} is newer than supported ${SUPPORTED_SCHEMA_VERSION}.`,
+      );
+    }
     configurePragmas(db);
     migrateDatabase(db);
     assertSchemaCurrent(db);
