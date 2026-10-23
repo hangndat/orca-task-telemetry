@@ -12,6 +12,7 @@ import { runCollect } from './collect.js';
 import { runLink } from './link.js';
 import { runReport, runReportTask, runReportTrace } from './report.js';
 import { runTrace } from './trace.js';
+import { runWriteback } from './writeback.js';
 
 const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'trace', 'project', 'hierarchy', 'unmapped']);
 
@@ -80,6 +81,13 @@ export async function routeCommand(
 
   if (command === 'init') {
     return runInit(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
+  }
+
+  if (command === 'writeback') {
+    return runWriteback(restPositionals, {
       json,
       cwd: options.cwd ?? process.cwd(),
     });

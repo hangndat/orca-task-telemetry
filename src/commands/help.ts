@@ -8,6 +8,7 @@ const IMPLEMENTED = new Set([
   'link',
   'report',
   'trace',
+  'writeback',
 ]);
 
 const TOP_LEVEL = [
@@ -18,6 +19,7 @@ const TOP_LEVEL = [
   { name: 'link', summary: 'Link an agent-top session to a GitHub issue' },
   { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
   { name: 'trace', summary: 'Link and refresh verified PR or commit evidence' },
+  { name: 'writeback', summary: 'Dry-run preview of GitHub Project NUMBER field writeback' },
 ];
 
 const REPORT_SUBCOMMANDS = [
@@ -104,6 +106,22 @@ export function commandHelpText(command: string): string {
       'Resolves the Git repository, discovers Projects V2, and stores a profile in',
       'the local orca-task-telemetry config. Interactive selection requires a TTY',
       'unless --project is provided.',
+    ].join('\n') + '\n';
+  }
+  if (command === 'writeback') {
+    return [
+      'orca-telemetry writeback — dry-run preview for Project NUMBER field (read-only)',
+      '',
+      'Usage:',
+      '  orca-telemetry writeback --field <name> [--field-id <id>] [--rollup direct|inclusive]',
+      '    [--issue <selector>] [--force-overwrite] [--json]',
+      '',
+      'Computes estimated API equivalent usage from the local DB and compares to the',
+      'current GitHub Project field value. Does not call item-edit or write SQLite.',
+      'Live --apply is not available in this release.',
+      '',
+      'Project and owner come from orca-telemetry init (no --project/--owner).',
+      '--rollup inclusive requires at least one --issue.',
     ].join('\n') + '\n';
   }
   if (command === 'doctor') {
