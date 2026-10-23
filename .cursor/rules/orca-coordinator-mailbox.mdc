@@ -1,0 +1,15 @@
+---
+description: Coordinator-only — lifecycle và chờ theo sự kiện
+alwaysApply: false
+---
+
+# Mailbox / settlement
+
+Chỉ áp dụng khi supervise Orca; dùng preamble thật và guide phiên bản host cho lệnh/field.
+
+- Start công việc độc lập trong budget; một event wait có timeout ≤45 giây, không mở nhiều wait/list hỏi cùng trạng thái.
+- Xử lý hết delivery: reply câu hỏi, xác minh worker_done/task/dispatch/outcome, lưu SHA/evidence, quyết định reuse/release rồi ack theo guide.
+- Timeout/inbox rỗng không chứng minh worker đã dừng; chỉ recovery/replacement sau proof hợp lệ. Không duplicate dispatch khi liveness chưa rõ.
+- Sau settlement xem ready queue trong scope. Không giữ reviewer idle hoặc đọc transcript mỗi timeout.
+- Trước kết thúc xác minh owned workers/delivery/question/cleanup đã xử lý hoặc được bàn giao rõ. Chỉ còn blocker không có worker live thì báo checkpoint; không chờ vô hạn quyết định user chưa có.
+- Worker gửi worker_done đúng một lần theo preamble; completion event không thay independent DoD.

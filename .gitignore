@@ -9,3 +9,9 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+
+# Machine-local agent settings and telemetry artifacts
+.claude/settings.local.json
+.cursor/mcp.json
+.orca-metrics/
+.code-review-graph/
