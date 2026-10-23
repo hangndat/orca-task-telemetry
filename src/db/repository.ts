@@ -14,6 +14,8 @@ import {
 export type CollectionSource = 'github' | 'orca' | 'codeburn';
 
 export type GitHubImportInput = {
+  /** Full Project snapshot when set; stale memberships for this Project are removed. */
+  projectId?: string;
   issues: GitHubIssue[];
   memberships: ProjectMembership[];
 };
@@ -84,14 +86,19 @@ function extrasFromRow(row: CodeBurnImportRow): SnapshotRowExtras {
 function upsertIssue(db: DatabaseSync, issue: GitHubIssue): void {
   db.prepare(
     `INSERT INTO issues (
-      issue_node_id, repository_name_with_owner, number, url, title, state
-    ) VALUES (?, ?, ?, ?, ?, ?)
+      issue_node_id, repository_name_with_owner, number, url, title, state,
+      parent_issue_node_id, parent_issue_observed
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(issue_node_id) DO UPDATE SET
       repository_name_with_owner = excluded.repository_name_with_owner,
       number = excluded.number,
       url = excluded.url,
       title = excluded.title,
-      state = excluded.state`,
+      state = excluded.state,
+      parent_issue_node_id = CASE WHEN ? = 1
+        THEN excluded.parent_issue_node_id ELSE issues.parent_issue_node_id END,
+      parent_issue_observed = CASE WHEN ? = 1
+        THEN 1 ELSE issues.parent_issue_observed END`,
   ).run(
     issue.issueNodeId,
     issue.repository.nameWithOwner,
@@ -99,6 +106,10 @@ function upsertIssue(db: DatabaseSync, issue: GitHubIssue): void {
     issue.url,
     issue.title,
     issue.state,
+    issue.parentIssueNodeId ?? null,
+    issue.parentIssueNodeId === undefined ? 0 : 1,
+    issue.parentIssueNodeId === undefined ? 0 : 1,
+    issue.parentIssueNodeId === undefined ? 0 : 1,
   );
 }
 
@@ -208,7 +219,13 @@ export function importGitHubRecords(
   db.exec('BEGIN IMMEDIATE');
   try {
     const projectIds = new Set<string>();
+    if (input.projectId !== undefined) {
+      projectIds.add(input.projectId);
+    }
     for (const m of input.memberships) {
+      if (input.projectId !== undefined && m.projectId !== input.projectId) {
+        throw new Error('GitHub membership does not belong to the collected Project.');
+      }
       projectIds.add(m.projectId);
     }
     const insertProject = db.prepare(
@@ -220,6 +237,9 @@ export function importGitHubRecords(
     }
     for (const issue of input.issues) {
       upsertIssue(db, issue);
+    }
+    if (input.projectId !== undefined) {
+      db.prepare('DELETE FROM project_memberships WHERE project_id = ?').run(input.projectId);
     }
     const insertMembership = db.prepare(
       `INSERT INTO project_memberships (project_id, issue_node_id)

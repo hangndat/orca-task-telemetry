@@ -80,6 +80,8 @@ export type UsageSnapshot = {
 
 export type GitHubIssue = {
   issueNodeId: string;
+  /** GitHub Issue.parent node ID. Undefined means this lookup did not fetch hierarchy. */
+  parentIssueNodeId?: string | null;
   repository: { nameWithOwner: string };
   number: number;
   url: string;

@@ -22,6 +22,7 @@ const REPORT_SUBCOMMANDS = [
   { name: 'tasks', summary: 'Report across issues in the selected project' },
   { name: 'task <issue-id>', summary: 'Report for one issue (node id, URL, or owner/repo#n)' },
   { name: 'project', summary: 'Project-level totals with deduped linked sessions' },
+  { name: 'hierarchy', summary: 'Direct and inclusive cost through native Issue parents' },
   { name: 'unmapped', summary: 'Sessions without an Issue link and link suggestions' },
 ];
 

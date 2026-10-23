@@ -18,6 +18,7 @@
               "__typename": "Issue",
               "id": "I_synthetic_issue",
               "number": 1,
+              "parent": null,
               "title": "Synthetic issue",
               "url": "https://github.com/hangndat/orca-task-telemetry/issues/1",
               "state": "OPEN",

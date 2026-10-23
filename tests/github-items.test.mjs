@@ -140,8 +140,45 @@ test('AC2: maps Issue node id, repo, number, url, title, state from fixture', as
     assert.match(first.issue.url, /\/issues\/3$/);
     assert.match(first.issue.title, /E01/);
     assert.equal(first.issue.state, 'OPEN');
+    assert.equal(first.issue.parentIssueNodeId, null);
   });
   rmSync(tmp, { recursive: true, force: true });
+});
+
+test('V1.1: reads native parent ID and rejects an incomplete parent', async () => {
+  const sample2 = JSON.parse(readFileSync(page2Sample, 'utf8'));
+  const page = {
+    data: {
+      node: {
+        id: PROJECT_ID,
+        items: {
+          totalCount: 1,
+          pageInfo: { hasNextPage: false, endCursor: 'x' },
+          nodes: [sample2.data.node.items.nodes[0]],
+        },
+      },
+    },
+  };
+  const tmp = mkdtempSync(join(tmpdir(), 'gh-items-parent-'));
+  const fixturePath = join(tmp, 'parent.json');
+  try {
+    writeFileSync(fixturePath, JSON.stringify(page));
+    await withPagingEnv(fixturePath, fixturePath, async () => {
+      const items = await readProjectItems(PROJECT_ID, { ghPath: pagingStub });
+      assert.equal(items[0].issue.parentIssueNodeId, 'I_kwDOVUhnY88AAAABZZFMSg');
+    });
+
+    page.data.node.items.nodes[0].content.parent = {};
+    writeFileSync(fixturePath, JSON.stringify(page));
+    await withPagingEnv(fixturePath, fixturePath, async () => {
+      await assert.rejects(
+        () => readProjectItems(PROJECT_ID, { ghPath: pagingStub }),
+        (err) => err.code === 'github_bad_response' && /content\.parent\.id/.test(err.message),
+      );
+    });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test('AC3: classifies Issue, PullRequest, DraftIssue, and Redacted content', async () => {
@@ -179,6 +216,7 @@ test('AC4: missing Issue id → github_bad_response with field path', async () =
               type: 'ISSUE',
               content: {
                 __typename: 'Issue',
+                parent: null,
                 number: 1,
                 title: 't',
                 url: 'https://github.com/hangndat/orca-task-telemetry/issues/1',
@@ -225,6 +263,7 @@ test('AC4: repeating cursor stops with github_bad_response', async () => {
               type: 'ISSUE',
               content: {
                 __typename: 'Issue',
+                parent: null,
                 id: 'I_stuck',
                 number: 1,
                 title: 't',

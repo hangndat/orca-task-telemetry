@@ -12,7 +12,7 @@ import { runCollect } from './collect.js';
 import { runLink } from './link.js';
 import { runReport, runReportTask } from './report.js';
 
-const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'project', 'unmapped']);
+const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'project', 'hierarchy', 'unmapped']);
 
 export type RouteResult =
   | { kind: 'ok'; data?: unknown; exitCode?: number }
@@ -105,7 +105,7 @@ export async function routeCommand(
       }
       return runReportTask(issueArg, subRest.slice(1), { json, cwd });
     }
-    return runReport(sub as 'tasks' | 'project' | 'unmapped', subRest, {
+    return runReport(sub as 'tasks' | 'project' | 'hierarchy' | 'unmapped', subRest, {
       json,
       cwd,
     });
