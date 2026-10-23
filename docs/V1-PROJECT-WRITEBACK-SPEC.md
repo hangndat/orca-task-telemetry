@@ -27,7 +27,7 @@ Story [#45](https://github.com/hangndat/orca-task-telemetry/issues/45) · Epic [
 gh version 2.103.0 (2026-10-21)
 ```
 
-**Đọc field / giá trị item (dry-run):** Client GraphQL read-only hiện có (`src/github/client.ts`) — query Projects V2 để discovery field, `dataType`, giá trị NUMBER hiện tại và trạng thái item. **Không** gọi mutation/subscription qua client này (guard giữ nguyên).
+**Đọc field / item / giá trị (dry-run):** Client GraphQL read-only hiện có (`src/github/client.ts`) — query Projects V2 để discovery field (`dataType`), paginate `items` (`readProjectItems`: `itemId`, content, field values NUMBER) và validate Issue thuộc Project profile so với `project_memberships`. **Không** gọi mutation/subscription qua client này (guard giữ nguyên).
 
 **Liệt kê field (tham chiếu CLI, không bắt buộc dry-run):** `gh project field-list <number> --owner <login> [--format json]` — help: một field mỗi lần fetch, `--limit` (mặc định 30).
 
@@ -80,7 +80,8 @@ orca-telemetry writeback [options]
 2. Discovery field qua GraphQL read-only (hoặc tương đương đã kiểm chứng): tìm theo `--field-id` hoặc tên; **trùng tên → fail**, yêu cầu `--field-id`.
 3. **Kiểu field:** chỉ `dataType === NUMBER`. Khác → exit `2`.
 
-4. Mỗi Issue trong preview phải có `projectItemId` = `itemId` từ **membership đã lưu** (SQLite sau `collect`) cho Project profile; không phụ thuộc `item-list` ad hoc mỗi lần dry-run.
+4. **Membership (SQLite):** `project_memberships` chỉ lưu `(project_id, issue_node_id)` — **không** lưu `itemId`. Issue trong scope phải có membership cho Project profile (sau `collect`).
+5. **`projectItemId`:** Lấy từ **query read-only** danh sách item Project (ví dụ `readProjectItems` / GraphQL `ProjectV2.items`, có `item.id`) trong cùng lần chạy dry-run hoặc apply; map `issueNodeId` → `ProjectV2Item.id`. Không migration DB chỉ để cache item id.
 
 ### Preview và xác nhận
 
@@ -89,7 +90,7 @@ orca-telemetry writeback [options]
 | Trường | Ý nghĩa |
 | --- | --- |
 | `issue` | Identity giống `report` (`owner/repo#n`, `issueNodeId`, `url`) |
-| `projectItemId` | Node id item trên Project (từ membership lưu) |
+| `projectItemId` | Node id `ProjectV2Item` (từ query items read-only, sau khi xác nhận membership SQLite) |
 | `computed` | `{ knownAmountUsd, sessionCount, rollup }` — nguồn estimated API equivalent |
 | `remote` | Giá trị NUMBER hiện tại (read GraphQL), hoặc `null` / absent |
 | `proposed` | Số NUMBER sẽ ghi (6 chữ số thập phân USD) hoặc không có khi skip |
@@ -180,7 +181,7 @@ Profile hoạt động với Project/user hoặc org qua IDs đã lưu `init`. *
 | **V1.2-D — Live evidence + security review** | `docs/`, `README.md` (đoạn ngắn), evidence `/tmp` | Sửa target repo; tạo Issue/field GitHub; apply live trong task planning | **Security gate:** independent review exact SHA — token `project`, no default apply in CI; live dry-run read-only trước; apply chỉ field thử trên item test |
 | **V1.2-E — Docs BA (contract)** | `docs/V1-PROJECT-WRITEBACK-SPEC.md` | `src/`, tests, lockfile | `git diff --check`; link docs; worker report |
 
-**Phụ thuộc:** V1.1 hierarchy; `collect` membership + `itemId`; profile `init`.
+**Phụ thuộc:** V1.1 hierarchy; `collect` membership `(project_id, issue_node_id)`; `readProjectItems` (read GraphQL) cho `itemId`; profile `init`.
 
 ---
 
@@ -238,7 +239,7 @@ Profile hoạt động với Project/user hoặc org qua IDs đã lưu `init`. *
 | `report task` | `direct` per Issue |
 | `report hierarchy` | `inclusive` khi `--rollup inclusive` + `--issue` |
 | `report project` | Kiểm tra dedupe trong Project (không ghi tổng lên field) |
-| `collect` | Membership `itemId`, usage, freshness trước apply |
+| `collect` | Membership issue↔project, usage, freshness trước apply |
 
 ---
 
