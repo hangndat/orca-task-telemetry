@@ -26,9 +26,15 @@ export type CodeburnAdapterOptions = {
 
 export type CodeburnInvocationResult = {
   stdout: string;
+  /** Always empty; raw subprocess stderr is never exposed. */
   stderr: string;
   exitCode: number | null;
 };
+
+/** Raw subprocess stderr must not be exposed to callers or error surfaces. */
+export function discardCodeburnStderr(_stderr: string): string {
+  return '';
+}
 
 function cbError(
   code: string,
@@ -261,7 +267,7 @@ export async function invokeCodeburn(
 
   return {
     stdout: result.stdout,
-    stderr: result.stderr,
+    stderr: discardCodeburnStderr(result.stderr),
     exitCode: result.exitCode,
   };
 }

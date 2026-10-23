@@ -107,3 +107,74 @@ test('missing binary surfaces codeburn_runtime_unavailable', async () => {
     (err) => err.code === 'codeburn_runtime_unavailable',
   );
 });
+
+test('T22-SEC-F01: stub stderr secrets are not exposed on success result', async () => {
+  const sentinel = 'LEAK_SENTINEL_TOKEN_codeburn_stub_test';
+  process.env.CODEBURN_STUB_STDOUT = '[{"sessionId":"s1","provider":"claude"}]';
+  process.env.CODEBURN_STUB_STDERR = `${sentinel}\n`;
+  const result = await invokeCodeburn(
+    [
+      'sessions',
+      '--provider',
+      'claude',
+      '--period',
+      'all',
+      '--format',
+      'json',
+      '--no-pager',
+    ],
+    { codeburnPath: stub },
+  );
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, '');
+  assert.ok(!JSON.stringify(result).includes(sentinel));
+  assert.equal(parseSessionsJsonArray(result.stdout).length, 1);
+  delete process.env.CODEBURN_STUB_STDOUT;
+  delete process.env.CODEBURN_STUB_STDERR;
+});
+
+test('T22-SEC-F01: nonzero exit still discards stderr from public result', async () => {
+  const sentinel = 'LEAK_SENTINEL_TOKEN_codeburn_exit_stderr';
+  process.env.CODEBURN_STUB_STDOUT = 'not-json';
+  process.env.CODEBURN_STUB_STDERR = `${sentinel}\n`;
+  process.env.CODEBURN_STUB_EXIT_CODE = '1';
+  const result = await invokeCodeburn(
+    [
+      'sessions',
+      '--provider',
+      'claude',
+      '--period',
+      'all',
+      '--format',
+      'json',
+      '--no-pager',
+    ],
+    { codeburnPath: stub },
+  );
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.stderr, '');
+  assert.ok(!JSON.stringify(result).includes(sentinel));
+  assert.throws(
+    () => parseSessionsJsonArray(result.stdout),
+    (err) => err.code === 'codeburn_schema_drift',
+  );
+  assert.ok(!JSON.stringify({ code: 'codeburn_schema_drift' }).includes(sentinel));
+  delete process.env.CODEBURN_STUB_STDOUT;
+  delete process.env.CODEBURN_STUB_STDERR;
+  delete process.env.CODEBURN_STUB_EXIT_CODE;
+});
+
+test('T22-SEC-F01: runtime errors use stable codes without subprocess stderr', async () => {
+  const sentinel = 'LEAK_SENTINEL_TOKEN_codeburn_enoent';
+  process.env.CODEBURN_STUB_STDERR = sentinel;
+  await assert.rejects(
+    () => invokeCodeburn(['--version'], { codeburnPath: '/no/such/codeburn' }),
+    (err) => {
+      assert.equal(err.code, 'codeburn_runtime_unavailable');
+      assert.ok(!JSON.stringify(err).includes(sentinel));
+      assert.ok(!err.message.includes(sentinel));
+      return true;
+    },
+  );
+  delete process.env.CODEBURN_STUB_STDERR;
+});
