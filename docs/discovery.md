@@ -101,3 +101,67 @@ Một row = **một session Claude Code**, số token **tích lũy toàn session
 | `projectId` | Chỉ xuất hiện với `--contributions`; chưa document giá trị mẫu trong fixture |
 | Roll-up token cha + subagents | Quan sát cấu trúc lồng; quy tắc tổng hợp cho báo cáo Issue chưa do CodeBurn ghi — cần quyết định E05 |
 | Codex / provider khác | Ngoài phạm vi T03 |
+
+## CodeBurn — Codex
+
+### Cài đặt và lệnh (AC1)
+
+Cùng package **0.9.27** và `npx --yes codeburn@0.9.27` như mục Claude Code. Filter provider: `--provider codex` (có trong `sessions`, `export`, `audit`, `doctor --provider codex`).
+
+```sh
+npx --yes codeburn@0.9.27 doctor --provider codex --json
+# → status "ok", candidatesFound > 0 (live: 86 sessions); không ghi probePaths/CODEX_HOME vào doc
+
+npx --yes codeburn@0.9.27 sessions --provider codex --period all --format json --no-pager
+
+npx --yes codeburn@0.9.27 export -f json --provider codex --from YYYY-MM-DD --to YYYY-MM-DD -o /tmp/codeburn-codex.json
+
+npx --yes codeburn@0.9.27 audit --provider codex --from YYYY-MM-DD --to YYYY-MM-DD --format json
+# → raw token fields + reasoningTokens (theo kỳ/model, không per-session trong output này)
+```
+
+Fixture: `tests/fixtures/codeburn/codex/`.
+
+### Trường `sessions --format json` (AC2)
+
+Cùng **shape camelCase** với Claude (`sessionId`, `inputTokens`, …). Một row = **tích lũy cả session Codex** (sum API calls).
+
+| Trường | Ý nghĩa Codex | Nullable / ghi chú | Evidence |
+| --- | --- | --- | --- |
+| `sessionId` | ID session Codex (UUID chuỗi hex) | Không null | `session-gpt-small-aggregated.json` |
+| `provider` | `"codex"` | Không null | fixture |
+| `project` | Slug cwd (vd `Users-admin-…`, **không** có `-` đầu như nhiều row Claude) | Redact fixture | fixture |
+| `models` | Display name (vd `GPT-6.1 Sol`) | Mảng | fixture |
+| `inputTokens` | Input billed bucket trong UI CodeBurn | Không gồm `cacheReadTokens` (bucket riêng) | fixture + audit `displayed` |
+| `outputTokens` | Output tokens | | fixture |
+| `cacheReadTokens` | Đọc cache (raw `cacheReadInputTokens`) | | fixture |
+| `cacheWriteTokens` | Cache creation | Live quan sát **0** trên mọi session Codex thu | fixture |
+| `calls` / `turns` | API calls / turns | | fixture |
+| `cost` | USD ước tính local | `isEstimated: false` trên mẫu | fixture |
+| `subagents` | — | **Không có** trên 86 session live (khác Claude) | live jq count 0 |
+
+**Cached input vs input (AC2):** `codeburn audit --format json` cho Codex có `raw.cachedInputTokens` và `raw.cacheReadInputTokens` **cùng giá trị** trên mẫu; `displayed` chỉ tách `inputTokens` và `cacheReadTokens` (không trùng lặp số trong hai cột displayed). **Không** coi `cacheReadTokens` là tập con được cộng vào `inputTokens` trong `sessions` JSON.
+
+**Reasoning tokens:** có trong `audit` → `raw.reasoningTokens`, **không** có field tương ứng trên object `sessions --format json` (gap cho parser chỉ đọc sessions).
+
+### Session ID và namespace (AC4)
+
+| | Claude Code | Codex |
+| --- | --- | --- |
+| Định dạng | UUID RFC (`8-4-4-4-12` hex) hoặc `agent-<hex>` cho subagent | UUID hex (`8-4-4-4-12`); mẫu live hay bắt đầu `01a1…` |
+| Prefix namespace | `agent-` = subagent Claude | Không thấy prefix `agent-`; không có mảng `subagents` |
+| Gợi ý E05 | Phân biệt cha/con qua `subagents[]` | Phân biệt qua `provider: "codex"` + pattern ID; không lồng subagent trong export đã thử |
+
+### Chi phí
+
+Giống Claude: **ước tính** từ bảng giá CodeBurn (`audit` → `rates`, `cost.recomputedTotalUSD`), không phải hóa đơn OpenAI. Codex có thêm `longContextTier` / `flex` trong `rates` (chỉ thấy trong `audit`, chưa map per-session).
+
+### Gaps (AC5)
+
+| Gap | Ghi chú |
+| --- | --- |
+| `reasoningTokens` per session | Chỉ thấy trong `audit` theo model/kỳ, không trong `sessions` JSON |
+| `cacheWriteTokens` > 0 | Chưa quan sát trên Codex live |
+| `subagents` / fork sessions | 0 session có `subagents`; fork/replay có trong parseVersion string — chưa có fixture |
+| Per-message JSON | Giống Claude — chỉ aggregate (+ optional `--contributions`) |
+| `isEstimated: true` | Chưa quan sát |
