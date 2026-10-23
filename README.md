@@ -16,7 +16,7 @@ Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, 
 | pnpm | 10.x (khuyến nghị) | `packageManager` trong `package.json`. |
 | GitHub CLI | `gh` đã đăng nhập | Scope **`read:project`** cần cho Project/items; `doctor` cảnh báo nếu thiếu (`gh auth refresh -s read:project`). |
 | Orca | CLI đọc-only | `doctor` kiểm tra `--version` (ví dụ 1.4.237 trên môi trường thử). |
-| CodeBurn | `codeburn@0.9.27` (tùy chọn) | `collect` đọc `sessions --provider claude|codex --format json`. Không có binary → collect **partial** (exit 5), nguồn khác vẫn ghi DB. |
+| CodeBurn | `codeburn@0.9.27` (tùy chọn) | `collect` đọc `sessions --provider claude|codex --format json`. Có thể chỉ định binary pin qua `ORCA_TELEMETRY_CODEBURN` (ví dụ bản trong npm cache) khi **không** cài global. Không có binary → collect **partial** (exit 5), nguồn khác vẫn ghi DB. |
 
 Chi tiết lệnh và schema: [docs/discovery.md](docs/discovery.md).
 
@@ -82,7 +82,11 @@ orca-telemetry report unmapped --json
 
 ### Ánh xạ session thủ công
 
-Chỉ liên kết khi bạn **chủ đích** chọn cặp Issue + `provider` + `session` (UUID CodeBurn). Không tự suy session từ timestamp hay branch. Gợi ý lệnh: `report unmapped`.
+Chỉ liên kết khi bạn **chủ đích** chọn cặp Issue + `provider` + `session` (UUID CodeBurn). Không tự suy session từ `projectHint`, branch hay timestamp. Gợi ý lệnh: `report unmapped`.
+
+Một phiên CodeBurn có thể gồm nhiều task hoặc repo trong lịch sử chat. Khi bạn map **toàn bộ** session vào một Issue, `report task` phản ánh **tổng** token/cost của session đó cho Issue — CLI **không** chia nhỏ usage trong cùng session giữa nhiều Issue. Cost trong báo cáo là `estimated_api_equivalent`, **không** phải hóa đơn billing.
+
+Ví dụ đã kiểm chứng (live, local evidence): user gán session Claude `a3df5501-4411-43db-9b37-70507f3a2121` → `hangndat/orca-task-telemetry#3` một lần (`method=manual`); `report unmapped` giảm 407→406; `report task` khớp bucket token CodeBurn. Chi tiết: [docs/mvp-validation.md](docs/mvp-validation.md).
 
 ### Cache, subagent, cost
 
@@ -103,8 +107,10 @@ Bằng chứng fixture vs live: [docs/mvp-validation.md](docs/mvp-validation.md)
 
 - Không ghi GitHub Project/Issue, không cài agent config trong repo người dùng (xem [BACKLOG.md](BACKLOG.md)).
 - Thiếu `read:project` → GitHub collector lỗi; có thể vẫn partial nếu Orca/CodeBurn ok.
-- CodeBurn không có trên PATH → không import session; báo cáo chỉ phản ánh dữ liệu đã collect.
-- Chưa publish npm; không tuyên bố “MVP complete” cho đến khi review độc lập trên cùng candidate SHA.
+- CodeBurn không có trên PATH → dùng `ORCA_TELEMETRY_CODEBURN` hoặc cài binary; nếu vẫn thiếu → không import session.
+- Bằng chứng tích hợp live trên máy dev có thể nằm ngoài repo (ví dụ `/tmp/…`); không thay thế CI — xem matrix trong `docs/mvp-validation.md`.
+- Review độc lập @ `818ca30` ghi T41 blocked **trước** link manual; evidence link mới cần **re-review** trên SHA sau docs — không tự gọi MVP hoàn tất.
+- Chưa publish npm; không push/PR trong phạm vi worker docs.
 
 ## Tài liệu
 
