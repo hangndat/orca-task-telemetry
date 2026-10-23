@@ -6,7 +6,7 @@
 GitHub Project → GitHub Issue → Orca (read-only) → agent-top sessions → SQLite → báo cáo CLI
 ```
 
-Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, `init`, `collect`, `link`, `report`). **V1.1 (#44)** thêm `Issue.parent` trong schema SQLite v2 và `report hierarchy`. **V1.3 (#46)** có liên kết trace thủ công, thu thập lại bằng chứng PR và báo cáo trace; acceptance tích hợp live và review độc lập vẫn riêng. Chưa phát hành npm công khai.
+Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, `init`, `collect`, `link`, `report`). **V1.1 (#44)** thêm `Issue.parent` trong schema SQLite v2 và `report hierarchy`. **V1.2 (#45)** thêm `writeback` (dry-run mặc định, `--apply` opt-in) — contract: [docs/V1-PROJECT-WRITEBACK-SPEC.md](docs/V1-PROJECT-WRITEBACK-SPEC.md). **V1.3 (#46)** có liên kết trace thủ công, thu thập lại bằng chứng PR và báo cáo trace. Chưa phát hành npm công khai.
 
 ## Điều kiện tiên quyết (đã xác minh trên máy phát triển)
 
@@ -14,7 +14,7 @@ Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, 
 | --- | --- | --- |
 | Node.js | **≥ 24.0.0** (bắt buộc) | CLI thoát mã 3 khi phiên bản không đạt (`checkNodeVersion`). Trên Node &lt; 24, import `node:sqlite` cũng thất bại trước khi chạy lệnh. |
 | pnpm | 10.x (khuyến nghị) | `packageManager` trong `package.json`. |
-| GitHub CLI | `gh` đã đăng nhập | Scope **`read:project`** cần cho Project/items; `doctor` cảnh báo nếu thiếu (`gh auth refresh -s read:project`). |
+| GitHub CLI | `gh` đã đăng nhập | **`read:project`** cho `collect` / `writeback` dry-run; scope **`project`** chỉ khi `writeback --apply` (`gh auth refresh -s project`). `doctor` cảnh báo nếu thiếu `read:project`. |
 | Orca | CLI đọc-only **1.4.241** (đã verify) | `doctor` kiểm tra `--version`. `collect` enumerates runs qua **`run-list`** rồi `worker-list` (mặc định). Pin một run (tùy chọn): `ORCA_TELEMETRY_COLLECT_RUN=<run_id>`. |
 | agent-top | **0.27.1** (tùy chọn cho usage) | `collect` đọc `sql --json` trên view `counted_sessions` (ADR 0001). Pin binary: `ORCA_TELEMETRY_AGENT_TOP`. **Không** gọi `sync`. Thiếu binary → collect **partial** (exit 5), không import session. |
 
@@ -73,7 +73,32 @@ orca-telemetry report trace OWNER/REPO#123 --json
 
 `report hierarchy` cần `collect` đã ghi `parent` cho mọi Issue trong Project; JSON/text chỉ đọc DB (không ghi GitHub). Parent ngoài Project hiện trong JSON qua `parentStatus: outside_project`, `parentIssueNodeId` và `outsideProjectParentIssueNodeId`; text dùng `owner/repo#number` cho mỗi Issue.
 
-- **`init` / `collect` / `report`**: chỉ đọc GitHub/Orca/agent-top; không commit, không sửa `AGENTS.md`, `.cursor/`, lockfile hay Project fields.
+### Writeback Project field (V1.2, #45)
+
+Ghi **estimated API equivalent** (known only) lên custom field **NUMBER** đã tạo trên board; Project/owner **chỉ** từ profile `init` (không `--project` / `--owner`). Chạy `collect` trước để có membership và usage.
+
+```bash
+# Dry-run (mặc định): GraphQL read-only + SQLite — không gọi item-edit
+orca-telemetry writeback --field "Cost USD" --json
+orca-telemetry writeback --field-id PVTF_… --issue hangndat/orca-task-telemetry#45 --json
+
+# Inclusive rollup: bắt buộc --issue (cùng semantics report hierarchy)
+orca-telemetry writeback --field "Cost USD" --rollup inclusive --issue OWNER/REPO#123 --json
+
+# Live (opt-in): cần scope project; non-TTY bắt buộc --yes
+orca-telemetry writeback --field "Cost USD" --apply --yes --json
+```
+
+| Hành vi | Ghi chú |
+| --- | --- |
+| Mặc định | `mode: dry_run` — preview `kind: writeback_preview`; không mutation GitHub |
+| `--apply` / `--yes` | Ghi qua `gh project item-edit`; `--yes` chỉ sau preview **cùng process**; TTY hỏi xác nhận nếu thiếu `--yes` |
+| `--force-overwrite` | Ghi khi remote NUMBER ≠ computed; không flag → `skip` `remote_conflict` |
+| Cost | Chỉ **estimated API equivalent**; session `unknown` → `skip` `unknown_cost`; không session → `no_usage` |
+| Field | Owner tạo field NUMBER trên board; tên trùng → exit `2`, dùng `--field-id` |
+| Race | GitHub không CAS nguyên tử; CLI re-read trước write nhưng không loại bỏ xung đột đồng thời |
+
+- **`init` / `collect` / `report` / `writeback` (không `--apply`)**: chỉ đọc GitHub/Orca/agent-top; không gọi mutation Project; không commit repo ứng dụng, không sửa `AGENTS.md`, `.cursor/`, lockfile hay agent config.
 - **`link`**: ghi ánh xạ Issue ↔ session trong DB cục bộ; từ chối xung đột (`attribution_link_conflict`).
 - **`collect` lần 2**: upsert idempotent — tổng usage trong báo cáo không đổi (đã kiểm bằng fixture E2E).
 
@@ -123,7 +148,7 @@ Bằng chứng fixture vs live: [docs/mvp-validation.md](docs/mvp-validation.md)
 
 ## Giới hạn đã biết
 
-- Không ghi GitHub Project/Issue, không cài agent config trong repo người dùng (xem [BACKLOG.md](BACKLOG.md)).
+- `writeback` không `--apply` thì không ghi Project; `--apply` chỉ ghi NUMBER field đã chọn (opt-in). Không cài agent config trong repo người dùng (xem [BACKLOG.md](BACKLOG.md)).
 - Thiếu `read:project` → GitHub collector lỗi; có thể vẫn partial nếu Orca/agent-top ok.
 - agent-top không có trên PATH → dùng `ORCA_TELEMETRY_AGENT_TOP` hoặc cài 0.27.1; nếu vẫn thiếu → không import session. Schema v4 xóa snapshot CodeBurn cũ.
 - Bằng chứng tích hợp live trên máy dev có thể nằm ngoài repo (ví dụ `/tmp/…`); không thay thế CI — xem matrix trong `docs/mvp-validation.md`.
@@ -132,7 +157,7 @@ Bằng chứng fixture vs live: [docs/mvp-validation.md](docs/mvp-validation.md)
 
 ## Tài liệu
 
-- [Đặc tả MVP](docs/MVP-SPEC.md) · [V1.1 hierarchy (#44)](docs/V1-HIERARCHY-SPEC.md) · [Kiến trúc](docs/ARCHITECTURE.md) · [Validation self-check](docs/mvp-validation.md) · [DoD self-check](docs/mvp-dod-self-check.md) · [ADR 0001 agent-top](docs/adr/0001-agent-top-usage-sot.md)
+- [Đặc tả MVP](docs/MVP-SPEC.md) · [V1.1 hierarchy (#44)](docs/V1-HIERARCHY-SPEC.md) · [V1.2 writeback (#45)](docs/V1-PROJECT-WRITEBACK-SPEC.md) · [V1.3 PR/commit trace (#46)](docs/V1-PR-COMMIT-TRACE-SPEC.md) · [Kiến trúc](docs/ARCHITECTURE.md) · [Validation self-check](docs/mvp-validation.md) · [DoD self-check](docs/mvp-dod-self-check.md) · [ADR 0001 agent-top](docs/adr/0001-agent-top-usage-sot.md)
 - Contributor agents: [AGENTS.md](AGENTS.md)
 
 ## Giấy phép
