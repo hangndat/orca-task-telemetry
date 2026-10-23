@@ -33,7 +33,7 @@ Xây dựng `orca-task-telemetry` thành một CLI Node.js/TypeScript có thể 
 - Task Spec có AC/checks, paths/non-goals, `Architecture impact: Có|Không`, Role ID/file, Persona, `Cost tier: cheap|standard`, model đã verify và skills cần nạp. Mẫu tại `docs/agents/templates/`.
 - Khi user giao leader/boss/orchestrator/coordinator: đọc `.cursor/rules/orca-leader-activation.mdc`. Task nhỏ làm inline; chỉ dispatch khi task authorize. Chỉ coordinator gốc dùng Orca với skill/guide đúng phiên bản; không dùng native Agent để spawn. Worker/reviewer không spawn con.
 - Kiểm ownership/live workers trước dispatch; không tự mở backlog hoặc chạy model đối chứng. Model pin của project nguồn không phải live compatibility evidence của repo này.
-- Review acceptance độc lập: reviewer khác session tác giả, exact SHA, scope/checks/evidence/limitations và verdict từng gate. Gộp DoD+security cùng SHA khi áp dụng. Self-check không được gọi là independent PASS.
+- Review acceptance độc lập do Codex đảm nhiệm trong session khác tác giả: exact SHA, scope/checks/evidence/limitations và verdict từng gate. Gộp DoD+security cùng SHA khi áp dụng. Self-check không được gọi là independent PASS.
 - Review/fix đọc `.cursor/rules/orca-review-convergence.mdc`: stable finding IDs, tối đa hai lượt fix tự động xuyên session/SHA; checkpoint/chẩn đoán khi không tiến triển, không lặp vô hạn. Không dùng known gap bỏ gate bắt buộc.
 - Git/PR theo `.cursor/rules/git-workflow.mdc`: conventional commit sau validate; remote push/PR/merge cần nằm trong quyền task. GitHub Project chỉ đọc trong MVP; không tự cập nhật fields/status.
 - Code complete khác acceptance complete và MVP complete. Worker completion không thay review; phân biệt local/CI/fixture/live evidence.
