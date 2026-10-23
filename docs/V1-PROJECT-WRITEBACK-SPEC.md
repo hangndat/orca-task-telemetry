@@ -40,7 +40,7 @@ gh version 2.103.0 (2026-10-21)
 
 **Tạo field:** **Non-goal V1.2** — owner tạo thủ công field NUMBER trên board; không `field-create` trong CLI.
 
-**Scope:** Dry-run chỉ cần **`read:project`** (hoặc tương đương cho query). `--apply` cần scope **`project`** trên token (theo [gh project manual](https://cli.github.com/manual/gh_project)).
+**Scope:** Dry-run chỉ cần **`read:project`** (hoặc tương đương cho query). `--apply` cần scope **`project`** trên token (theo [gh project manual](https://cli.github.com/manual/gh_project)); preflight đọc `gh auth status --json hosts --no-refresh`, xét account `github.com` đang active và fail exit `2` trước preview/write nếu thiếu hoặc không xác minh được scope, kể cả khi không có set dự kiến.
 
 **Ranh giới code:** `collect` / `report` / dry-run **writeback** chỉ đi qua client read-only. Module apply (ví dụ `src/writeback/gh-apply.ts`) subprocess `gh project item-edit`, tách biệt collector.
 

@@ -130,6 +130,59 @@ test('AC2: timeout maps to github_unavailable', async () => {
   delete process.env.GH_ITEM_EDIT_STUB_DELAY_MS;
 });
 
+test('F03: timeout remains failure when child handles SIGTERM and exits zero', async () => {
+  process.env.GH_ITEM_EDIT_STUB_SIGNAL = 'zero';
+  process.env.GH_ITEM_EDIT_STUB_DELAY_MS = '3000';
+  try {
+    await assert.rejects(
+      () => setProjectItemNumberField(SAMPLE, { ghPath: stub, timeoutMs: 300 }),
+      (err) => err.code === 'github_unavailable' && /remote write state is unknown/.test(err.message),
+    );
+  } finally {
+    delete process.env.GH_ITEM_EDIT_STUB_SIGNAL;
+    delete process.env.GH_ITEM_EDIT_STUB_DELAY_MS;
+  }
+});
+
+test('F03: ignored SIGTERM escalates to SIGKILL and settles promptly', async () => {
+  process.env.GH_ITEM_EDIT_STUB_SIGNAL = 'ignore';
+  process.env.GH_ITEM_EDIT_STUB_DELAY_MS = '3000';
+  const started = Date.now();
+  try {
+    await assert.rejects(
+      () => setProjectItemNumberField(SAMPLE, { ghPath: stub, timeoutMs: 300 }),
+      (err) => err.code === 'github_unavailable',
+    );
+    assert.ok(Date.now() - started < 2000);
+  } finally {
+    delete process.env.GH_ITEM_EDIT_STUB_SIGNAL;
+    delete process.env.GH_ITEM_EDIT_STUB_DELAY_MS;
+  }
+});
+
+test('F03: output overflow fails even if child exits zero on SIGTERM', async () => {
+  process.env.GH_ITEM_EDIT_STUB_SIGNAL = 'zero';
+  process.env.GH_ITEM_EDIT_STUB_STDOUT = 'x'.repeat(1000);
+  try {
+    await assert.rejects(
+      () => setProjectItemNumberField(SAMPLE, { ghPath: stub, maxBuffer: 10 }),
+      (err) => err.code === 'github_apply_failed' && /remote write state is unknown/.test(err.message),
+    );
+  } finally {
+    delete process.env.GH_ITEM_EDIT_STUB_SIGNAL;
+    delete process.env.GH_ITEM_EDIT_STUB_STDOUT;
+  }
+});
+
+test('F03: invalid process bounds are rejected before spawn', async () => {
+  for (const options of [{ timeoutMs: 0 }, { timeoutMs: Infinity }, { maxBuffer: -1 }, { maxBuffer: NaN }]) {
+    await assert.rejects(
+      () => setProjectItemNumberField(SAMPLE, { ghPath: stub, ...options }),
+      (err) => err.code === 'usage_error' && err.exitCode === EXIT_USAGE,
+    );
+  }
+});
+
 test('AC2: scope hint in stderr maps to github_scope_missing', async () => {
   process.env.GH_ITEM_EDIT_STUB_EXIT_CODE = '1';
   process.env.GH_ITEM_EDIT_STUB_STDERR = 'HTTP 403: insufficient_scopes\n';

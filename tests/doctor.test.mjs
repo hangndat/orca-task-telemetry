@@ -17,7 +17,7 @@ test('T32: doctor pass when core checks healthy', async () => {
     nodeVersion: 'v24.1.0',
     ghAuthStatus: async () => ({
       authenticated: true,
-      scopes: ['read:project', 'repo'],
+      scopes: ['read:project', 'project', 'repo'],
     }),
     orcaVersion: async () => '1.4.237',
     codeburnVersion: async () => '0.9.27',
@@ -25,6 +25,31 @@ test('T32: doctor pass when core checks healthy', async () => {
   });
   assert.equal(report.summary, 'pass');
   assert.equal(report.exitCode, 0);
+  assert.equal(report.checks.find((c) => c.id === 'gh_apply_scope')?.status, 'pass');
+});
+
+test('F02: doctor separates read access from apply scope', async () => {
+  const report = await runDoctorWithDeps({
+    nodeVersion: 'v24.1.0',
+    ghAuthStatus: async () => ({ authenticated: true, scopes: ['read:project', 'repo'] }),
+  });
+  assert.equal(report.checks.find((c) => c.id === 'gh_scope')?.status, 'pass');
+  assert.deepEqual(report.checks.find((c) => c.id === 'gh_apply_scope'), {
+    id: 'gh_apply_scope', status: 'warn',
+    message: 'Token is missing project scope required for --apply.',
+    remedy: 'gh auth refresh -s project',
+  });
+  assert.equal(report.summary, 'warn');
+});
+
+test('F02: doctor warns when active auth state is unknown or unauthenticated', async () => {
+  for (const status of [
+    { authenticated: false, scopes: [], known: true },
+    { authenticated: false, scopes: [], known: false },
+  ]) {
+    const report = await runDoctorWithDeps({ nodeVersion: 'v24.1.0', ghAuthStatus: async () => status });
+    assert.equal(report.checks.find((c) => c.id === 'gh_apply_scope')?.status, 'warn');
+  }
 });
 
 test('T32: doctor warn on missing sources still exits 0', async () => {

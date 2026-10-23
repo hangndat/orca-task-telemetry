@@ -226,7 +226,7 @@ test('CLI stub: dry-run never edits; apply JSON writes once and rerun is unchang
   }
 });
 
-test('CLI stub: scope failure exits 5 with sanitized item error', () => {
+test('CLI stub: scope revoked after preflight is a partial item failure with sanitized error', () => {
   const repo = initBareRepo();
   const home = mkdtempSync(join(tmpdir(), 'orca-wb-scope-'));
   try {
@@ -254,6 +254,93 @@ test('CLI stub: scope failure exits 5 with sanitized item error', () => {
     assert.equal(data.items[0].error.code, 'github_scope_missing');
     assert.equal(data.items[0].error.hint, 'gh auth refresh -s project');
     assert.doesNotMatch(result.stdout + result.stderr, /ghp_SUPERSECRET123/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('F02: read:project permits preview but missing project rejects apply before any edit', () => {
+  const repo = initBareRepo();
+  const home = mkdtempSync(join(tmpdir(), 'orca-wb-preflight-'));
+  const logPath = join(home, 'log.ndjson');
+  try {
+    writeReportsProfile(home, 'PVT_attr_synthetic_project');
+    installDatasetInHome(home, (ctx) => {
+      linkSessionToIssue(ctx.db, {
+        provider: 'claude', source: 'codeburn',
+        rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
+        issueNodeId: 'I_attr_issue_alpha', linkedAt: '2026-06-01T10:00:00Z',
+      });
+    });
+    const env = {
+      ORCA_TELEMETRY_HOME: home, ORCA_TELEMETRY_GH: ghStub,
+      GH_WRITEBACK_STATE_PATH: join(home, 'remote.json'), GH_WRITEBACK_LOG_PATH: logPath,
+      GH_WRITEBACK_AUTH: 'read',
+    };
+    const dry = runCliWriteback(['--field-id', 'PVTF_cost', '--json'], { cwd: repo, env });
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.equal(JSON.parse(dry.stdout).data.summary.wouldSet, 1);
+    const apply = runCliWriteback(['--field-id', 'PVTF_cost', '--apply', '--yes', '--json'], { cwd: repo, env });
+    assert.equal(apply.status, EXIT_USAGE, apply.stderr);
+    assert.equal(JSON.parse(apply.stdout).error.code, 'github_scope_missing');
+    assert.equal(JSON.parse(apply.stdout).error.hint, 'gh auth refresh -s project');
+    assert.equal(readFileSync(logPath, 'utf8').includes('item-edit'), false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('F02: apply validates scope even when preview would plan no sets', () => {
+  const repo = initBareRepo();
+  const home = mkdtempSync(join(tmpdir(), 'orca-wb-no-sets-'));
+  const logPath = join(home, 'log.ndjson');
+  try {
+    writeReportsProfile(home, 'PVT_attr_synthetic_project');
+    installDatasetInHome(home);
+    const env = {
+      ORCA_TELEMETRY_HOME: home, ORCA_TELEMETRY_GH: ghStub,
+      GH_WRITEBACK_STATE_PATH: join(home, 'remote.json'), GH_WRITEBACK_LOG_PATH: logPath,
+      GH_WRITEBACK_AUTH: 'read',
+    };
+    const dry = runCliWriteback(['--field-id', 'PVTF_cost', '--json'], { cwd: repo, env });
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.equal(JSON.parse(dry.stdout).data.summary.wouldSet, 0);
+    const apply = runCliWriteback(['--field-id', 'PVTF_cost', '--apply', '--yes', '--json'], { cwd: repo, env });
+    assert.equal(apply.status, EXIT_USAGE, apply.stderr);
+    assert.equal(JSON.parse(apply.stdout).error.code, 'github_scope_missing');
+    assert.equal(readFileSync(logPath, 'utf8').includes('item-edit'), false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('F02: unauthenticated and unknown auth fail closed before item edit', () => {
+  const repo = initBareRepo();
+  const home = mkdtempSync(join(tmpdir(), 'orca-wb-auth-'));
+  const logPath = join(home, 'log.ndjson');
+  try {
+    writeReportsProfile(home, 'PVT_attr_synthetic_project');
+    installDatasetInHome(home);
+    for (const [mode, code] of [
+      ['unauthenticated', 'github_auth_required'],
+      ['unknown', 'github_auth_unverified'],
+      ['inactive-project', 'github_scope_missing'],
+    ]) {
+      const result = runCliWriteback(['--field-id', 'PVTF_cost', '--apply', '--yes', '--json'], {
+        cwd: repo,
+        env: {
+          ORCA_TELEMETRY_HOME: home, ORCA_TELEMETRY_GH: ghStub,
+          GH_WRITEBACK_STATE_PATH: join(home, 'remote.json'), GH_WRITEBACK_LOG_PATH: logPath,
+          GH_WRITEBACK_AUTH: mode,
+        },
+      });
+      assert.equal(result.status, EXIT_USAGE, result.stderr);
+      assert.equal(JSON.parse(result.stdout).error.code, code);
+    }
+    assert.equal(readFileSync(logPath, 'utf8').includes('item-edit'), false);
   } finally {
     rmSync(home, { recursive: true, force: true });
     rmSync(repo, { recursive: true, force: true });

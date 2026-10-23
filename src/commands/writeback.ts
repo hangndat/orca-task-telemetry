@@ -4,6 +4,7 @@ import type { Readable, Writable } from 'node:stream';
 import { CliError, usageError } from '../errors.js';
 import { openReportContext } from '../reports/tasks.js';
 import { sanitizeDisplayText } from '../reports/render.js';
+import { requireGhProjectWriteScope } from '../github/auth-scopes.js';
 import {
   applyExitCode,
   applyWritebackPreview,
@@ -171,6 +172,9 @@ export async function runWriteback(
     throw error;
   }
   try {
+    if (args.apply) {
+      requireGhProjectWriteScope();
+    }
     const data = await buildWritebackPreview(ctx, {
       fieldName: args.field,
       fieldId: args.fieldId,

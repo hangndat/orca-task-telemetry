@@ -13,6 +13,12 @@ import { appendFileSync } from 'node:fs';
 const argv = process.argv.slice(2);
 const logPath = process.env.GH_ITEM_EDIT_STUB_LOG_PATH;
 
+if (process.env.GH_ITEM_EDIT_STUB_SIGNAL === 'zero') {
+  process.on('SIGTERM', () => process.exit(0));
+} else if (process.env.GH_ITEM_EDIT_STUB_SIGNAL === 'ignore') {
+  process.on('SIGTERM', () => {});
+}
+
 function finish() {
   if (logPath) {
     appendFileSync(logPath, `${JSON.stringify({ argv })}\n`);

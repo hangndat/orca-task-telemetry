@@ -9,7 +9,24 @@ if (!statePath || !logPath) process.exit(90);
 const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {};
 const log = (kind) => appendFileSync(logPath, `${JSON.stringify({ kind, argv })}\n`);
 
-if (argv[0] === 'repo' && argv[1] === 'view') {
+if (argv[0] === 'auth' && argv[1] === 'status') {
+  log('auth');
+  const mode = process.env.GH_WRITEBACK_AUTH ?? 'project';
+  if (mode === 'unknown') {
+    process.stdout.write('{invalid json');
+  } else {
+    const accounts = mode === 'unauthenticated' ? [] : [{
+      active: true,
+      state: 'success',
+      scopes: mode === 'read' || mode === 'inactive-project' ? 'repo, read:project' : 'repo, read:project, project',
+      tokenSource: 'keyring',
+    }];
+    if (mode === 'inactive-project') {
+      accounts.push({ active: false, state: 'success', scopes: 'repo, project', tokenSource: 'keyring' });
+    }
+    process.stdout.write(JSON.stringify({ hosts: { 'github.com': accounts } }));
+  }
+} else if (argv[0] === 'repo' && argv[1] === 'view') {
   process.stdout.write(JSON.stringify({
     id: 'R_reports',
     nameWithOwner: 'org-a/repo',
