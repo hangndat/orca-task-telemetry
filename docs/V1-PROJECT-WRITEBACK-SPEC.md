@@ -1,8 +1,10 @@
 # V1.2 — Ghi ngược custom field GitHub Projects V2 (#45)
 
-Story [#45](https://github.com/hangndat/orca-task-telemetry/issues/45) · Epic [#11](https://github.com/hangndat/orca-task-telemetry/issues/11) · Hạng mục P1 trong [BACKLOG.md](../BACKLOG.md). MVP và V1.1 (`report hierarchy`, [#44](V1-HIERARCHY-SPEC.md)) vẫn **chỉ đọc** GitHub; tài liệu này là **contract đã chốt** (sau draft SHA `2829e5b07615bcb559a34d8ae0567b47305402f4`) trước mọi thay đổi runtime.
+Story [#45](https://github.com/hangndat/orca-task-telemetry/issues/45) · Epic [#11](https://github.com/hangndat/orca-task-telemetry/issues/11) · Hạng mục P1 trong [BACKLOG.md](../BACKLOG.md). MVP và V1.1 (`report hierarchy`, [#44](V1-HIERARCHY-SPEC.md)) vẫn **chỉ đọc** GitHub trừ lệnh `writeback --apply`. Tài liệu này là **contract đã chốt** (draft SHA `2829e5b07615bcb559a34d8ae0567b47305402f4`); runtime V1.2 tại **`2bad83490c149a11404524152d895710bcad5eb2`** (`feat(writeback): add explicit project field apply flow`).
 
 **Architecture impact: Có** — mở ranh giới tin cậy **ghi ra GitHub** (Projects V2 custom field). Không daemon, không webhook; một lệnh CLI tường minh, opt-in, có dry-run mặc định.
+
+**Acceptance V1.2:** Chưa **PASS** — cần independent security review trên exact SHA code và live `--apply` trên **field NUMBER thử** / item test (không dùng field roadmap kinh doanh như `Wave`). Fixture/stub và live dry-run read-only dưới đây **không** thay hai gate đó.
 
 ## Tiêu chí nghiệm thu (contract)
 
@@ -178,7 +180,7 @@ Profile hoạt động với Project/user hoặc org qua IDs đã lưu `init`. *
 | **V1.2-A — Contract + read adapter** | `src/contracts.ts`, `src/github/fields.ts` (mới), tests fixture GraphQL field read | `item-edit`, journal, field-create | Unit: parse field metadata; NUMBER-only validation |
 | **V1.2-B — Preview engine** | `src/writeback/preview.ts`, `src/commands/writeback.ts`, `src/commands/router.ts`, `help.ts` | `--apply` | `pnpm test`; JSON `writeback_preview`; parity `report hierarchy` fixture; duplicate field name fail |
 | **V1.2-C — Apply adapter** | `src/writeback/gh-apply.ts`, `src/writeback/apply.ts`, `doctor` scope hint | Journal DB; tạo/xóa field; `--project` override | Stub `item-edit`; re-read before write; idempotent re-run; non-TTY without `--yes` → 2 |
-| **V1.2-D — Live evidence + security review** | `docs/`, `README.md` (đoạn ngắn), evidence `/tmp` | Sửa target repo; tạo Issue/field GitHub; apply live trong task planning | **Security gate:** independent review exact SHA — token `project`, no default apply in CI; live dry-run read-only trước; apply chỉ field thử trên item test |
+| **V1.2-D — Live evidence + security review** | `docs/`, `README.md` (đoạn ngắn), evidence `/tmp` | Sửa target repo; tạo Issue/field GitHub; apply live trong slice docs | **Docs @ `2bad834`:** live dry-run read-only (bảng evidence); security review + live apply field thử — gate còn mở |
 | **V1.2-E — Docs BA (contract)** | `docs/V1-PROJECT-WRITEBACK-SPEC.md` | `src/`, tests, lockfile | `git diff --check`; link docs; worker report |
 
 **Phụ thuộc:** V1.1 hierarchy; `collect` membership `(project_id, issue_node_id)`; `readProjectItems` (read GraphQL) cho `itemId`; profile `init`.
@@ -243,4 +245,37 @@ Profile hoạt động với Project/user hoặc org qua IDs đã lưu `init`. *
 
 ---
 
-_Tài liệu contract final @ task V1.2-E. Acceptance implementation và security review là gate riêng trên SHA code._
+## Trạng thái triển khai và evidence (@ `2bad83490c149a11404524152d895710bcad5eb2`)
+
+### Kiểm chứng tự động (fixture / stub — không `item-edit` thật)
+
+| Check | Kết quả |
+| --- | --- |
+| `pnpm test` | 45 files, **292** tests pass (stub `gh` / Orca / CodeBurn) |
+| `pnpm test:pack` | pack + cài prefix tạm + smoke CLI pass |
+| Phạm vi | Dry-run preview, apply orchestration, non-TTY/`--yes`, re-read conflict, partial failure, scope hint — **không** mutation GitHub trong CI mặc định |
+
+### Live read-only (worker V1.2-D, 2026-10-24)
+
+Môi trường cô lập: `ORCA_TELEMETRY_HOME=/tmp/orca-telemetry-resume/live-v12` (ngoài git root). Không ghi credentials, prompt hay nội dung repo riêng vào doc.
+
+| Bước | Kết quả |
+| --- | --- |
+| `init --project` (user Project **#4**) | Thành công; profile lưu node id Project |
+| `collect --json` (PATH, không pin) | Exit **5** partial: GitHub **103** issues/memberships; Orca **7** executions; CodeBurn `codeburn_runtime_unavailable`; DB **0** session |
+| `collect --json` (pin `ORCA_TELEMETRY_CODEBURN` → binary `codeburn@0.9.27` trong npm cache) | Exit **0**: GitHub **103**; Orca **8** executions; CodeBurn **424** sessions; DB **424** sessions (không phải gap collector lâu dài — thiếu PATH hoặc dùng pin như README) |
+| Discovery field NUMBER `Wave` | Node id `PVTF_lAHOAGoDWs4BoZ5mzhm6Ld4` (field roadmap — **không** dùng cho live cost apply) |
+| `writeback --field Wave --issue hangndat/orca-task-telemetry#45 --json` (@ `2bad834`, sau collect thành công) | Exit **0**; `kind: writeback_preview`, `mode: dry_run`; item `PVTI_lAHOAGoDWs4BoZ5mzhDBA3g`; `remote: null`; skip **`no_usage`** (chưa `link` session → Issue **#45**, không phải DB trống); **wouldSet 0**; **không** gọi `item-edit` |
+
+**Hệ quả:** Live dry-run chứng minh đọc field + item + membership + preview JSON. Số cost trên #45 vẫn skip vì chưa attribution Issue ↔ session cho issue đó. **Chưa** có live `--apply` evidence; **chưa** thử org-owned Project.
+
+### Gate còn lại
+
+1. **Independent security review** trên SHA `2bad834` (token `project`, không default apply trong automation, ranh giới read-only client).
+2. **Live apply** một lần trên field NUMBER **dành cho thử** và item test, sau `collect` + `link` có usage known — ghi lại stdout/redacted JSON, không field kinh doanh.
+
+Báo cáo worker chi tiết: `/tmp/orca-telemetry-resume/worker-V12-D.md`.
+
+---
+
+_Tài liệu contract + evidence docs @ V1.2-D. Implementation code @ `2bad834`; acceptance và security review là gate riêng._
