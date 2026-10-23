@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import { openReadOnlyTelemetryDb } from '../dist/db/read-only.js';
 import { buildTraceReport, formatTraceReportText } from '../dist/reports/trace.js';
-import { at, oidA, profile, setupTraceDb } from './helpers/trace-slice3-harness.mjs';
+import { at, oidA, oidB, profile, setupTraceDb } from './helpers/trace-slice3-harness.mjs';
 
 // Synthetic/redacted fixture, not live integration evidence.
 function ctx(db) { return { db, profile: profile(), close() {} }; }
@@ -30,6 +30,75 @@ test('trace report dedupes Issue and PR usage while retaining repeated PR/commit
     assert.match(formatTraceReportText(report), /do not add path totals/);
     assert.match(formatTraceReportText(report), /Commit a{40}/);
     assert.equal(report.pullRequests[0].issueRelation.source, 'closingIssuesReferences');
+  } finally { fixture.close(); }
+});
+
+test('redacted golden text and JSON keep provider tokens at each scope without adding repeated paths', () => {
+  const fixture = setupTraceDb();
+  try {
+    const db = fixture.db;
+    db.prepare(`INSERT INTO usage_sessions (session_key, provider, source, raw_id)
+      VALUES ('claude:codeburn:c1', 'claude', 'codeburn', 'c1')`).run();
+    db.prepare(`INSERT INTO usage_snapshots
+      (session_key, observed_at, tokens_json, cost_amount_usd, cost_kind)
+      VALUES ('claude:codeburn:c1', ?, ?, 0.5, 'estimated_api_equivalent')`)
+      .run(at, JSON.stringify({ provider: 'claude', input: 7, output: 4,
+        cacheRead: 1, cacheWrite: 2, reasoning: null }));
+    db.prepare(`INSERT INTO session_links (session_key, issue_node_id, method, linked_at)
+      VALUES ('claude:codeburn:c1', 'I_1', 'manual', ?)` ).run(at);
+    db.prepare(`INSERT INTO session_pull_links
+      (session_key, issue_node_id, pull_node_id, method, linked_at)
+      VALUES ('claude:codeburn:c1', 'I_1', 'PR_7', 'manual', ?)` ).run(at);
+    db.prepare(`INSERT INTO session_commit_links (session_key, pull_node_id, oid, method, linked_at)
+      VALUES ('claude:codeburn:c1', 'PR_7', ?, 'manual', ?)` ).run(oidA, at);
+    db.prepare(`INSERT INTO session_pull_links
+      (session_key, issue_node_id, pull_node_id, method, linked_at)
+      VALUES ('codex:codeburn:s3', 'I_1', 'PR_8', 'manual', ?)` ).run(at);
+    db.prepare(`INSERT INTO session_commit_links (session_key, pull_node_id, oid, method, linked_at)
+      VALUES ('codex:codeburn:s3', 'PR_8', ?, 'manual', ?)` ).run(oidB, at);
+
+    const report = buildTraceReport(ctx(db), '3');
+    const scopeUsage = [report.issueUsage, ...report.pullRequests.flatMap(pr =>
+      [pr.usage, ...pr.commits.map(commit => commit.usage)])];
+    const jsonGolden = scopeUsage.map(usage => ({
+      sessions: usage.sessionCount, missing: usage.missingSnapshotCount,
+      providers: usage.byProvider.map(p => [p.provider, p.sessionCount, p.missingSnapshotCount,
+        p.knownTokens.input, p.knownTokens.output, p.knownTokens.cacheRead,
+        p.knownTokens.cacheWrite, p.knownTokens.reasoning, p.tokensComplete]),
+    }));
+    assert.deepEqual(jsonGolden, [
+      { sessions: 4, missing: 1, providers: [
+        ['claude', 1, 0, 7, 4, 1, 2, null, true],
+        ['codex', 3, 1, 20, 4, 6, 0, null, false]] },
+      { sessions: 2, missing: 0, providers: [
+        ['claude', 1, 0, 7, 4, 1, 2, null, true],
+        ['codex', 1, 0, 10, 2, 3, 0, null, true]] },
+      { sessions: 2, missing: 0, providers: [
+        ['claude', 1, 0, 7, 4, 1, 2, null, true],
+        ['codex', 1, 0, 10, 2, 3, 0, null, true]] },
+      { sessions: 1, missing: 0, providers: [
+        ['codex', 1, 0, 10, 2, 3, 0, null, true]] },
+      { sessions: 2, missing: 1, providers: [
+        ['codex', 2, 1, 10, 2, 3, 0, null, false]] },
+      { sessions: 1, missing: 0, providers: [
+        ['codex', 1, 0, 10, 2, 3, 0, null, true]] },
+      { sessions: 2, missing: 1, providers: [
+        ['codex', 2, 1, 10, 2, 3, 0, null, false]] },
+    ]);
+    assert.equal(report.issueUsage.byProvider.find(p => p.provider === 'codex').knownTokens.input, 20);
+    const tokenLines = formatTraceReportText(report).split('\n').filter(line => line.includes(' known tokens:'));
+    const claude = 'claude known tokens: in=7 out=4 cacheR=1 cacheW=2 reasoning=unknown; complete=true; sessions=1; missing snapshots=0';
+    const codex = (input, complete, sessions, missing) =>
+      `codex known tokens: in=${input} out=${input / 5} cacheR=${input * 3 / 10} cacheW=0 reasoning=unknown; complete=${complete}; sessions=${sessions}; missing snapshots=${missing}`;
+    assert.deepEqual(tokenLines, [
+      `  ${claude}`, `  ${codex(20, false, 3, 1)}`,
+      `      ${claude}`, `      ${codex(10, true, 1, 0)}`,
+      `      ${claude}`, `      ${codex(10, true, 1, 0)}`,
+      `      ${codex(10, true, 1, 0)}`,
+      `      ${codex(10, false, 2, 1)}`,
+      `      ${codex(10, true, 1, 0)}`,
+      `      ${codex(10, false, 2, 1)}`,
+    ]);
   } finally { fixture.close(); }
 });
 

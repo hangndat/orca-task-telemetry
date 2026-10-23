@@ -268,15 +268,18 @@ function displayCost(usageValue: TraceUsage): string {
     `${formatUsd(usageValue.cost.amountUsd)} estimated API equivalent`;
 }
 
+function providerTokenLines(usageValue: TraceUsage, indent: string): string[] {
+  return usageValue.byProvider.map(provider =>
+    `${indent}${provider.provider} known tokens: in=${provider.knownTokens.input} out=${provider.knownTokens.output} cacheR=${provider.knownTokens.cacheRead} cacheW=${provider.knownTokens.cacheWrite} reasoning=${provider.knownTokens.reasoning ?? 'unknown'}; complete=${provider.tokensComplete}; sessions=${provider.sessionCount}; missing snapshots=${provider.missingSnapshotCount}`);
+}
+
 export function formatTraceReportText(report: TraceReport): string {
   const lines = [
     `Trace report — ${sanitizeDisplayText(report.issue.url)}`,
     `Issue usage: ${report.issueUsage.sessionCount} linked sessions; ${displayCost(report.issueUsage)}; missing snapshots: ${report.issueUsage.missingSnapshotCount}`,
     'Issue sessions:',
   ];
-  for (const provider of report.issueUsage.byProvider) {
-    lines.push(`  ${provider.provider} known tokens: in=${provider.knownTokens.input} out=${provider.knownTokens.output} cacheR=${provider.knownTokens.cacheRead} cacheW=${provider.knownTokens.cacheWrite}; complete=${provider.tokensComplete}`);
-  }
+  lines.push(...providerTokenLines(report.issueUsage, '  '));
   if (report.issueSessions.length === 0) lines.push('  none');
   for (const session of report.issueSessions) {
     lines.push(`  ${sanitizeDisplayText(session.sessionKey)} [${session.linkMethod}, ${session.provider}/${session.source}, Orca ${session.orcaReference.status}]: ${session.cost.amountUsd === null ? 'unknown cost' : formatUsd(session.cost.amountUsd)}`);
@@ -287,9 +290,11 @@ export function formatTraceReportText(report: TraceReport): string {
     lines.push(`  ${sanitizeDisplayText(pull.url)} — ${pull.state}, draft=${pull.isDraft}, mergedAt=${pull.mergedAt ?? 'null'}`);
     lines.push(`    Issue relation: ${pull.issueRelation.status} via ${pull.issueRelation.source}; lastVerifiedAt=${pull.issueRelation.lastVerifiedAt ?? 'null'}`);
     lines.push(`    Usage: ${pull.usage.sessionCount} sessions; ${displayCost(pull.usage)}`);
+    lines.push(...providerTokenLines(pull.usage, '      '));
     for (const session of pull.sessions) lines.push(`    Session: ${sanitizeDisplayText(session.sessionKey)} [manual]`);
     for (const commit of pull.commits) {
       lines.push(`    Commit ${commit.oid}: ${commit.relation.status} via ${commit.relation.source}; lastVerifiedAt=${commit.relation.lastVerifiedAt ?? 'null'}; sessions=${commit.sessionKeys.map(sanitizeDisplayText).join(', ')}; cost=${displayCost(commit.usage)}`);
+      lines.push(...providerTokenLines(commit.usage, '      '));
     }
   }
   lines.push('Warnings:');
