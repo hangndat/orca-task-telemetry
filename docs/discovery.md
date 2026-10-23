@@ -130,7 +130,7 @@ Cùng **shape camelCase** với Claude (`sessionId`, `inputTokens`, …). Một 
 | --- | --- | --- | --- |
 | `sessionId` | ID session Codex (UUID chuỗi hex) | Không null | `session-gpt-small-aggregated.json` |
 | `provider` | `"codex"` | Không null | fixture |
-| `project` | Slug cwd (vd `Users-admin-…`, **không** có `-` đầu như nhiều row Claude) | Redact fixture | fixture |
+| `project` | Slug cwd (vd `Users-<user>-<repo-slug>`, **không** có `-` đầu như nhiều row Claude) | Redact fixture | fixture |
 | `models` | Display name (vd `GPT-6.1 Sol`) | Mảng | fixture |
 | `inputTokens` | Input billed bucket trong UI CodeBurn | Không gồm `cacheReadTokens` (bucket riêng) | fixture + audit `displayed` |
 | `outputTokens` | Output tokens | | fixture |

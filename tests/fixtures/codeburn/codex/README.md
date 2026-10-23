@@ -20,7 +20,7 @@
 
 | Gốc | Placeholder |
 | --- | --- |
-| `project` slug (`Users-admin-…`) | `<PROJECT_SLUG>` |
+| `project` slug (vd `Users-<user>-<repo-slug>`) | `<PROJECT_SLUG>` |
 | `Project` đường dẫn tuyệt đối | `<PROJECT_ABSOLUTE_PATH_REDACTED>` |
 | `sessionId` | `01a10000-bbbb-4ccc-8ddd-eeeeeeeeee01` (giữ prefix `01a1` minh họa định dạng Codex) |
 
@@ -28,14 +28,23 @@ Không prompt, email, path home thật, credential.
 
 ## Đối chiếu token (AC3)
 
-Session live (trước redact ID): `01a14780-fa01-7e01-9f2f-3e890a32da65`.
+**Tiêu chí chọn session:** `provider=codex`, `models` gồm `GPT-6.1 Sol`, `calls=14`, `turns=1`, bốn bucket khớp `session-gpt-small-aggregated.json` (`inputTokens=51600`, `outputTokens=2040`, `cacheReadTokens=661504`, `cacheWriteTokens=0`). Ngày trong fixture: `2026-10-17`.
 
 ```sh
+FIXTURE=tests/fixtures/codeburn/codex/session-gpt-small-aggregated.json
 npx --yes codeburn@0.9.27 sessions --provider codex --period all --format json --no-pager \
-  | jq '.[] | select(.sessionId=="01a14780-fa01-7e01-9f2f-3e890a32da65") | {inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, cost, calls, turns}'
+  | jq --slurpfile exp "$FIXTURE" '
+      .[] | select(
+        .inputTokens==$exp[0].inputTokens
+        and .outputTokens==$exp[0].outputTokens
+        and .cacheReadTokens==$exp[0].cacheReadTokens
+        and .cacheWriteTokens==$exp[0].cacheWriteTokens
+        and .calls==$exp[0].calls
+        and .turns==$exp[0].turns
+      ) | {sessionId, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, cost, calls, turns}'
 ```
 
-Live 2026-10-23: `inputTokens=51600`, `outputTokens=2040`, `cacheReadTokens=661504`, `cacheWriteTokens=0`, `cost≈0.190`, `calls=14`, `turns=1` — khớp `session-gpt-small-aggregated.json`.
+Khớp fixture khi các bucket và `calls`/`turns` trùng; `sessionId` chỉ in local.
 
 Tổng bốn bucket: **715 144** (= 51600 + 2040 + 661504 + 0).
 
@@ -44,5 +53,6 @@ Export cùng ngày: `Cost (USD)=0.19` vs `cost=0.1897504…` trong `sessions`.
 ## grep
 
 ```sh
-rg -i 'hangndat|@gmail|SideProject|ticket-solution|/Users/admin|prompt|sk-|Bearer' tests/fixtures/codeburn/codex/ || true
+rg -i 'hangndat|@gmail|SideProject|ticket-solution|prompt|sk-|Bearer' tests/fixtures/codeburn/codex/ || true
+# Không có đường dẫn home tuyệt đối trong JSON/README — kiểm tay hoặc rg tùy biến trên máy review.
 ```
