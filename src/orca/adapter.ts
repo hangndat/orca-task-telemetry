@@ -6,7 +6,8 @@ import {
   EXIT_USAGE,
 } from '../errors.js';
 
-export const ORCA_VERIFIED_VERSION_PREFIX = '1.4.';
+/** Only build with live evidence in docs/discovery.md (not a semver range). */
+export const ORCA_VERIFIED_VERSION = '1.4.237';
 export const DEFAULT_ORCA_TIMEOUT_MS = 60_000;
 export const DEFAULT_ORCA_MAX_BUFFER = 10 * 1024 * 1024;
 
@@ -65,9 +66,11 @@ export type OrcaAdapterOptions = {
 
 export type OrcaInvocationResult = {
   stdout: string;
+  /** Sanitized; raw subprocess stderr is never exposed. */
   stderr: string;
   exitCode: number | null;
 };
+
 
 function orcaError(
   code: string,
@@ -88,6 +91,75 @@ export function resolveOrcaBinary(): string {
     return cliCommand;
   }
   return 'orca';
+}
+
+/**
+ * Read a flag value from argv without treating the next flag as a value.
+ */
+export function readArgvFlag(argv: string[], flag: string): string | undefined {
+  const idx = argv.indexOf(flag);
+  if (idx < 0) {
+    return undefined;
+  }
+  const next = argv[idx + 1];
+  if (next === undefined || next.startsWith('-')) {
+    return '';
+  }
+  return next;
+}
+
+function requireArgvFlag(argv: string[], flag: string, commandLabel: string): void {
+  const value = readArgvFlag(argv, flag);
+  if (value === undefined) {
+    throw orcaError(
+      'orca_command_denied',
+      `${commandLabel} requires ${flag}.`,
+      EXIT_USAGE,
+    );
+  }
+  if (value.length === 0) {
+    throw orcaError(
+      'orca_command_denied',
+      `${flag} must have a non-empty value for ${commandLabel}.`,
+      EXIT_USAGE,
+    );
+  }
+}
+
+function assertRequiredArgvSelectors(argv: string[], commandKey: string): void {
+  switch (commandKey) {
+    case 'worktree:show':
+      requireArgvFlag(argv, '--worktree', 'worktree show');
+      return;
+    case 'repo:show':
+      requireArgvFlag(argv, '--repo', 'repo show');
+      return;
+    case 'reference:list':
+      requireArgvFlag(argv, '--worktree', 'reference list');
+      return;
+    case 'reference:find':
+      requireArgvFlag(argv, '--query', 'reference find');
+      return;
+    case 'orchestration:run-show':
+      requireArgvFlag(argv, '--id', 'orchestration run-show');
+      return;
+    case 'orchestration:task-list':
+      requireArgvFlag(argv, '--run', 'orchestration task-list');
+      return;
+    case 'orchestration:worker-show':
+      requireArgvFlag(argv, '--dispatch', 'orchestration worker-show');
+      return;
+    case 'orchestration:dispatch-show':
+      requireArgvFlag(argv, '--task', 'orchestration dispatch-show');
+      return;
+    default:
+      return;
+  }
+}
+
+/** Raw subprocess stderr must not be exposed to callers or logs. */
+export function sanitizeOrcaStderr(_stderr: string): string {
+  return '';
 }
 
 function takesValue(flag: string): boolean {
@@ -214,6 +286,7 @@ export function assertAllowlistedOrcaArgv(argv: string[]): void {
       'See docs/discovery.md § Orca allowlist.',
     );
   }
+  assertRequiredArgvSelectors(argv, key);
 }
 
 export function parseOrcaVersionText(stdout: string): string {
@@ -238,12 +311,12 @@ export function parseOrcaVersionText(stdout: string): string {
 }
 
 export function assertSupportedOrcaVersion(version: string): void {
-  if (!version.startsWith(ORCA_VERIFIED_VERSION_PREFIX)) {
+  if (version !== ORCA_VERIFIED_VERSION) {
     throw orcaError(
       'orca_version_unsupported',
-      `Orca CLI version ${version} is outside the verified range (${ORCA_VERIFIED_VERSION_PREFIX}x).`,
+      `Orca CLI version ${version} is not the verified build ${ORCA_VERIFIED_VERSION}.`,
       EXIT_SOURCE_UNAVAILABLE,
-      'Upgrade Orca desktop to a 1.4.x build verified in docs/discovery.md.',
+      `Use Orca desktop ${ORCA_VERIFIED_VERSION} as recorded in docs/discovery.md.`,
     );
   }
 }
@@ -382,7 +455,7 @@ export async function invokeOrcaReadOnly(
 
   return {
     stdout: result.stdout,
-    stderr: result.stderr,
+    stderr: sanitizeOrcaStderr(result.stderr),
     exitCode: result.exitCode,
   };
 }

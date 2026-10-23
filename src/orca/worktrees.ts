@@ -105,10 +105,6 @@ export function parseWorktreePsRowJson(text: string): OrcaManualWorktreeRecord |
     throw schemaError('row', 'missing row');
   }
   const rec = row as Record<string, unknown>;
-  const agents = rec['agents'];
-  if (Array.isArray(agents) && agents.length > 0) {
-    return null;
-  }
   const worktreeId = asNullableString(rec['worktreeId']);
   const hostId = asNullableString(rec['hostId']);
   if (!worktreeId || !hostId) {
@@ -143,7 +139,7 @@ export function parseWorktreeListJson(text: string): OrcaManualWorktreeRecord[] 
   }
   const worktrees = (result as Record<string, unknown>)['worktrees'];
   if (worktrees === undefined) {
-    return [];
+    throw schemaError('result.worktrees', 'missing worktrees array');
   }
   if (!Array.isArray(worktrees)) {
     throw schemaError('result.worktrees', 'expected array');
@@ -157,8 +153,11 @@ export function parseWorktreeListJson(text: string): OrcaManualWorktreeRecord[] 
     const rec = wt as Record<string, unknown>;
     const worktreeId = asNullableString(rec['id']);
     const hostId = asNullableString(rec['hostId']);
-    if (!worktreeId || !hostId) {
-      continue;
+    if (!worktreeId) {
+      throw schemaError(`result.worktrees[${i}].id`, 'missing worktree id');
+    }
+    if (!hostId) {
+      throw schemaError(`result.worktrees[${i}].hostId`, 'missing hostId');
     }
     out.push({
       source: 'manual',

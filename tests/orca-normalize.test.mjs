@@ -70,6 +70,41 @@ test('manual-only worktree becomes manual execution', () => {
   assert.equal(merged[0].runId, null);
 });
 
+test('same worktree id on different hosts keeps manual and supervised', () => {
+  const sharedWt = 'shared-wt-id::<HOME>/path';
+  const supervised = parseWorkerListJson(
+    readFileSync(join(fixtureDir, 'worker-list-snippet.json'), 'utf8'),
+  );
+  supervised[0].worktreeId = sharedWt;
+  supervised[0].hostId = 'host-b';
+  const manual = parseWorktreeShowJson(
+    readFileSync(join(fixtureDir, 'synthetic-worktree-manual.json'), 'utf8'),
+  );
+  manual.worktreeId = sharedWt;
+  manual.hostId = 'host-a';
+  const merged = mergeOrcaExecutions(supervised, [manual]);
+  assert.equal(merged.length, 2);
+  assert.ok(merged.some((e) => e.source === 'manual' && e.hostId === 'host-a'));
+  assert.ok(merged.some((e) => e.source === 'supervised' && e.hostId === 'host-b'));
+});
+
+test('supervised missing dispatchId with worktreeId does not silently drop manual', () => {
+  const wtId = WORKTREE_A;
+  const supervised = parseWorkerListJson(
+    readFileSync(join(fixtureDir, 'worker-list-snippet.json'), 'utf8'),
+  );
+  supervised[0].dispatchId = null;
+  supervised[0].worktreeId = wtId;
+  const manual = parseWorktreeShowJson(
+    readFileSync(join(fixtureDir, 'worktree-manual-show.json'), 'utf8'),
+  );
+  manual.worktreeId = wtId;
+  assert.throws(
+    () => mergeOrcaExecutions(supervised, [manual]),
+    (err) => err.code === 'orca_schema_drift',
+  );
+});
+
 test('distinct host namespaces produce distinct execution keys', () => {
   const supervised = parseWorkerListJson(
     readFileSync(join(fixtureDir, 'synthetic-worker-list.json'), 'utf8'),

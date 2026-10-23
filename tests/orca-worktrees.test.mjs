@@ -29,8 +29,46 @@ test('worktree ps manual row (no agents)', () => {
   assert.equal(row.issueRefHint, null);
 });
 
-test('empty worktree list is valid', () => {
-  assert.deepEqual(parseWorktreeListJson('{"ok":true,"result":{}}'), []);
+test('genuine empty worktree list is valid', () => {
+  assert.deepEqual(
+    parseWorktreeListJson('{"ok":true,"result":{"worktrees":[]}}'),
+    [],
+  );
+});
+
+test('missing worktrees array is schema drift', () => {
+  assert.throws(
+    () => parseWorktreeListJson('{"ok":true,"result":{}}'),
+    (err) => err.code === 'orca_schema_drift',
+  );
+});
+
+test('worktree list row missing id or hostId is schema drift', () => {
+  assert.throws(
+    () =>
+      parseWorktreeListJson(
+        '{"ok":true,"result":{"worktrees":[{"hostId":"local"}]}}',
+      ),
+    (err) => err.code === 'orca_schema_drift' && err.message.includes('.id'),
+  );
+  assert.throws(
+    () =>
+      parseWorktreeListJson(
+        '{"ok":true,"result":{"worktrees":[{"id":"wt-only"}]}}',
+      ),
+    (err) => err.code === 'orca_schema_drift' && err.message.includes('hostId'),
+  );
+});
+
+test('worktree ps with manually launched agent still parses as manual', () => {
+  const text = readFileSync(
+    join(fixtureDir, 'synthetic-worktree-ps-manual-agent.json'),
+    'utf8',
+  );
+  const row = parseWorktreePsRowJson(text);
+  assert.ok(row);
+  assert.equal(row.source, 'manual');
+  assert.match(row.worktreeId, /manual-agent/);
 });
 
 test('synthetic manual worktree', () => {

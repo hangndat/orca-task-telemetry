@@ -65,13 +65,77 @@ test('stub invocation log records argv for allowlisted call', async () => {
   delete process.env.ORCA_STUB_STDOUT;
 });
 
-test('unsupported and supported version parsing', () => {
+test('only verified Orca build 1.4.237 is accepted', () => {
   assert.equal(parseOrcaVersionText('1.4.237\n'), '1.4.237');
   assert.throws(
     () => assertSupportedOrcaVersion('1.3.0'),
     (err) => err.code === 'orca_version_unsupported',
   );
-  assert.doesNotThrow(() => assertSupportedOrcaVersion('1.4.100'));
+  assert.throws(
+    () => assertSupportedOrcaVersion('1.4.100'),
+    (err) => err.code === 'orca_version_unsupported',
+  );
+  assert.throws(
+    () => assertSupportedOrcaVersion('1.4.238'),
+    (err) => err.code === 'orca_version_unsupported',
+  );
+  assert.doesNotThrow(() => assertSupportedOrcaVersion('1.4.237'));
+});
+
+test('required selectors validated before spawn', () => {
+  assert.throws(
+    () => assertAllowlistedOrcaArgv(['worktree', 'show', '--json']),
+    (err) => err.code === 'orca_command_denied',
+  );
+  assert.throws(
+    () => assertAllowlistedOrcaArgv(['worktree', 'show', '--worktree', '', '--json']),
+    (err) => err.code === 'orca_command_denied',
+  );
+  assert.throws(
+    () => assertAllowlistedOrcaArgv(['worktree', 'show', '--worktree', '--json']),
+    (err) => err.code === 'orca_command_denied',
+  );
+  assert.throws(
+    () => assertAllowlistedOrcaArgv(['orchestration', 'dispatch-show', '--json']),
+    (err) => err.code === 'orca_command_denied',
+  );
+  assert.doesNotThrow(() =>
+    assertAllowlistedOrcaArgv(['worktree', 'list', '--json']),
+  );
+  assert.doesNotThrow(() =>
+    assertAllowlistedOrcaArgv(['orchestration', 'worker-list', '--json']),
+  );
+});
+
+test('deny-before-spawn leaves stub invocation log empty for missing selector', async () => {
+  const log = mkdtempSync(join(tmpdir(), 'orca-stub-log-'));
+  const logFile = join(log, 'invocations.ndjson');
+  process.env.ORCA_STUB_LOG_PATH = logFile;
+  await assert.rejects(
+    () =>
+      invokeOrcaReadOnly(['worktree', 'show', '--json'], {
+        orcaPath: stub,
+        timeoutMs: 5_000,
+      }),
+    (err) => err.code === 'orca_command_denied',
+  );
+  assert.throws(() => readFileSync(logFile, 'utf8'), { code: 'ENOENT' });
+  rmSync(log, { recursive: true, force: true });
+  delete process.env.ORCA_STUB_LOG_PATH;
+});
+
+test('stub stderr secrets are not exposed on result', async () => {
+  const sentinel = 'LEAK_SENTINEL_TOKEN_orca_stub_test';
+  process.env.ORCA_STUB_STDOUT = '{"ok":true}\n';
+  process.env.ORCA_STUB_STDERR = `${sentinel}\n`;
+  const result = await invokeOrcaReadOnly(['status', '--json'], {
+    orcaPath: stub,
+    timeoutMs: 5_000,
+  });
+  assert.equal(result.stderr, '');
+  assert.ok(!JSON.stringify(result).includes(sentinel));
+  delete process.env.ORCA_STUB_STDOUT;
+  delete process.env.ORCA_STUB_STDERR;
 });
 
 test('readOrcaVersion uses stub stdout', async () => {
@@ -109,7 +173,7 @@ test('optional live orca --version when binary available', async () => {
   const binary = process.env.ORCA_TELEMETRY_ORCA ?? 'orca';
   try {
     const version = await readOrcaVersion({ orcaPath: binary, timeoutMs: 10_000 });
-    assert.match(version, /^1\.4\./);
+    assert.equal(version, '1.4.237');
   } catch (err) {
     if (err.code !== 'orca_runtime_unavailable') {
       throw err;
