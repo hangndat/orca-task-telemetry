@@ -567,3 +567,22 @@ Module: `src/contracts.ts` (T05). Unknown trong contract luôn là `null` (khôn
 2. Báo cáo Project: nếu user chỉ link session cha, subagent `agent-…` có hiển thị unlinked usage hay bị loại?
 3. `Issue.id` lấy từ query items (thêm field) hay query Issue riêng theo `number`?
 4. `linkedBy` có chuẩn hóa từ `gh auth status` login / Orca handle hay luôn `null` trong MVP?
+
+## SQLite — telemetry store (T26)
+
+| Mục | Giá trị |
+| --- | --- |
+| Driver | `node:sqlite` (`DatabaseSync`) — không thêm native npm dependency |
+| Node runtime | `package.json` `engines.node >= 24.0.0` |
+| Xác minh Node 24 (minimum) | `npx --yes node@24.0.0 tests/helpers/node24-sqlite-smoke.mjs` (2026-10-24): **OK**; `ExperimentalWarning: SQLite is an experimental feature` |
+| Xác minh Node 24 (patch) | `npx --yes node@24.11.0` cùng smoke script — **OK**; cùng experimental warning |
+| Xác minh Node hiện tại | `node -e "import('node:sqlite')…"` trên v26.11.0 — **OK** (cùng experimental warning) |
+| Đường dẫn DB | `resolveAppPaths().dbPath` → `<appHome>/telemetry.sqlite` (T10); test dùng path tạm explicit |
+| PRAGMA | `foreign_keys=ON`, `journal_mode=WAL`, schema `PRAGMA user_version` (v1) |
+| Quyền file (POSIX) | Thư mục DB `0700` (best-effort), file `0600` sau open; không chmod thư mục cha tùy ý |
+| Ranh giới path | Từ chối symlink DB/parent; từ chối DB nằm trong git root đích khi `gitRoot` được truyền |
+| Đóng gói | `pnpm pack` / `test:pack` không kéo binary SQLite ngoài — dùng built-in Node 24+ |
+
+**Không lưu:** prompt thô, transcript, credential, stderr/token provider, hay whole JSON nguồn — chỉ cột allowlisted trong migration v1 (`src/db/migrations/v1.ts`).
+
+**Import idempotent (T28):** mỗi nguồn một transaction; snapshot tích lũy thay thế khi `observedAt` mới hơn; cùng `observedAt` + payload khác → `db_snapshot_conflict`; `collection_logs` append mỗi lượt (message sanitized).
