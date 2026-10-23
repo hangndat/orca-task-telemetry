@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { EXIT_USAGE } from '../dist/errors.js';
 import { runDoctorWithDeps } from '../dist/doctor.js';
 import { SUPPORTED_SCHEMA_VERSION } from '../dist/db/migrate.js';
 
@@ -35,6 +36,7 @@ test('T32: doctor fail on unsupported node', async () => {
     nodeVersion: 'v20.0.0',
   });
   assert.equal(report.summary, 'fail');
+  assert.equal(report.exitCode, EXIT_USAGE);
   assert.ok(report.checks.some((c) => c.id === 'node' && c.status === 'fail'));
 });
 
@@ -45,4 +47,6 @@ test('T32: doctor fail on future database schema', async () => {
     readDbUserVersion: () => SUPPORTED_SCHEMA_VERSION + 10,
   });
   assert.equal(report.checks.find((c) => c.id === 'database')?.status, 'fail');
+  assert.equal(report.summary, 'fail');
+  assert.equal(report.exitCode, EXIT_USAGE);
 });

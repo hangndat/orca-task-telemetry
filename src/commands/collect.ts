@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig } from '../config.js';
 import {
@@ -58,9 +59,17 @@ export type CollectPayload = {
   };
 };
 
+function canonicalPath(targetPath: string): string {
+  try {
+    return fs.realpathSync(targetPath);
+  } catch {
+    return path.resolve(targetPath);
+  }
+}
+
 function pathsInsideGitRoot(gitRoot: string, targetPath: string): boolean {
-  const root = path.resolve(gitRoot);
-  const target = path.resolve(targetPath);
+  const root = canonicalPath(gitRoot);
+  const target = canonicalPath(targetPath);
   const rel = path.relative(root, target);
   return rel.length === 0 || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }

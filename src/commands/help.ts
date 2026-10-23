@@ -93,7 +93,8 @@ export function commandHelpText(command: string): string {
       'Usage:',
       '  orca-telemetry doctor [--json]',
       '',
-      'Checks Node.js and presence of git, gh, orca, and codeburn.',
+      'Checks Node.js, gh auth (read:project), Orca/CodeBurn versions, profile, and DB schema.',
+      'Exit codes: 0 when summary is pass or warn; 2 when summary is fail (diagnostic).',
     ].join('\n') + '\n';
   }
   const entry = TOP_LEVEL.find((c) => c.name === command);
