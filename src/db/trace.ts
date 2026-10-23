@@ -245,3 +245,10 @@ export function refreshStoredPullTrace(db: DatabaseSync, pullNodeId: string, evi
     refreshExistingRelations(db, pullNodeId, evidence);
   });
 }
+
+/** A stored PR is collected once even when several sessions or Issues link to it. */
+export function listStoredPullNodeIds(db: DatabaseSync): string[] {
+  const rows = db.prepare('SELECT pull_node_id FROM pull_requests ORDER BY pull_node_id')
+    .all() as { pull_node_id: string }[];
+  return rows.map(row => row.pull_node_id);
+}
