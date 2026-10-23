@@ -292,6 +292,9 @@ export function runIsolatedPackInstallTest(packageRoot = REPO_ROOT) {
     if (parsed.ok !== true) {
       fail(`doctor --json ok !== true: ${doctorJson.stdout}`);
     }
+    if (!parsed.data?.checks || !Array.isArray(parsed.data.checks)) {
+      fail(`doctor --json missing checks array: ${doctorJson.stdout}`);
+    }
 
     const after = captureGitRepoInventory(gitRepo);
     assertGitRepoUnchanged(before, after);

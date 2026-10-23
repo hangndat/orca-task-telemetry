@@ -1,15 +1,21 @@
-import { runDoctor, collectDoctorData } from '../doctor.js';
+import {
+  formatDoctorText,
+  runDoctorWithDeps,
+  buildDefaultDoctorDeps,
+} from '../doctor.js';
 import { notImplemented, usageError, unknownCommand } from '../errors.js';
 import { commandHelpText } from './help.js';
 import { writeJsonSuccess } from './output.js';
 import { runInit } from './init.js';
 import { runProjects } from './projects.js';
-
-const STUB_COMMANDS = new Set(['collect', 'link']);
+import { runCollect } from './collect.js';
+import { runLink } from './link.js';
 
 const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'project', 'unmapped']);
 
-export type RouteResult = { kind: 'ok'; data?: unknown } | { kind: 'text'; write: () => void };
+export type RouteResult =
+  | { kind: 'ok'; data?: unknown; exitCode?: number }
+  | { kind: 'text'; write: () => void; exitCode?: number };
 
 export async function routeCommand(
   command: string,
@@ -28,15 +34,32 @@ export async function routeCommand(
   }
 
   if (command === 'doctor') {
+    const cwd = options.cwd ?? process.cwd();
+    const report = await runDoctorWithDeps(await buildDefaultDoctorDeps(cwd));
     if (json) {
-      return { kind: 'ok', data: collectDoctorData() };
+      return { kind: 'ok', data: report, exitCode: report.exitCode };
     }
     return {
       kind: 'text',
+      exitCode: report.exitCode,
       write: () => {
-        runDoctor();
+        process.stdout.write(formatDoctorText(report));
       },
     };
+  }
+
+  if (command === 'collect') {
+    return runCollect(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
+  }
+
+  if (command === 'link') {
+    return runLink(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
   }
 
   if (command === 'projects') {
@@ -51,10 +74,6 @@ export async function routeCommand(
       json,
       cwd: options.cwd ?? process.cwd(),
     });
-  }
-
-  if (STUB_COMMANDS.has(command)) {
-    throw notImplemented(command);
   }
 
   if (command === 'report') {
@@ -80,8 +99,8 @@ export function finishRoute(result: RouteResult, json: boolean): number {
     if (json) {
       writeJsonSuccess(result.data);
     }
-    return 0;
+    return result.exitCode ?? 0;
   }
   result.write();
-  return 0;
+  return result.exitCode ?? 0;
 }

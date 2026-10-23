@@ -1,13 +1,13 @@
 const VERSION = '0.1.0';
 
-const IMPLEMENTED = new Set(['doctor', 'projects', 'init']);
+const IMPLEMENTED = new Set(['doctor', 'projects', 'init', 'collect', 'link']);
 
 const TOP_LEVEL = [
   { name: 'doctor', summary: 'Check local tools (implemented)' },
   { name: 'init', summary: 'Initialize telemetry profile for this repository' },
   { name: 'projects', summary: 'List GitHub Projects for the current repository' },
-  { name: 'collect', summary: 'Collect Orca/CodeBurn usage (not implemented)' },
-  { name: 'link', summary: 'Link a session to an issue (not implemented)' },
+  { name: 'collect', summary: 'Collect GitHub, Orca, and CodeBurn into local DB' },
+  { name: 'link', summary: 'Link a CodeBurn session to a GitHub issue' },
   { name: 'report', summary: 'Usage reports (not implemented)' },
 ];
 

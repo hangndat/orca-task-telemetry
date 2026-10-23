@@ -21,8 +21,17 @@ export type GitHubImportInput = {
 export type CodeBurnImportRow = {
   session: UsageSession;
   snapshot: UsageSnapshot;
+  /** Provider session model labels (Claude and Codex). */
+  models?: string[] | null;
+  /** Per-session model/token allocation semantics when multiple models apply. */
+  tokenAllocation?: ClaudeTokenAllocation | null;
+  /** CodeBurn project slug hint (not GitHub Project membership). */
+  projectHint?: string | null;
+  /** @deprecated use `models` */
   claudeModels?: string[] | null;
+  /** @deprecated use `tokenAllocation` */
   claudeTokenAllocation?: ClaudeTokenAllocation | null;
+  /** @deprecated use `projectHint` */
   claudeProjectHint?: string | null;
 };
 
@@ -61,14 +70,14 @@ function appendCollectionLog(
 }
 
 function extrasFromRow(row: CodeBurnImportRow): SnapshotRowExtras {
+  const modelList = row.models ?? row.claudeModels;
   const models =
-    row.claudeModels && row.claudeModels.length > 0
-      ? JSON.stringify(row.claudeModels)
-      : null;
+    modelList && modelList.length > 0 ? JSON.stringify(modelList) : null;
   return {
     claudeModelsJson: models,
-    claudeTokenAllocation: row.claudeTokenAllocation ?? null,
-    claudeProjectHint: row.claudeProjectHint ?? null,
+    claudeTokenAllocation:
+      row.tokenAllocation ?? row.claudeTokenAllocation ?? null,
+    claudeProjectHint: row.projectHint ?? row.claudeProjectHint ?? null,
   };
 }
 

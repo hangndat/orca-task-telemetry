@@ -64,6 +64,8 @@ test('--help documents implemented vs planned commands', () => {
   assert.match(result.stdout, /doctor.*implemented/i);
   assert.match(result.stdout, /projects.*implemented/i);
   assert.match(result.stdout, /init.*implemented/i);
+  assert.match(result.stdout, /collect.*implemented/i);
+  assert.match(result.stdout, /link.*implemented/i);
   assert.doesNotMatch(result.stdout, /__internal_test/);
 });
 
@@ -114,8 +116,6 @@ test('report task without issue id is usage_error', () => {
 });
 
 const NOT_IMPLEMENTED_CASES = [
-  ['collect'],
-  ['link'],
   ['report', 'tasks'],
   ['report', 'task', '42'],
   ['report', 'project'],
@@ -142,8 +142,8 @@ for (const args of NOT_IMPLEMENTED_CASES) {
 test('doctor does not require an active GitHub session', () => {
   const result = run('doctor');
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /Node\.js:/);
-  assert.match(result.stdout, /gh:/);
+  assert.match(result.stdout, /Summary:/);
+  assert.match(result.stdout, /\[pass\]/i);
 });
 
 test('--version --json emits a single JSON object', () => {
@@ -159,8 +159,8 @@ test('doctor --json emits structured data', () => {
   assert.equal(result.status, 0);
   const body = parseStdoutJson(result);
   assert.equal(body.ok, true);
-  assert.match(body.data.nodeVersion, /^v\d+/);
-  assert.ok(Array.isArray(body.data.tools));
+  assert.ok(Array.isArray(body.data.checks));
+  assert.ok(['pass', 'warn', 'fail'].includes(body.data.summary));
 });
 
 test('unexpected internal error exits 1 without stack by default', () => {

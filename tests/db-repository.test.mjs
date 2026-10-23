@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'vitest';
 import { orcaExecutionKey, sessionKey } from '../dist/contracts.js';
+import { readFileSync } from 'node:fs';
 import {
   countRows,
   importCodeBurnUsage,
@@ -13,7 +14,6 @@ import {
   sanitizeCollectionMessage,
 } from '../dist/db/index.js';
 import { normalizeProjectMemberships } from '../dist/github/memberships.js';
-import { readFileSync } from 'node:fs';
 import { dirname, join as joinPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -236,6 +236,49 @@ test('T28: Orca import idempotent by execution key', () => {
   importOrcaExecutions(db, [exec]);
   importOrcaExecutions(db, [exec]);
   assert.equal(countRows(db, 'executions'), 1);
+  close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('T33: codex models persist via generic import aliases', () => {
+  const { db, close, dir } = openTemp();
+  const observedAt = '2026-06-01T00:00:00.000Z';
+  const row = JSON.parse(
+    readFileSync(
+      joinPath(testDir, 'fixtures/codeburn/codex/session-gpt-small-aggregated.json'),
+      'utf8',
+    ),
+  );
+  const key = sessionKey('codex', 'codeburn', row.sessionId);
+  importCodeBurnUsage(db, [
+    {
+      session: {
+        sessionKey: key,
+        provider: 'codex',
+        source: 'codeburn',
+        rawId: row.sessionId,
+      },
+      snapshot: {
+        sessionKey: key,
+        observedAt,
+        tokens: {
+          provider: 'codex',
+          input: row.inputTokens,
+          output: row.outputTokens,
+          cacheRead: row.cacheReadTokens,
+          cacheWrite: row.cacheWriteTokens,
+          reasoning: null,
+        },
+        cost: { amountUsd: row.cost, kind: 'estimated_api_equivalent', source: null },
+      },
+      models: row.models,
+      tokenAllocation: 'known',
+    },
+  ]);
+  const stored = db
+    .prepare('SELECT claude_models_json FROM usage_snapshots WHERE session_key = ?')
+    .get(key);
+  assert.match(stored.claude_models_json, /GPT-6.1 Sol/);
   close();
   rmSync(dir, { recursive: true, force: true });
 });
