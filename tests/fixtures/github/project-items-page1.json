@@ -23,6 +23,7 @@
             "type": "ISSUE",
             "content": {
               "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZE2rQ",
               "number": 3,
               "title": "[E01] Khảo sát tương thích & hợp đồng tích hợp",
               "url": "https://github.com/hangndat/orca-task-telemetry/issues/3",
@@ -92,6 +93,7 @@
             "type": "ISSUE",
             "content": {
               "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZE5DQ",
               "number": 4,
               "title": "[E02] Nền tảng npm CLI package tái sử dụng",
               "url": "https://github.com/hangndat/orca-task-telemetry/issues/4",

@@ -20,6 +20,7 @@
             "type": "ISSUE",
             "content": {
               "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZG9Pg",
               "number": 61,
               "title": "[V2.9] Hỗ trợ đa người dùng",
               "url": "https://github.com/hangndat/orca-task-telemetry/issues/61",
@@ -82,6 +83,7 @@
             "type": "ISSUE",
             "content": {
               "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZGqPw",
               "number": 52,
               "title": "[V1.9] Đối chiếu session nâng cao có phê duyệt tường minh",
               "url": "https://github.com/hangndat/orca-task-telemetry/issues/52",
@@ -144,6 +146,7 @@
             "type": "ISSUE",
             "content": {
               "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZG_vg",
               "number": 62,
               "title": "[V2.10] Tự động áp ngân sách (opt-in tường minh)",
               "url": "https://github.com/hangndat/orca-task-telemetry/issues/62",

@@ -19,6 +19,9 @@ Nguồn live (read-only), không mutation. Thu thập trên máy worker **2026-1
 | `project-view-cli.json` | `gh project view 4 --owner hangndat --format json` |
 | `project-items-page1.json` | `items(first:100)` — **2** node mẫu; `pageInfo` và `rateLimit` **đầy đủ** từ live |
 | `project-items-page2.json` | `items(first:100, after:<page1.endCursor>)` — **3** node; `pageInfo` **đầy đủ**; `rateLimit` **chỉ** từ response trang 2 (không dùng lại trang 1) |
+| `content-types-synthetic.json` | **Synthetic** (không từ project #4): Issue + PullRequest + DraftIssue + `content: null` (Redacted) cho AC3 |
+
+Issue `content.id` (GraphQL node ID) thêm **2026-10-23** bằng `gh api graphql` read-only trên project #4 / `repository.issue(number)`.
 
 ## Redact
 
@@ -32,8 +35,8 @@ Kiểm tra: `rg -i 'gho_|github_pat_|Bearer |@[a-z0-9.-]+\.[a-z]{2,}' tests/fixt
 
 | Content / field | Lý do |
 | --- | --- |
-| `DraftIssue` | Project #4: 103/103 item là `Issue` (live jq 2026-10-23) |
-| `PullRequest` | Cùng quan sát |
+| `DraftIssue` | Project #4: 103/103 item là `Issue` — xem `content-types-synthetic.json` |
+| `PullRequest` | Cùng quan sát — xem `content-types-synthetic.json` |
 | `ProjectV2ItemFieldIterationValue` | Không có iteration field trên item live |
 | `repository.issueTypes` | `null` trên repo cá nhân `hangndat/orca-task-telemetry` |
 | Issue xóa / không quyền (`REDACTED`) | Chưa có item quan sát — xem bảng nullable trong discovery |

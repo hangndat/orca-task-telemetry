@@ -255,6 +255,7 @@ query ProjectItems($id: ID!, $after: String) {
           content {
             __typename
             ... on Issue {
+              id
               number
               title
               url

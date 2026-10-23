@@ -1,0 +1,61 @@
+{
+  "data": {
+    "node": {
+      "id": "PVT_synthetic_project",
+      "items": {
+        "totalCount": 4,
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": "cursor_end",
+          "hasPreviousPage": false,
+          "startCursor": "cursor_start"
+        },
+        "nodes": [
+          {
+            "id": "PVTI_synthetic_issue",
+            "type": "ISSUE",
+            "content": {
+              "__typename": "Issue",
+              "id": "I_synthetic_issue",
+              "number": 1,
+              "title": "Synthetic issue",
+              "url": "https://github.com/hangndat/orca-task-telemetry/issues/1",
+              "state": "OPEN",
+              "repository": { "nameWithOwner": "hangndat/orca-task-telemetry" }
+            },
+            "fieldValues": { "nodes": [] }
+          },
+          {
+            "id": "PVTI_synthetic_pr",
+            "type": "PULL_REQUEST",
+            "content": {
+              "__typename": "PullRequest",
+              "number": 99,
+              "title": "Synthetic PR",
+              "url": "https://github.com/hangndat/orca-task-telemetry/pull/99",
+              "state": "OPEN",
+              "repository": { "nameWithOwner": "hangndat/orca-task-telemetry" }
+            },
+            "fieldValues": { "nodes": [] }
+          },
+          {
+            "id": "PVTI_synthetic_draft",
+            "type": "DRAFT_ISSUE",
+            "content": {
+              "__typename": "DraftIssue",
+              "title": "Synthetic draft",
+              "body": "Not a real project item"
+            },
+            "fieldValues": { "nodes": [] }
+          },
+          {
+            "id": "PVTI_synthetic_redacted",
+            "type": "ISSUE",
+            "content": null,
+            "fieldValues": { "nodes": [] }
+          }
+        ]
+      }
+    }
+  }
+}
