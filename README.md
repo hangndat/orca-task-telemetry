@@ -64,7 +64,7 @@ orca-telemetry report hierarchy --json
 orca-telemetry report unmapped --json
 ```
 
-`report hierarchy` cần `collect` đã ghi `parent` cho mọi Issue trong Project; JSON/text chỉ đọc DB (không ghi GitHub). Parent ngoài Project hiện trong text/JSON qua `parentStatus: outside_project` và `parentIssueNodeId`.
+`report hierarchy` cần `collect` đã ghi `parent` cho mọi Issue trong Project; JSON/text chỉ đọc DB (không ghi GitHub). Parent ngoài Project hiện trong JSON qua `parentStatus: outside_project`, `parentIssueNodeId` và `outsideProjectParentIssueNodeId`; text dùng `owner/repo#number` cho mỗi Issue.
 
 - **`init` / `collect` / `report`**: chỉ đọc GitHub/Orca/CodeBurn; không commit, không sửa `AGENTS.md`, `.cursor/`, lockfile hay Project fields.
 - **`link`**: ghi ánh xạ Issue ↔ session trong DB cục bộ; từ chối xung đột (`attribution_link_conflict`).

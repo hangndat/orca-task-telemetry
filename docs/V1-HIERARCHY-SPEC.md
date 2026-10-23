@@ -23,6 +23,6 @@ Architecture impact: **Có** — thêm parent relation trong SQLite v2 và báo 
 ## Triển khai (worker evidence)
 
 - SQLite v2: `parent_issue_node_id`, `parent_issue_observed` (0 = chưa thu thập parent; identity-only import không ghi đè).
-- `report hierarchy`: `kind: hierarchy`, mỗi node có `direct` / `inclusive` (session + `CostRollup`); parent ngoài Project → `parentStatus: outside_project` (spec prose `outsideProjectParentIssueId` tương đương `parentIssueNodeId` khi status này).
+- `report hierarchy`: `kind: hierarchy`, mỗi node có `direct` / `inclusive` (session + `CostRollup`); parent ngoài Project → `parentStatus: outside_project`, `parentIssueNodeId` và `outsideProjectParentIssueNodeId` (cùng node id cha ngoài Project). CLI text dùng `owner/repo#number` cho mỗi Issue.
 - Kiểm chứng local: `pnpm test` (250), `pnpm test:pack`; fixture `tests/reports-hierarchy.test.mjs`, `tests/hierarchy-storage.test.mjs`.
 - Live read-only (coordinator probe, Project #4): 103 items, 93 Issue có `parent`; Issue #44 parent `I_kwDOVUhnY88AAAABZZFJ7A` — không ghi GitHub/Project/target repo.

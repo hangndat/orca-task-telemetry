@@ -113,13 +113,18 @@ test('V1.1: three-level roll-up keeps direct/unknown cost and project boundaries
     assert.equal(nodeById(reportA, 'I_epic').inclusive.cost.unknownAmountCount, 1);
     assert.equal(nodeById(reportA, 'I_task_empty').inclusive.sessionCount, 0);
     assert.equal(nodeById(reportA, 'I_boundary_child').parentStatus, 'outside_project');
+    assert.equal(nodeById(reportA, 'I_boundary_child').outsideProjectParentIssueNodeId, 'I_outside');
+    assert.equal(nodeById(reportA, 'I_boundary_child').parentIssueNodeId, 'I_outside');
     assert.equal(reportA.projectTotals.sessionCount, 4);
     assert.equal(reportA.projectTotals.cost.knownAmountUsd, 3.75);
     assert.equal(reportA.projectTotals.cost.unknownAmountCount, 1);
     assert.equal(reportB.projectTotals.cost.knownAmountUsd, 3);
     assert.equal(reportB.nodes.length, 1);
-    assert.match(formatHierarchyReportText(reportA), /parent outside Project: I_outside/);
-    assert.doesNotMatch(formatHierarchyReportText(reportA), /Issue 6/);
+    const textA = formatHierarchyReportText(reportA);
+    assert.match(textA, /parent outside Project: I_outside/);
+    assert.match(textA, /org-a\/repo#1 Issue 1/);
+    assert.doesNotMatch(textA, /^#1 /m);
+    assert.doesNotMatch(textA, /Issue 6/);
   } finally {
     disposeDataset(ctx);
   }
@@ -168,11 +173,68 @@ test('V1.1: report hierarchy CLI JSON/text reads without changing DB bytes', () 
     assert.equal(payload.data.projectTotals.cost.knownAmountUsd, 3.75);
     const text = runCliReport(['report', 'hierarchy'], { cwd: repo, env });
     assert.equal(text.status, 0, text.stderr);
-    assert.match(text.stdout, /#1 Issue 1/);
+    assert.match(text.stdout, /org-a\/repo#1 Issue 1/);
+    const boundary = payload.data.nodes.find((n) => n.issue.issueNodeId === 'I_boundary_child');
+    assert.equal(boundary.parentStatus, 'outside_project');
+    assert.equal(boundary.outsideProjectParentIssueNodeId, 'I_outside');
     assert.deepEqual(appHomeInventory(appHome), before);
   } finally {
     rmSync(appHome, { recursive: true, force: true });
     rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('V1.1: text distinguishes Issues with same number/title in different repositories', () => {
+  const multiRepoFixture = {
+    issues: [
+      {
+        issueNodeId: 'I_a',
+        parentIssueNodeId: null,
+        repository: { nameWithOwner: 'org-a/repo' },
+        number: 7,
+        url: 'https://github.com/org-a/repo/issues/7',
+        title: 'Shared title',
+        state: 'OPEN',
+      },
+      {
+        issueNodeId: 'I_b',
+        parentIssueNodeId: null,
+        repository: { nameWithOwner: 'org-b/repo' },
+        number: 7,
+        url: 'https://github.com/org-b/repo/issues/7',
+        title: 'Shared title',
+        state: 'OPEN',
+      },
+    ],
+    memberships: [
+      { projectId: 'P_MULTI', issueNodeId: 'I_a' },
+      { projectId: 'P_MULTI', issueNodeId: 'I_b' },
+    ],
+    sessions: [
+      session('a', 'claude', 0.1),
+      session('b', 'claude', 0.2),
+    ],
+  };
+  const ctx = loadSyntheticDataset(multiRepoFixture);
+  try {
+    for (const [rawSessionId, issueNodeId] of [['a', 'I_a'], ['b', 'I_b']]) {
+      linkSessionToIssue(ctx.db, {
+        provider: 'claude',
+        source: 'codeburn',
+        rawSessionId,
+        issueNodeId,
+        linkedAt: '2026-06-01T10:00:00Z',
+      });
+    }
+    const report = buildHierarchyReport({ profile: profile('P_MULTI'), db: ctx.db, close: () => {} });
+    assert.equal(report.nodes.length, 2);
+    assert.ok(Math.abs(report.projectTotals.cost.knownAmountUsd - 0.3) < 1e-12);
+    const text = formatHierarchyReportText(report);
+    assert.match(text, /org-a\/repo#7 Shared title/);
+    assert.match(text, /org-b\/repo#7 Shared title/);
+    assert.equal(text.split('\n').filter((line) => line === '#7 Shared title').length, 0);
+  } finally {
+    disposeDataset(ctx);
   }
 });
 

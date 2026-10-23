@@ -14,6 +14,8 @@ export type HierarchyIssueNode = {
   depth: number;
   parentIssueNodeId: string | null;
   parentStatus: 'none' | 'in_project' | 'outside_project';
+  /** Present when `parentStatus` is `outside_project` (AC3 JSON contract). */
+  outsideProjectParentIssueNodeId?: string;
   direct: HierarchyCostSummary;
   inclusive: HierarchyCostSummary;
 };
@@ -133,6 +135,9 @@ export function buildHierarchyReport(ctx: ReportContext): HierarchyReport {
       direct,
       inclusive,
     };
+    if (node.parentStatus === 'outside_project' && node.parentIssueNodeId !== null) {
+      output.outsideProjectParentIssueNodeId = node.parentIssueNodeId;
+    }
     nodes.push(output);
     for (const child of node.children) addSummary(inclusive, visit(child, depth + 1));
     visiting.delete(id);
@@ -172,8 +177,9 @@ export function formatHierarchyReportText(report: HierarchyReport): string {
     const outside = node.parentStatus === 'outside_project'
       ? ` [parent outside Project: ${sanitizeDisplayText(node.parentIssueNodeId ?? '')}]`
       : '';
+    const issueIdentity = `${sanitizeDisplayText(node.issue.repository.nameWithOwner)}#${node.issue.number}`;
     lines.push(
-      `${indent}#${node.issue.number} ${sanitizeDisplayText(node.issue.title)}${outside}`,
+      `${indent}${issueIdentity} ${sanitizeDisplayText(node.issue.title)}${outside}`,
       `${indent}  direct: ${costText(node.direct)} | inclusive: ${costText(node.inclusive)}`,
     );
   }
