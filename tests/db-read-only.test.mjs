@@ -3,8 +3,10 @@ import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -19,14 +21,46 @@ import {
   readUserVersionReadOnly,
   SUPPORTED_SCHEMA_VERSION,
 } from '../dist/db/index.js';
-import { EXIT_USAGE } from '../dist/errors.js';
+import { EXIT_SOURCE_UNAVAILABLE, EXIT_USAGE } from '../dist/errors.js';
 import { spawnLegacyWalHolder } from './helpers/spawn-legacy-wal.mjs';
+import { initBareRepo, writeReportsProfile } from './helpers/reports-harness.mjs';
 
 const distDir = dirname(fileURLToPath(import.meta.url));
 
 function tempHome() {
   const dir = mkdtempSync(join(tmpdir(), 'orca-ro-test-'));
   return { dir, dbPath: join(dir, 'telemetry.sqlite') };
+}
+
+async function createColdLegacyWalDb(dbPath) {
+  const holder = spawnLegacyWalHolder(dbPath);
+  await holder.ready;
+  await holder.closeGracefully();
+  const walPath = `${dbPath}-wal`;
+  const shmPath = `${dbPath}-shm`;
+  assert.ok(!existsSync(walPath));
+  assert.ok(!existsSync(shmPath));
+  const header = readFileSync(dbPath);
+  assert.equal(header.readUInt8(18), 2);
+  assert.equal(header.readUInt8(19), 2);
+}
+
+function assertDbError(err) {
+  return err.code === 'db_error';
+}
+
+function ghDoctorEnv(appHome, repoId = 'R_cold_wal', nameWithOwner = 'o/r') {
+  const ghStub = resolve(distDir, 'helpers/gh-repo-stub.mjs');
+  return {
+    ...process.env,
+    ORCA_TELEMETRY_HOME: appHome,
+    ORCA_TELEMETRY_GH: ghStub,
+    GH_STUB_REPO_VIEW_JSON: JSON.stringify({
+      id: repoId,
+      nameWithOwner,
+      url: `https://github.com/${nameWithOwner}`,
+    }),
+  };
 }
 
 test('read-only opens live DELETE database without sidecars', async () => {
@@ -40,6 +74,89 @@ test('read-only opens live DELETE database without sidecars', async () => {
   const after = readdirSync(dir).sort().join(',');
   assert.equal(before, after);
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('cold legacy WAL header rejects read-only access without mutating home', async () => {
+  const { dir, dbPath } = tempHome();
+  await createColdLegacyWalDb(dbPath);
+  const inventoryBefore = readdirSync(dir).sort();
+  assert.deepEqual(inventoryBefore, ['telemetry.sqlite']);
+  await assert.rejects(() => readUserVersionReadOnly(dbPath), assertDbError);
+  await assert.rejects(() => openReadOnlyTelemetryDb(dbPath), assertDbError);
+  assert.deepEqual(readdirSync(dir).sort(), inventoryBefore);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('T32-SEC-F02/T35-SEC-F01: doctor rejects cold legacy WAL before SQLite open', async () => {
+  const repo = mkdtempSync(join(tmpdir(), 'orca-doc-cold-wal-repo-'));
+  spawnSync('git', ['init'], { cwd: repo });
+  spawnSync('git', ['config', 'user.email', 'd@test.com'], { cwd: repo });
+  spawnSync('git', ['config', 'user.name', 'd'], { cwd: repo });
+
+  const appHome = mkdtempSync(join(tmpdir(), 'orca-doc-cold-wal-home-'));
+  const dbPath = join(appHome, 'telemetry.sqlite');
+  await createColdLegacyWalDb(dbPath);
+  const inventoryBefore = readdirSync(appHome).sort();
+
+  const cli = resolve(distDir, '../dist/cli.js');
+  const result = spawnSync(process.execPath, [cli, 'doctor', '--json'], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: ghDoctorEnv(appHome),
+  });
+  assert.equal(result.status, EXIT_USAGE);
+  const payload = JSON.parse(result.stdout.trim().split('\n').pop());
+  assert.equal(payload.data.summary, 'fail');
+  const dbCheck = payload.data.checks.find((c) => c.id === 'database');
+  assert.equal(dbCheck?.status, 'fail');
+  assert.match(dbCheck?.message ?? '', /legacy WAL storage/i);
+  assert.match(dbCheck?.remedy ?? '', /collect/i);
+  assert.deepEqual(readdirSync(appHome).sort(), inventoryBefore);
+  rmSync(repo, { recursive: true, force: true });
+  rmSync(appHome, { recursive: true, force: true });
+});
+
+test('cold legacy WAL rejects report CLI commands without mutating home', async () => {
+  const repo = initBareRepo();
+  const appHome = mkdtempSync(join(tmpdir(), 'orca-report-cold-wal-home-'));
+  writeReportsProfile(appHome);
+  const dbPath = join(appHome, 'telemetry.sqlite');
+  await createColdLegacyWalDb(dbPath);
+  const inventoryBefore = readdirSync(appHome).sort();
+  const cli = resolve(distDir, '../dist/cli.js');
+  const commands = [
+    ['report', 'tasks', '--json'],
+    ['report', 'project', '--json'],
+    ['report', 'unmapped', '--json'],
+    ['report', 'task', '1', '--json'],
+  ];
+  for (const args of commands) {
+    const result = spawnSync(process.execPath, [cli, ...args], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: ghDoctorEnv(appHome, 'R_reports', 'org-a/repo'),
+    });
+    assert.equal(result.status, EXIT_SOURCE_UNAVAILABLE);
+  }
+  assert.deepEqual(readdirSync(appHome).sort(), inventoryBefore);
+  rmSync(repo, { recursive: true, force: true });
+  rmSync(appHome, { recursive: true, force: true });
+});
+
+test('SQLite header preflight rejects short and unsupported future format', async () => {
+  const { dir, dbPath } = tempHome();
+  writeFileSync(dbPath, Buffer.from('SQLite format 3\0', 'utf8'));
+  await assert.rejects(() => readUserVersionReadOnly(dbPath), assertDbError);
+  rmSync(dir, { recursive: true, force: true });
+
+  const future = tempHome();
+  openTelemetryDatabase({ dbPath: future.dbPath }).close();
+  const bytes = Buffer.from(readFileSync(future.dbPath));
+  bytes.writeUInt8(3, 18);
+  bytes.writeUInt8(3, 19);
+  writeFileSync(future.dbPath, bytes);
+  await assert.rejects(() => readUserVersionReadOnly(future.dbPath), assertDbError);
+  rmSync(future.dir, { recursive: true, force: true });
 });
 
 test('legacy WAL sidecar rejects read-only access without mutating home', async () => {
@@ -81,6 +198,15 @@ test('writer normalizes legacy WAL and preserves committed rows', async () => {
   const second = openTelemetryDatabase({ dbPath });
   assert.equal(countRows(second.db, 'collection_logs'), 1);
   second.close();
+  const reader = await openReadOnlyTelemetryDb(dbPath);
+  const probe = reader.db
+    .prepare(
+      "SELECT message FROM collection_logs WHERE source = 'orca' AND message = 'legacy-wal-probe'",
+    )
+    .all();
+  assert.equal(probe.length, 1);
+  reader.release();
+  assert.ok(!existsSync(`${dbPath}-wal`));
   rmSync(dir, { recursive: true, force: true });
 }, 15_000);
 

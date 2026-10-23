@@ -12,14 +12,56 @@ export type ReadOnlyTelemetryHandle = {
 };
 
 const SQLITE_MAGIC = 'SQLite format 3';
+/** Minimum bytes to read journal format versions at offsets 18 and 19. */
+const SQLITE_HEADER_MIN_BYTES = 20;
+const JOURNAL_FORMAT_ROLLBACK = 1;
+const JOURNAL_FORMAT_WAL = 2;
+
+const LEGACY_WAL_MESSAGE = 'Telemetry database uses legacy WAL storage.';
+const LEGACY_WAL_REMEDY =
+  'Run orca-telemetry collect to normalize the database for read-only access.';
+
+function rejectLegacyWalHeader(): void {
+  throw dbError(LEGACY_WAL_MESSAGE, LEGACY_WAL_REMEDY);
+}
 
 function assertSqliteMainHeader(filePath: string): void {
   const fd = fs.openSync(filePath, 'r');
   try {
-    const buf = Buffer.alloc(16);
-    fs.readSync(fd, buf, 0, 16, 0);
+    const { size } = fs.fstatSync(fd);
+    if (size < SQLITE_HEADER_MIN_BYTES) {
+      throw dbError('Database file is not a valid SQLite database.');
+    }
+    const buf = Buffer.alloc(SQLITE_HEADER_MIN_BYTES);
+    const read = fs.readSync(fd, buf, 0, SQLITE_HEADER_MIN_BYTES, 0);
+    if (read < SQLITE_HEADER_MIN_BYTES) {
+      throw dbError('Database file is not a valid SQLite database.');
+    }
     const magic = buf.toString('utf8', 0, SQLITE_MAGIC.length);
     if (magic !== SQLITE_MAGIC) {
+      throw dbError('Database file is not a valid SQLite database.');
+    }
+    const writeVersion = buf.readUInt8(18);
+    const readVersion = buf.readUInt8(19);
+    if (
+      writeVersion === JOURNAL_FORMAT_WAL ||
+      readVersion === JOURNAL_FORMAT_WAL
+    ) {
+      rejectLegacyWalHeader();
+    }
+    if (
+      writeVersion > JOURNAL_FORMAT_WAL ||
+      readVersion > JOURNAL_FORMAT_WAL
+    ) {
+      throw dbError(
+        'Database uses an unsupported SQLite file format.',
+        'Upgrade orca-task-telemetry or run collect after upgrading the database.',
+      );
+    }
+    if (
+      writeVersion < JOURNAL_FORMAT_ROLLBACK ||
+      readVersion < JOURNAL_FORMAT_ROLLBACK
+    ) {
       throw dbError('Database file is not a valid SQLite database.');
     }
   } finally {
@@ -51,10 +93,7 @@ export function preflightReadOnlySource(sourceDbPath: string): void {
   }
   assertSqliteMainHeader(resolved);
   if (fs.existsSync(`${resolved}-wal`)) {
-    throw dbError(
-      'Telemetry database uses legacy WAL storage.',
-      'Run orca-telemetry collect to normalize the database for read-only access.',
-    );
+    rejectLegacyWalHeader();
   }
 }
 
