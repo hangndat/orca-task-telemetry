@@ -60,6 +60,15 @@ export function normalizeProjectMemberships(
           `Issue node ${issue.issueNodeId} has conflicting repositories`,
         );
       }
+      if (
+        existing.parentIssueNodeId !== undefined &&
+        issue.parentIssueNodeId !== undefined &&
+        existing.parentIssueNodeId !== issue.parentIssueNodeId
+      ) {
+        throw new Error(
+          `Issue node ${issue.issueNodeId} has conflicting parent references`,
+        );
+      }
     } else {
       issuesByNode.set(issue.issueNodeId, issue);
     }

@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openTelemetryDatabase } from '../../dist/db/index.js';
+import { openTelemetryDatabase, SUPPORTED_SCHEMA_VERSION } from '../../dist/db/index.js';
 import { readUserVersionReadOnly } from '../../dist/db/read-only.js';
 import { spawnLegacyWalHolder } from './spawn-legacy-wal.mjs';
 
@@ -22,8 +22,8 @@ const handle = openTelemetryDatabase({ dbPath });
 handle.close();
 const beforeDelete = readdirSync(dir).sort().join(',');
 const version = await readUserVersionReadOnly(dbPath);
-if (version !== 1) {
-  throw new Error(`expected schema 1 got ${version}`);
+if (version !== SUPPORTED_SCHEMA_VERSION) {
+  throw new Error(`expected schema ${SUPPORTED_SCHEMA_VERSION} got ${version}`);
 }
 const afterDelete = readdirSync(dir).sort().join(',');
 if (beforeDelete !== afterDelete) {

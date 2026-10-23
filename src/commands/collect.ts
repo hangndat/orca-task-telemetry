@@ -138,6 +138,7 @@ async function collectGithub(
     const items = await readProjectItems(projectId);
     const normalized = normalizeProjectMemberships(items);
     importGitHubRecords(db, {
+      projectId,
       issues: normalized.issues,
       memberships: normalized.memberships,
     });

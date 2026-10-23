@@ -65,3 +65,27 @@ test('T16: issues distinct by node id not title', () => {
   assert.equal(result.issues.length, 1);
   assert.equal(result.memberships.length, 2);
 });
+
+test('V1.1: conflicting native parents for one Issue fail normalization', () => {
+  const base = {
+    projectId: 'P1',
+    itemId: 'item-1',
+    contentType: 'Issue',
+    issue: {
+      issueNodeId: 'I1',
+      parentIssueNodeId: 'PA',
+      repository: { nameWithOwner: 'o/r' },
+      number: 1,
+      url: 'https://github.com/o/r/issues/1',
+      title: 'Issue',
+      state: 'OPEN',
+    },
+  };
+  assert.throws(
+    () => normalizeProjectMemberships([
+      base,
+      { ...base, itemId: 'item-2', issue: { ...base.issue, parentIssueNodeId: 'PB' } },
+    ]),
+    /conflicting parent references/,
+  );
+});

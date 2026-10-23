@@ -4,8 +4,12 @@ import {
   MIGRATION_V1_STATEMENTS,
   SCHEMA_VERSION_V1,
 } from './migrations/v1.js';
+import {
+  MIGRATION_V2_STATEMENTS,
+  SCHEMA_VERSION_V2,
+} from './migrations/v2.js';
 
-export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V1;
+export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V2;
 
 function readUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as
@@ -31,18 +35,24 @@ export function migrateDatabase(db: DatabaseSync): void {
   if (current === SUPPORTED_SCHEMA_VERSION) {
     return;
   }
-  if (current !== 0) {
+  if (current !== 0 && current !== SCHEMA_VERSION_V1) {
     throw dbSchemaError(
-      `Unsupported intermediate schema version ${current}; expected 0 or ${SUPPORTED_SCHEMA_VERSION}.`,
+      `Unsupported intermediate schema version ${current}; expected 0, ${SCHEMA_VERSION_V1} or ${SUPPORTED_SCHEMA_VERSION}.`,
     );
   }
 
   db.exec('BEGIN IMMEDIATE');
   try {
-    for (const sql of MIGRATION_V1_STATEMENTS) {
+    if (current === 0) {
+      for (const sql of MIGRATION_V1_STATEMENTS) {
+        db.exec(sql);
+      }
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V1}`);
+    }
+    for (const sql of MIGRATION_V2_STATEMENTS) {
       db.exec(sql);
     }
-    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V1}`);
+    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V2}`);
     db.exec('COMMIT');
   } catch (err) {
     try {

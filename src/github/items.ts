@@ -31,6 +31,7 @@ export const PROJECT_ITEMS_QUERY = `query ProjectItems($id: ID!, $after: String)
               title
               url
               state
+              parent { id }
               repository { nameWithOwner }
             }
             ... on PullRequest {
@@ -110,6 +111,7 @@ type GraphqlIssueContent = {
   title?: string;
   url?: string;
   state?: string;
+  parent?: { id?: string } | null;
   repository?: { nameWithOwner?: string };
 };
 
@@ -171,8 +173,15 @@ function mapContentType(
 
 function mapIssue(content: GraphqlIssueContent, path: string): GitHubIssue {
   const repoPath = `${path}.repository.nameWithOwner`;
+  if (content.parent === undefined) {
+    throw badResponse(`${path}.parent`, 'missing parent field');
+  }
   return {
     issueNodeId: requireString(content.id, `${path}.id`),
+    parentIssueNodeId:
+      content.parent === null
+        ? null
+        : requireString(content.parent.id, `${path}.parent.id`),
     repository: {
       nameWithOwner: requireString(
         content.repository?.nameWithOwner,
