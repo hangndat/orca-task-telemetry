@@ -1,0 +1,12 @@
+---
+description: Coordinator-only — worktree ownership và cleanup an toàn
+alwaysApply: false
+---
+
+# Worktree hygiene
+
+Chỉ khi task cần worktree: dùng orca-cli skill/guide, không raw git worktree để thay Orca state. Worker không tự tạo worktree. Khi đã có Issue/PR thì gắn full URL/reference và comment tiếng Việt bằng interface đã verify; local-only ghi rõ, không bịa Issue hoặc linked field.
+
+Kiểm owner live trước sửa/dispatch. DAG chỉ biểu diễn dependency artifact/contract/path conflict thật; task độc lập không phải chờ theo số thứ tự story.
+
+Trước cleanup: owned dispatch settled, không agent/reviewer dùng path, evidence/SHA đã lưu và working tree an toàn. Không reset --hard, force-clean, kill process hoặc xóa worktree/branch của người khác. worker release không có nghĩa worktree đã xóa. Không tạo automation hay thực thi lifecycle mutation trong telemetry collector MVP.

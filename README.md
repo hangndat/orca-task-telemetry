@@ -34,6 +34,12 @@ npm pack
 
 The npm package will expose the command `orca-telemetry` via the `bin` entry point. Once it has been implemented and packed, you can install the tarball globally or use a Git-based install. The intended production package must operate outside the current source directory.
 
+## Contributor agents
+
+Setup chung cho Codex, Claude và Cursor nằm ở [AGENTS.md](AGENTS.md) và [agent workflow](docs/agents/README.md): role/persona theo scope CLI, mẫu giao việc, review độc lập theo SHA và giới hạn vòng fix. Bộ hướng dẫn được điều chỉnh từ `ticket-solution`; xem [provenance và giới hạn validation](docs/agents/PROVENANCE.md).
+
+Cấu hình này chỉ dành cho contributor của repo; telemetry CLI không cài/sửa agent setup trong repository người dùng.
+
 ## Planned MVP usage (NOT IMPLEMENTED)
 
 ```bash
