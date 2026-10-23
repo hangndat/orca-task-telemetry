@@ -1,0 +1,59 @@
+{
+  "id": "65e0231d-987d-4ae6-9042-6e5d75c2f35f",
+  "ok": true,
+  "result": {
+    "worktree": {
+      "id": "00000000-0000-4000-8000-0000000000aa::<HOME>/<OTHER_REPO_PATH>",
+      "identity": {
+        "key": "wt2:local:00000000-0000-4000-8000-0000000000bb",
+        "executionHostId": "local",
+        "instanceId": "00000000-0000-4000-8000-0000000000bb"
+      },
+      "instanceId": "00000000-0000-4000-8000-0000000000bb",
+      "repoId": "00000000-0000-4000-8000-0000000000aa",
+      "projectId": "github:<OTHER_OWNER>/<OTHER_REPO>",
+      "hostId": "local",
+      "projectHostSetupId": "00000000-0000-4000-8000-0000000000aa",
+      "path": "<HOME>/<OTHER_REPO_PATH>",
+      "head": "<SHA>",
+      "branch": "refs/heads/main",
+      "isBare": false,
+      "isMainWorktree": true,
+      "displayName": "main",
+      "displayNameMode": "automatic",
+      "comment": "",
+      "linkedIssue": null,
+      "linkedPR": null,
+      "linkedLinearIssue": null,
+      "linkedLinearIssueWorkspaceId": null,
+      "linkedLinearIssueOrganizationUrlKey": null,
+      "linkedGitLabMR": null,
+      "linkedGitLabIssue": null,
+      "linkedBitbucketPR": null,
+      "linkedAzureDevOpsPR": null,
+      "linkedGiteaPR": null,
+      "linkedWorkItem": null,
+      "linkedTaskSourceContext": null,
+      "isArchived": false,
+      "isUnread": false,
+      "isPinned": false,
+      "sortOrder": 1792767296380,
+      "lastActivityAt": 1792763185085,
+      "workspaceStatus": "in-progress",
+      "parentWorktreeId": null,
+      "childWorktreeIds": [],
+      "lineage": null,
+      "git": {
+        "path": "<HOME>/<OTHER_REPO_PATH>",
+        "head": "<SHA>",
+        "branch": "refs/heads/main",
+        "isBare": false,
+        "isMainWorktree": true
+      },
+      "linkedItems": []
+    }
+  },
+  "_meta": {
+    "runtimeId": "9d821662-c628-49db-a168-99fa7b7636fc"
+  }
+}

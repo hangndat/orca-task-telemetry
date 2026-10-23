@@ -1,0 +1,13 @@
+[
+  {
+    "_fixture": "synthetic — missing cost",
+    "sessionId": "01a10000-bbbb-4ccc-8ddd-eeeeeeeeee99",
+    "provider": "codex",
+    "project": "<SYNTH_PROJECT>",
+    "models": ["GPT-6.1 Sol"],
+    "inputTokens": 100,
+    "outputTokens": 50,
+    "cacheReadTokens": 200,
+    "cacheWriteTokens": 0
+  }
+]

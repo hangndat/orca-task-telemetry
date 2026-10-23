@@ -1,0 +1,165 @@
+{
+  "data": {
+    "rateLimit": {
+      "cost": 1,
+      "remaining": 4947,
+      "resetAt": "2026-10-23T15:33:22Z"
+    },
+    "node": {
+      "id": "PVT_kwHOAGoDWs4BoZ5m",
+      "number": 4,
+      "title": "Orca Task Telemetry — Development Roadmap",
+      "items": {
+        "totalCount": 103,
+        "pageInfo": {
+          "hasNextPage": true,
+          "endCursor": "Y3Vyc29yOnYyOpKrMDAwMDAwMDAuMDHOEMED2Q==",
+          "hasPreviousPage": false,
+          "startCursor": "Y3Vyc29yOnYyOpKqMDAwMDAwMDEuMM4QwPNX"
+        },
+        "nodes": [
+          {
+            "id": "PVTI_lAHOAGoDWs4BoZ5mzhDA81c",
+            "type": "ISSUE",
+            "content": {
+              "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZE2rQ",
+              "number": 3,
+              "title": "[E01] Khảo sát tương thích & hợp đồng tích hợp",
+              "url": "https://github.com/hangndat/orca-task-telemetry/issues/3",
+              "state": "OPEN",
+              "repository": {
+                "nameWithOwner": "hangndat/orca-task-telemetry"
+              }
+            },
+            "fieldValues": {
+              "nodes": [
+                {
+                  "__typename": "ProjectV2ItemFieldRepositoryValue",
+                  "repository": {
+                    "nameWithOwner": "hangndat/orca-task-telemetry"
+                  },
+                  "field": {
+                    "name": "Repository"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldTextValue",
+                  "text": "[E01] Khảo sát tương thích & hợp đồng tích hợp",
+                  "field": {
+                    "name": "Title"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "P0 — Critical",
+                  "field": {
+                    "name": "Priority"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "MVP",
+                  "field": {
+                    "name": "Phase"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Epic",
+                  "field": {
+                    "name": "Item Type"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Backlog",
+                  "field": {
+                    "name": "Status"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldNumberValue",
+                  "number": 1.0,
+                  "field": {
+                    "name": "Wave"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "PVTI_lAHOAGoDWs4BoZ5mzhDA82Y",
+            "type": "ISSUE",
+            "content": {
+              "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZE5DQ",
+              "number": 4,
+              "title": "[E02] Nền tảng npm CLI package tái sử dụng",
+              "url": "https://github.com/hangndat/orca-task-telemetry/issues/4",
+              "state": "OPEN",
+              "repository": {
+                "nameWithOwner": "hangndat/orca-task-telemetry"
+              }
+            },
+            "fieldValues": {
+              "nodes": [
+                {
+                  "__typename": "ProjectV2ItemFieldRepositoryValue",
+                  "repository": {
+                    "nameWithOwner": "hangndat/orca-task-telemetry"
+                  },
+                  "field": {
+                    "name": "Repository"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldTextValue",
+                  "text": "[E02] Nền tảng npm CLI package tái sử dụng",
+                  "field": {
+                    "name": "Title"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "P0 — Critical",
+                  "field": {
+                    "name": "Priority"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "MVP",
+                  "field": {
+                    "name": "Phase"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Epic",
+                  "field": {
+                    "name": "Item Type"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Backlog",
+                  "field": {
+                    "name": "Status"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldNumberValue",
+                  "number": 1.0,
+                  "field": {
+                    "name": "Wave"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

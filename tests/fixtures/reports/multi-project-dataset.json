@@ -1,0 +1,49 @@
+{
+  "label": "multi-project-T36",
+  "projectIdA": "PVT_reports_project_a",
+  "projectIdB": "PVT_reports_project_b",
+  "issues": [
+    {
+      "issueNodeId": "I_shared_cross_project",
+      "repository": { "nameWithOwner": "org-a/repo" },
+      "number": 10,
+      "url": "https://github.com/org-a/repo/issues/10",
+      "title": "Shared",
+      "state": "OPEN"
+    },
+    {
+      "issueNodeId": "I_only_project_b",
+      "repository": { "nameWithOwner": "org-b/other" },
+      "number": 20,
+      "url": "https://github.com/org-b/other/issues/20",
+      "title": "B only",
+      "state": "OPEN"
+    }
+  ],
+  "memberships": [
+    { "projectId": "PVT_reports_project_a", "issueNodeId": "I_shared_cross_project" },
+    { "projectId": "PVT_reports_project_b", "issueNodeId": "I_shared_cross_project" },
+    { "projectId": "PVT_reports_project_b", "issueNodeId": "I_only_project_b" }
+  ],
+  "sharedRawSessionId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "sessions": [
+    {
+      "provider": "claude",
+      "rawId": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "observedAt": "2026-05-01T12:00:00.000Z",
+      "tokens": { "provider": "claude", "input": 50, "output": 25, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "amountUsd": 0.5, "kind": "estimated_api_equivalent", "source": null },
+      "claudeModels": ["Sonnet 5"],
+      "claudeTokenAllocation": "known"
+    },
+    {
+      "provider": "claude",
+      "rawId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      "observedAt": "2026-05-02T12:00:00.000Z",
+      "tokens": { "provider": "claude", "input": 10, "output": 5, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "amountUsd": 0.1, "kind": "estimated_api_equivalent", "source": null },
+      "claudeModels": ["Haiku"],
+      "claudeTokenAllocation": "known"
+    }
+  ]
+}

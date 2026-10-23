@@ -1,0 +1,22 @@
+Project report — PVT_attr_synthetic_project
+Repository: org-a/repo
+Linked sessions (deduped): 3
+Collection snapshot (latest per source):
+  codeburn: success @ 2026-01-01T00:00:00.000Z
+  github: success @ 2026-01-01T00:00:00.000Z
+  orca: success @ 2026-01-01T00:00:00.000Z
+
+Totals by provider (linked to issues in this project only):
+Provider  Sessions  In        Out       Models                  
+--------  --------  --------  --------  ------------------------
+claude           2       120        60  Sonnet 5, Opus (allocation unknown)
+codex            1       200        80  unknown
+
+Project cost — known (est. API-equiv): $1.75; sessions with unknown cost: 1
+
+Unmapped sessions (not included in project totals above):
+  count=1 in=5 out=5 costKnown=$0.05 unknownCostSessions=0
+
+Issues in project:
+  #1 https://github.com/org-a/repo/issues/1 linkedSessions=3
+  #2 https://github.com/org-b/repo/issues/2 linkedSessions=0

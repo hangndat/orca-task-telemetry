@@ -1,0 +1,32 @@
+{
+  "_fixture": "synthetic — no live IDs; for Vitest only",
+  "ok": true,
+  "result": {
+    "workers": [
+      {
+        "dispatchId": "ctx_synthetic00000001",
+        "taskId": "task_synthetic00000001",
+        "runId": "run_synthetic00000001",
+        "agentTerminalHandle": "term_synthetic-0000-4000-8000-000000000001",
+        "resource": {
+          "worktreeId": "00000000-0000-4000-8000-00000000a001::<SYNTH>/repo-a"
+        },
+        "projection": {
+          "host": { "kind": "local", "id": "local" }
+        }
+      },
+      {
+        "dispatchId": "ctx_synthetic00000002",
+        "taskId": null,
+        "runId": null,
+        "agentTerminalHandle": null,
+        "resource": {
+          "worktreeId": "00000000-0000-4000-8000-00000000a002::<SYNTH>/repo-b"
+        },
+        "projection": {
+          "host": { "kind": "remote", "id": "remote-host-1" }
+        }
+      }
+    ]
+  }
+}

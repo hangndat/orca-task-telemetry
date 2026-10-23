@@ -1,0 +1,63 @@
+{
+  "label": "synthetic-memberships-T16",
+  "items": [
+    {
+      "projectId": "PVT_synthetic_project_alpha",
+      "itemId": "PVTI_alpha_issue_repo_a",
+      "contentType": "Issue",
+      "issue": {
+        "issueNodeId": "I_synthetic_shared_issue_001",
+        "repository": { "nameWithOwner": "org-alpha/repo-a" },
+        "number": 10,
+        "url": "https://github.com/org-alpha/repo-a/issues/10",
+        "title": "Shared issue on repo A",
+        "state": "OPEN"
+      }
+    },
+    {
+      "projectId": "PVT_synthetic_project_beta",
+      "itemId": "PVTI_beta_issue_repo_b",
+      "contentType": "Issue",
+      "issue": {
+        "issueNodeId": "I_synthetic_issue_repo_b_only",
+        "repository": { "nameWithOwner": "org-beta/repo-b" },
+        "number": 20,
+        "url": "https://github.com/org-beta/repo-b/issues/20",
+        "title": "Issue only on repo B",
+        "state": "OPEN"
+      }
+    },
+    {
+      "projectId": "PVT_synthetic_project_beta",
+      "itemId": "PVTI_beta_duplicate_shared",
+      "contentType": "Issue",
+      "issue": {
+        "issueNodeId": "I_synthetic_shared_issue_001",
+        "repository": { "nameWithOwner": "org-alpha/repo-a" },
+        "number": 10,
+        "url": "https://github.com/org-alpha/repo-a/issues/10",
+        "title": "Shared issue on repo A",
+        "state": "OPEN"
+      }
+    },
+    {
+      "projectId": "PVT_synthetic_project_alpha",
+      "itemId": "PVTI_alpha_pull_request",
+      "contentType": "PullRequest",
+      "issue": null
+    },
+    {
+      "projectId": "PVT_synthetic_project_alpha",
+      "itemId": "PVTI_alpha_duplicate_shared",
+      "contentType": "Issue",
+      "issue": {
+        "issueNodeId": "I_synthetic_shared_issue_001",
+        "repository": { "nameWithOwner": "org-alpha/repo-a" },
+        "number": 10,
+        "url": "https://github.com/org-alpha/repo-a/issues/10",
+        "title": "Shared issue on repo A",
+        "state": "OPEN"
+      }
+    }
+  ]
+}

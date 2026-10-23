@@ -1,0 +1,169 @@
+{
+  "kind": "tasks",
+  "projectId": "PVT_attr_synthetic_project",
+  "repository": "org-a/repo",
+  "freshness": [
+    {
+      "source": "codeburn",
+      "status": "success",
+      "recordedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "source": "github",
+      "status": "success",
+      "recordedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "source": "orca",
+      "status": "success",
+      "recordedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "issues": [
+    {
+      "issue": {
+        "issueNodeId": "I_attr_issue_alpha",
+        "repository": {
+          "nameWithOwner": "org-a/repo"
+        },
+        "number": 1,
+        "url": "https://github.com/org-a/repo/issues/1",
+        "title": "Alpha",
+        "state": "OPEN"
+      },
+      "mappingStatus": "mapped",
+      "usageStatus": "has_usage",
+      "sessionCount": 3,
+      "byProvider": [
+        {
+          "provider": "claude",
+          "sessionCount": 2,
+          "input": 120,
+          "output": 60,
+          "cacheRead": 10,
+          "cacheWrite": 5,
+          "reasoningNullCount": 0,
+          "models": [
+            "Sonnet 5",
+            "Opus"
+          ],
+          "mixedModelAllocation": "unknown"
+        },
+        {
+          "provider": "codex",
+          "sessionCount": 1,
+          "input": 200,
+          "output": 80,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "reasoningNullCount": 1,
+          "models": [],
+          "mixedModelAllocation": "known"
+        }
+      ],
+      "cost": {
+        "knownAmountUsd": 1.75,
+        "knownEstimatedCount": 2,
+        "unknownAmountCount": 1
+      },
+      "sessions": [
+        {
+          "sessionKey": "claude:codeburn:aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01",
+          "provider": "claude",
+          "rawSessionId": "aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01",
+          "models": [
+            "Sonnet 5"
+          ],
+          "modelAllocation": "known",
+          "mappingStatus": "mapped",
+          "tokens": {
+            "input": 100,
+            "output": 50,
+            "cacheRead": 10,
+            "cacheWrite": 5,
+            "reasoning": null
+          },
+          "cost": {
+            "amountUsd": 1.5,
+            "kind": "estimated_api_equivalent"
+          },
+          "orcaReference": {
+            "status": "unknown"
+          },
+          "observedAt": "2026-05-01T12:00:00.000Z"
+        },
+        {
+          "sessionKey": "claude:codeburn:aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee02",
+          "provider": "claude",
+          "rawSessionId": "aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee02",
+          "models": [
+            "Opus",
+            "Sonnet 5"
+          ],
+          "modelAllocation": "unknown",
+          "mappingStatus": "mapped",
+          "tokens": {
+            "input": 20,
+            "output": 10,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "reasoning": null
+          },
+          "cost": {
+            "amountUsd": null,
+            "kind": "unknown"
+          },
+          "orcaReference": {
+            "status": "unknown"
+          },
+          "observedAt": "2026-05-02T12:00:00.000Z"
+        },
+        {
+          "sessionKey": "codex:codeburn:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "provider": "codex",
+          "rawSessionId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "models": [],
+          "modelAllocation": "known",
+          "mappingStatus": "mapped",
+          "tokens": {
+            "input": 200,
+            "output": 80,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "reasoning": null
+          },
+          "cost": {
+            "amountUsd": 0.25,
+            "kind": "estimated_api_equivalent"
+          },
+          "orcaReference": {
+            "status": "unknown"
+          },
+          "observedAt": "2026-05-03T12:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "issue": {
+        "issueNodeId": "I_attr_issue_beta",
+        "repository": {
+          "nameWithOwner": "org-b/repo"
+        },
+        "number": 2,
+        "url": "https://github.com/org-b/repo/issues/2",
+        "title": "Beta",
+        "state": "OPEN"
+      },
+      "mappingStatus": "no_linked_sessions",
+      "usageStatus": "no_usage_data",
+      "sessionCount": 0,
+      "byProvider": [],
+      "cost": {
+        "knownAmountUsd": 0,
+        "knownEstimatedCount": 0,
+        "unknownAmountCount": 0
+      },
+      "sessions": []
+    }
+  ]
+}

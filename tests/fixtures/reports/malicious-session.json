@@ -1,0 +1,29 @@
+{
+  "label": "malicious-session-id",
+  "projectId": "PVT_attr_synthetic_project",
+  "issues": [
+    {
+      "issueNodeId": "I_attr_issue_alpha",
+      "repository": { "nameWithOwner": "org-a/repo" },
+      "number": 1,
+      "url": "https://github.com/org-a/repo/issues/1",
+      "title": "Alpha",
+      "state": "OPEN"
+    }
+  ],
+  "memberships": [
+    { "projectId": "PVT_attr_synthetic_project", "issueNodeId": "I_attr_issue_alpha" }
+  ],
+  "sharedRawSessionId": "unused",
+  "sessions": [
+    {
+      "provider": "claude",
+      "rawId": "safe\nFAKE\u001b[31m",
+      "observedAt": "2026-05-01T12:00:00.000Z",
+      "tokens": { "provider": "claude", "input": 1, "output": 1, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "amountUsd": 0.01, "kind": "estimated_api_equivalent", "source": null },
+      "claudeModels": ["Evil\nModel"],
+      "claudeTokenAllocation": "known"
+    }
+  ]
+}

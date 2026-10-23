@@ -1,0 +1,96 @@
+{
+  "kind": "project",
+  "projectId": "PVT_attr_synthetic_project",
+  "repository": "org-a/repo",
+  "freshness": [
+    {
+      "source": "codeburn",
+      "status": "success",
+      "recordedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "source": "github",
+      "status": "success",
+      "recordedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "source": "orca",
+      "status": "success",
+      "recordedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "linkedSessionCount": 3,
+  "totalsByProvider": [
+    {
+      "provider": "claude",
+      "sessionCount": 2,
+      "input": 120,
+      "output": 60,
+      "cacheRead": 10,
+      "cacheWrite": 5,
+      "reasoningNullCount": 0,
+      "models": [
+        "Sonnet 5",
+        "Opus"
+      ],
+      "mixedModelAllocation": "unknown"
+    },
+    {
+      "provider": "codex",
+      "sessionCount": 1,
+      "input": 200,
+      "output": 80,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "reasoningNullCount": 1,
+      "models": [],
+      "mixedModelAllocation": "known"
+    }
+  ],
+  "totalsByModel": [
+    {
+      "provider": "claude",
+      "model": "Sonnet 5",
+      "allocation": "unknown",
+      "sessionCount": 2
+    },
+    {
+      "provider": "claude",
+      "model": "Opus",
+      "allocation": "unknown",
+      "sessionCount": 2
+    },
+    {
+      "provider": "codex",
+      "model": "unknown",
+      "allocation": "unknown",
+      "sessionCount": 1
+    }
+  ],
+  "cost": {
+    "knownAmountUsd": 1.75,
+    "knownEstimatedCount": 2,
+    "unknownAmountCount": 1
+  },
+  "unmappedNotInProjectTotals": {
+    "sessionCount": 1,
+    "input": 5,
+    "output": 5,
+    "costKnownUsd": 0.05,
+    "costUnknownCount": 0
+  },
+  "issuesInProject": [
+    {
+      "issueNodeId": "I_attr_issue_alpha",
+      "number": 1,
+      "url": "https://github.com/org-a/repo/issues/1",
+      "sessionCount": 3
+    },
+    {
+      "issueNodeId": "I_attr_issue_beta",
+      "number": 2,
+      "url": "https://github.com/org-b/repo/issues/2",
+      "sessionCount": 0
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "row": {
+    "workspaceKind": "git",
+    "worktreeId": "synthetic-manual-agent-wt::<HOME>/orca/workspaces/manual-agent",
+    "repoId": "00000000-0000-4000-8000-0000000000cc",
+    "hostId": "local",
+    "terminalPlatform": "darwin",
+    "repo": "manual-agent-repo",
+    "path": "<HOME>/orca/workspaces/manual-agent",
+    "branch": "refs/heads/main",
+    "isArchived": false,
+    "isMainWorktree": true,
+    "hasHostSidebarActivity": true,
+    "defaultBranch": true,
+    "worktreeInstanceId": "00000000-0000-4000-8000-0000000000dd",
+    "parentWorktreeId": null,
+    "childWorktreeIds": [],
+    "displayName": "manual-agent",
+    "workspaceStatus": "in-progress",
+    "sortOrder": 1792767296380,
+    "lastActivityAt": 1792763185085,
+    "linkedIssue": null,
+    "linkedPR": null,
+    "linkedLinearIssue": null,
+    "linkedGitLabMR": null,
+    "linkedGitLabIssue": null,
+    "linkedItems": [],
+    "comment": "",
+    "isPinned": false,
+    "isActive": true,
+    "unread": false,
+    "liveTerminalCount": 1,
+    "hasAttachedPty": true,
+    "unverifiableTerminalCount": 0,
+    "lastOutputAt": 1792751390571,
+    "preview": "<REDACTED>",
+    "status": "active",
+    "agents": [
+      {
+        "agentId": "agent_manual_launch_001",
+        "state": "running"
+      }
+    ],
+    "terminalVerdict": "live"
+  }
+}

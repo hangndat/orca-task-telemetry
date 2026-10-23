@@ -1,0 +1,211 @@
+{
+  "data": {
+    "rateLimit": {
+      "cost": 1,
+      "remaining": 4838,
+      "resetAt": "2026-10-23T15:31:54Z"
+    },
+    "node": {
+      "items": {
+        "totalCount": 103,
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": "Y3Vyc29yOnYyOpK5MDAwMDAwMDAuMDA5NzA4NzM3ODY0MDc3Ns4QwQPn",
+          "hasPreviousPage": true,
+          "startCursor": "Y3Vyc29yOnYyOpK5MDAwMDAwMDAuMDA5OTAwOTkwMDk5MDA5Oc4QwQPf"
+        },
+        "nodes": [
+          {
+            "id": "PVTI_lAHOAGoDWs4BoZ5mzhDBA98",
+            "type": "ISSUE",
+            "content": {
+              "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZG9Pg",
+              "number": 61,
+              "title": "[V2.9] Hỗ trợ đa người dùng",
+              "url": "https://github.com/hangndat/orca-task-telemetry/issues/61",
+              "state": "OPEN",
+              "repository": {
+                "nameWithOwner": "hangndat/orca-task-telemetry"
+              }
+            },
+            "fieldValues": {
+              "nodes": [
+                {
+                  "__typename": "ProjectV2ItemFieldRepositoryValue",
+                  "repository": {
+                    "nameWithOwner": "hangndat/orca-task-telemetry"
+                  },
+                  "field": {
+                    "name": "Repository"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldTextValue",
+                  "text": "[V2.9] Hỗ trợ đa người dùng",
+                  "field": {
+                    "name": "Title"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "P2 — Normal",
+                  "field": {
+                    "name": "Priority"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "V2",
+                  "field": {
+                    "name": "Phase"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Story",
+                  "field": {
+                    "name": "Item Type"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Backlog",
+                  "field": {
+                    "name": "Status"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "PVTI_lAHOAGoDWs4BoZ5mzhDBA-M",
+            "type": "ISSUE",
+            "content": {
+              "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZGqPw",
+              "number": 52,
+              "title": "[V1.9] Đối chiếu session nâng cao có phê duyệt tường minh",
+              "url": "https://github.com/hangndat/orca-task-telemetry/issues/52",
+              "state": "OPEN",
+              "repository": {
+                "nameWithOwner": "hangndat/orca-task-telemetry"
+              }
+            },
+            "fieldValues": {
+              "nodes": [
+                {
+                  "__typename": "ProjectV2ItemFieldRepositoryValue",
+                  "repository": {
+                    "nameWithOwner": "hangndat/orca-task-telemetry"
+                  },
+                  "field": {
+                    "name": "Repository"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldTextValue",
+                  "text": "[V1.9] Đối chiếu session nâng cao có phê duyệt tường minh",
+                  "field": {
+                    "name": "Title"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "P1 — High",
+                  "field": {
+                    "name": "Priority"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "V1",
+                  "field": {
+                    "name": "Phase"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Story",
+                  "field": {
+                    "name": "Item Type"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Backlog",
+                  "field": {
+                    "name": "Status"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "PVTI_lAHOAGoDWs4BoZ5mzhDBA-c",
+            "type": "ISSUE",
+            "content": {
+              "__typename": "Issue",
+              "id": "I_kwDOVUhnY88AAAABZZG_vg",
+              "number": 62,
+              "title": "[V2.10] Tự động áp ngân sách (opt-in tường minh)",
+              "url": "https://github.com/hangndat/orca-task-telemetry/issues/62",
+              "state": "OPEN",
+              "repository": {
+                "nameWithOwner": "hangndat/orca-task-telemetry"
+              }
+            },
+            "fieldValues": {
+              "nodes": [
+                {
+                  "__typename": "ProjectV2ItemFieldRepositoryValue",
+                  "repository": {
+                    "nameWithOwner": "hangndat/orca-task-telemetry"
+                  },
+                  "field": {
+                    "name": "Repository"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldTextValue",
+                  "text": "[V2.10] Tự động áp ngân sách (opt-in tường minh)",
+                  "field": {
+                    "name": "Title"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "P2 — Normal",
+                  "field": {
+                    "name": "Priority"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "V2",
+                  "field": {
+                    "name": "Phase"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Story",
+                  "field": {
+                    "name": "Item Type"
+                  }
+                },
+                {
+                  "__typename": "ProjectV2ItemFieldSingleSelectValue",
+                  "name": "Backlog",
+                  "field": {
+                    "name": "Status"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

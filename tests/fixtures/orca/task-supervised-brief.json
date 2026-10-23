@@ -1,0 +1,20 @@
+{
+  "data": {
+    "id": "task_6be81dd44e83",
+    "run_id": "run_1a060327fe49",
+    "parent_id": null,
+    "created_by_terminal_handle": null,
+    "created_by_pane_key": null,
+    "created_by_process_incarnation": null,
+    "created_by_run_generation": 1,
+    "task_title": "Remy \u00b7 collect \u2014 T01 (#63) GitHub Projects V2",
+    "display_name": "Remy \u00b7 collect \u2014 T01 (#63) GitHub Projects V2",
+    "spec": "<TASK_SPEC_TRUNCATED>",
+    "spec_truncated": true,
+    "status": "completed",
+    "deps": "[]",
+    "result": "{\"provenance\":\"worker_report\",\"outcome\":\"succeeded\",\"body\":\"<WORKER_REPORT_BODY_TRUNCATED>\"}",
+    "created_at": "2026-10-23 14:50:59",
+    "completed_at": "2026-10-23T14:54:19.099Z"
+  }
+}

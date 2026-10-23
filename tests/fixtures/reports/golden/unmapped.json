@@ -1,0 +1,46 @@
+{
+  "kind": "unmapped",
+  "projectId": "PVT_attr_synthetic_project",
+  "repository": "org-a/repo",
+  "freshness": [
+    {
+      "source": "codeburn",
+      "status": "success",
+      "recordedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "source": "github",
+      "status": "success",
+      "recordedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "source": "orca",
+      "status": "success",
+      "recordedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "sessions": [
+    {
+      "provider": "claude",
+      "rawSessionId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "models": [
+        "Haiku"
+      ],
+      "tokens": {
+        "input": 5,
+        "output": 5,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "cost": {
+        "amountUsd": 0.05,
+        "kind": "estimated_api_equivalent"
+      },
+      "orcaReference": {
+        "status": "unknown"
+      },
+      "projectHint": null,
+      "linkSuggestion": "orca-telemetry link --issue <issue-url-or-owner/repo#n> --provider claude --session bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    }
+  ]
+}
