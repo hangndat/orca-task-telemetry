@@ -165,3 +165,205 @@ Giống Claude: **ước tính** từ bảng giá CodeBurn (`audit` → `rates`,
 | `subagents` / fork sessions | 0 session có `subagents`; fork/replay có trong parseVersion string — chưa có fixture |
 | Per-message JSON | Giống Claude — chỉ aggregate (+ optional `--contributions`) |
 | `isEstimated: true` | Chưa quan sát |
+
+## GitHub Projects V2
+
+### Cài đặt và xác thực (AC1)
+
+| Mục | Giá trị |
+| --- | --- |
+| CLI | **gh 2.103.0** (2026-10-21) |
+| Account live | `hangndat` (active) |
+| Token scopes quan sát (`gh auth status`) | `gist`, **`project`**, `read:org`, **`repo`**, `workflow` |
+| Scope tài liệu GitHub cho đọc Projects V2 | **`read:project`** (đọc item/field) + **`repo`** khi Issue/PR thuộc **repository private** (project #4 `public: false`, repo private) |
+
+**Lệnh xác minh (read-only, live 2026-10-23):**
+
+```sh
+gh --version
+gh auth status
+gh project view 4 --owner hangndat --format json
+gh project list --owner hangndat --limit 5 --format json
+gh api graphql -f query='…'   # xem query đầy đủ bên dưới
+```
+
+**Thiếu scope (không tái hiện bằng `gh auth refresh` trên worker — quan sát coordinator / lịch sử task):**
+
+| Kênh | Hình dạng lỗi |
+| --- | --- |
+| GraphQL (`gh api graphql`) | `errors[].extensions.type` = **`INSUFFICIENT_SCOPES`**; `message` yêu cầu scope **`read:project`** |
+| REST / `gh project list` | Thông báo thiếu **`read:project`**, gợi ý `gh auth refresh -s read:project` |
+
+Trên token hiện tại, scope OAuth hiển thị là `project` (không phải chuỗi `read:project`); GraphQL/REST vẫn chấp nhận đọc project #4 sau khi user cấp scope project.
+
+Fixture: `tests/fixtures/github/` (README: nguồn, redact, gaps).
+
+### GraphQL — project và items (AC2)
+
+**Project node ID** (user project #4): `PVT_kwHOAGoDWs4BoZ5m` — lấy từ `gh project view 4 --owner hangndat --format json` → field `id`, hoặc `user.projectsV2` / `repository.projectsV2`.
+
+**1) Project của owner (`user.projectsV2`):**
+
+```graphql
+query {
+  user(login: "hangndat") {
+    projectsV2(first: 10) {
+      nodes { id number title url }
+    }
+  }
+}
+```
+
+(`viewer { projectsV2 … }` tương đương khi login `hangndat`.)
+
+**2) Project liên kết repository (`repository.projectsV2`):**
+
+```graphql
+query {
+  repository(owner: "hangndat", name: "orca-task-telemetry") {
+    issueTypes(first: 10) { totalCount nodes { id name } }
+    projectsV2(first: 10) {
+      nodes { id number title }
+    }
+  }
+}
+```
+
+Live: `issueTypes` = **`null`** (repo user-owned); `projectsV2.nodes` chứa project #4. Nếu query `issueTypes { id }` không có `first`/`last`, API trả lỗi `MISSING_PAGINATION_BOUNDARIES`.
+
+**3) Items + field values + rate limit (query chính cho MVP-03):**
+
+```graphql
+query ProjectItems($id: ID!, $after: String) {
+  rateLimit { cost remaining resetAt }
+  node(id: $id) {
+    ... on ProjectV2 {
+      id
+      number
+      title
+      items(first: 100, after: $after) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+          hasPreviousPage
+          startCursor
+        }
+        nodes {
+          id
+          type
+          content {
+            __typename
+            ... on Issue {
+              number
+              title
+              url
+              state
+              repository { nameWithOwner }
+            }
+            ... on PullRequest {
+              number
+              title
+              url
+              state
+              repository { nameWithOwner }
+            }
+            ... on DraftIssue {
+              title
+              body
+            }
+          }
+          fieldValues(first: 20) {
+            nodes {
+              __typename
+              ... on ProjectV2ItemFieldTextValue {
+                text
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldNumberValue {
+                number
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                name
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldIterationValue {
+                title
+                startDate
+                duration
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+              ... on ProjectV2ItemFieldRepositoryValue {
+                repository { nameWithOwner }
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Chạy (page 1):**
+
+```sh
+gh api graphql -f query=@query.graphql -f id='PVT_kwHOAGoDWs4BoZ5m'
+```
+
+**Chạy (page 2):** thêm `-f after='<endCursor từ pageInfo page 1>'`.
+
+**Org project:** `organization(login:).projectsV2` — **chưa xác minh live** trên worker (chỉ user project #4).
+
+### Phân trang (AC3)
+
+Project #4: `items.totalCount` = **103**.
+
+| Trang | `first` | `after` | `nodes` | `pageInfo.hasNextPage` | `pageInfo.endCursor` (live) |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 100 | _(none)_ | 100 | `true` | `Y3Vyc29yOnYyOpKrMDAwMDAwMDAuMDHOEMED2Q==` |
+| 2 | 100 | cursor trang 1 | 3 | `false` | `Y3Vyc29yOnYyOpK5MDAwMDAwMDAuMDA5NzA4NzM3ODY0MDc3Ns4QwQPn` |
+
+- `hasPreviousPage` = `false` trang 1, `true` trang 2.
+- Thứ tự `nodes[].id`: **ổn định** giữa hai query liên tiếp (so sánh 100 id, live 2026-10-23).
+- Fixture: `project-items-page1.json` (rút 2 node, giữ `pageInfo`/`rateLimit`), `project-items-page2.json` (3 node đầy đủ).
+
+### Rate limit (AC4)
+
+Trong cùng query `ProjectItems`, field `rateLimit` trên response GraphQL (không cần header riêng):
+
+| Lần gọi | `cost` | `remaining` (mẫu) | `resetAt` (mẫu) |
+| --- | --- | --- | --- |
+| Page 1 items | 1 | 4956 | `2026-10-23T15:33:22Z` |
+| Page 2 items | 1 | 4884 | `2026-10-23T15:31:54Z` |
+
+`cost` = **1** cho mỗi request items như trên; `remaining` giảm theo từng query.
+
+### Nullable và khác biệt content (AC5)
+
+| Trường / tình huống | Nullable / hành vi | Evidence |
+| --- | --- | --- |
+| `ProjectV2Item.type` | Enum string, live: `"ISSUE"` | `project-items-page1.json` |
+| `content` union | `__typename` = `Issue` \| `PullRequest` \| `DraftIssue` | Issue: fixture; PR/Draft: **gap** (project #4 toàn Issue) |
+| `Issue.number`, `url`, `repository` | Có trên Issue | fixture |
+| `DraftIssue` | **Không** có `number` / `url` trong schema GraphQL (chỉ `title`, `body`) | GraphQL schema; **chưa có fixture** |
+| `PullRequest` | Có `number`, `url`, `state`, `repository` | **gap** trên project #4 |
+| `fieldValues` / `ProjectV2ItemFieldTextValue.text` | Có (vd field `Title`) | fixture |
+| `ProjectV2ItemFieldSingleSelectValue.name` | Có (vd `Status`, `Priority`) | fixture |
+| `ProjectV2ItemFieldNumberValue.number` | Có (vd `Wave`) | fixture |
+| `ProjectV2ItemFieldRepositoryValue.repository` | Có khi query fragment `repository { nameWithOwner }` | fixture (sau bổ sung fragment) |
+| `ProjectV2ItemFieldIterationValue` | Có trên project có iteration field | **gap** trên project #4 |
+| `repository.issueTypes` | **`null`** (repo cá nhân) | live query 2026-10-23 |
+| Issue đã xóa / repo không quyền | GitHub có thể trả nội dung redacted (`REDACTED` trong docs GitHub) | **gap** — chưa có item mẫu |
+
+### Gaps tóm tắt
+
+| Gap | Ghi chú |
+| --- | --- |
+| Fixture `PullRequest` / `DraftIssue` | Project #4 không chứa item loại này |
+| `ProjectV2ItemFieldIterationValue` | Không xuất hiện trên 103 item live |
+| `organization.projectsV2` | Chưa chạy live |
+| `REDACTED` content | Chưa quan sát |
+| `read:project` vs scope `project` trên token | Hiển thị OAuth khác message lỗi khi thiếu quyền |
