@@ -1,27 +1,27 @@
 # Orca Task Telemetry
 
-**GitHub Projects-first AI coding cost intelligence for Orca, Claude Code, and Codex.**
+**Phân tích chi phí lập trình AI cho Orca, Claude Code và Codex, lấy GitHub Projects làm trung tâm.**
 
-> **Status: foundation scaffold — not a working telemetry collector.** The CLI currently supports `--help`, `--version`, and `doctor`. The integration commands listed below are implementation targets, not completed features.
+> **Trạng thái: bộ khung nền tảng — chưa có collector telemetry hoạt động.** CLI hiện hỗ trợ `--help`, `--version` và `doctor`. Các lệnh tích hợp liệt kê bên dưới là mục tiêu triển khai, chưa phải tính năng đã hoàn thành.
 
-## Goal
+## Mục tiêu
 
-Install one CLI globally, then attribute Claude Code / Codex session usage to GitHub Issues in existing repositories without changing application code or agent configuration.
+Cài đặt một CLI trên toàn hệ thống, sau đó quy mức sử dụng session Claude Code / Codex về GitHub Issue trong các repository hiện có mà không thay đổi mã ứng dụng hoặc cấu hình agent.
 
 ```text
-GitHub Project -> GitHub Issue -> Orca execution -> provider session -> CodeBurn usage -> SQLite -> CLI report
+GitHub Project -> GitHub Issue -> Thực thi Orca -> Session của provider -> Mức sử dụng từ CodeBurn -> SQLite -> Báo cáo CLI
 ```
 
-GitHub is the source of truth for issues and project planning; Orca provides execution metadata; CodeBurn provides session usage. The first MVP uses explicit, verified session-to-issue linking where exact identifiers are not available.
+GitHub là nguồn dữ liệu chuẩn cho Issue và việc lập kế hoạch Project; Orca cung cấp metadata thực thi; CodeBurn cung cấp mức sử dụng session. MVP đầu tiên sử dụng liên kết session với Issue tường minh, đã được xác minh khi không có định danh chính xác.
 
-## Prerequisites
+## Điều kiện tiên quyết
 
 - Node.js 24+
-- npm or pnpm
-- GitHub CLI (`gh`) and access to GitHub Projects V2, for future integration
-- Orca and CodeBurn for future local execution and token collection
+- npm hoặc pnpm
+- GitHub CLI (`gh`) và quyền truy cập GitHub Projects V2, dành cho tích hợp sau này
+- Orca và CodeBurn, dành cho thực thi cục bộ và thu thập token sau này
 
-## Local development
+## Phát triển cục bộ
 
 ```bash
 npm install
@@ -32,9 +32,9 @@ node dist/cli.js doctor
 npm pack
 ```
 
-The npm package will expose the command `orca-telemetry` via the `bin` entry point. Once it has been implemented and packed, you can install the tarball globally or use a Git-based install. The intended production package must operate outside the current source directory.
+npm package sẽ cung cấp lệnh `orca-telemetry` qua entry point `bin`. Sau khi được triển khai và đóng gói, bạn có thể cài đặt tarball trên toàn hệ thống hoặc cài đặt từ Git. Package dùng trong production phải hoạt động bên ngoài thư mục mã nguồn hiện tại.
 
-## Planned MVP usage (NOT IMPLEMENTED)
+## Cách sử dụng MVP dự kiến (CHƯA TRIỂN KHAI)
 
 ```bash
 cd /path/to/ticket-solution
@@ -46,26 +46,26 @@ orca-telemetry report project
 orca-telemetry report unmapped
 ```
 
-These commands are illustrative interfaces to be implemented, not instructions that work in this scaffold.
+Các lệnh này minh họa giao diện sẽ triển khai, chưa phải hướng dẫn có thể chạy được với bộ khung hiện tại.
 
-## MVP definition
+## Định nghĩa MVP
 
-The first validated slice must map **one real GitHub Issue** to **one real Claude Code or Codex session**, and display its token usage with clear attribution provenance. Work with multiple repositories must not mutate their `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.codex/`, `.cursor/`, or application dependencies.
+Lát cắt đầu tiên được kiểm chứng phải ánh xạ **một GitHub Issue có thật** với **một session Claude Code hoặc Codex có thật**, đồng thời hiển thị mức sử dụng token cùng nguồn gốc quy thuộc rõ ràng. Khi làm việc với nhiều repository, không được thay đổi `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.codex/`, `.cursor/` hoặc dependency ứng dụng của các repository đó.
 
-See [MVP specification](docs/MVP-SPEC.md), [architecture](docs/ARCHITECTURE.md), and [backlog](BACKLOG.md).
+Xem [đặc tả MVP](docs/MVP-SPEC.md), [kiến trúc](docs/ARCHITECTURE.md) và [backlog](BACKLOG.md).
 
-## Create your GitHub repository
+## Tạo repository GitHub của bạn
 
-After extracting this starter, authenticate the GitHub CLI (`gh auth login`) and run:
+Sau khi giải nén bộ khung này, xác thực GitHub CLI (`gh auth login`) và chạy:
 
 ```bash
 bash scripts/publish-github.sh
 ```
 
-The script initializes a Git repository (if needed), creates one scaffold commit, creates `hangndat/orca-task-telemetry` as a **private** repository, and pushes `main`. To create a public repository intentionally, use `VISIBILITY=public bash scripts/publish-github.sh`.
+Script khởi tạo repository Git (nếu cần), tạo một commit cho bộ khung, tạo `hangndat/orca-task-telemetry` dưới dạng repository **private** và push `main`. Để chủ động tạo repository công khai, sử dụng `VISIBILITY=public bash scripts/publish-github.sh`.
 
-This project is independent of `ticket-solution`. Do not commit secrets, local session logs, telemetry databases, or application source code from other projects.
+Dự án này độc lập với `ticket-solution`. Không commit secret, log session cục bộ, cơ sở dữ liệu telemetry hoặc mã nguồn ứng dụng từ các dự án khác.
 
-## License
+## Giấy phép
 
-Not yet selected. Choose a license before public distribution.
+Chưa chọn. Cần chọn giấy phép trước khi phân phối công khai.
