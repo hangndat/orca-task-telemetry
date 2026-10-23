@@ -6,7 +6,7 @@
 GitHub Project → GitHub Issue → Orca (read-only) → CodeBurn sessions → SQLite → báo cáo CLI
 ```
 
-Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, `init`, `collect`, `link`, `report`). Chưa phát hành npm công khai; chưa được reviewer độc lập ký nhận MVP hoàn tất.
+Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, `init`, `collect`, `link`, `report`). **V1.1 (#44)** thêm `Issue.parent` trong schema SQLite v2 và `report hierarchy` (direct/inclusive cost, parent ngoài Project là ranh giới). Chưa phát hành npm công khai; V1.1 chờ independent Codex review trên exact SHA.
 
 ## Điều kiện tiên quyết (đã xác minh trên máy phát triển)
 
@@ -60,8 +60,11 @@ orca-telemetry link --issue OWNER/REPO#123 --provider codex --session '<session-
 orca-telemetry report tasks --json
 orca-telemetry report task OWNER/REPO#123 --json
 orca-telemetry report project --json
+orca-telemetry report hierarchy --json
 orca-telemetry report unmapped --json
 ```
+
+`report hierarchy` cần `collect` đã ghi `parent` cho mọi Issue trong Project; JSON/text chỉ đọc DB (không ghi GitHub). Parent ngoài Project hiện trong text/JSON qua `parentStatus: outside_project` và `parentIssueNodeId`.
 
 - **`init` / `collect` / `report`**: chỉ đọc GitHub/Orca/CodeBurn; không commit, không sửa `AGENTS.md`, `.cursor/`, lockfile hay Project fields.
 - **`link`**: ghi ánh xạ Issue ↔ session trong DB cục bộ; từ chối xung đột (`attribution_link_conflict`).
@@ -114,7 +117,7 @@ Bằng chứng fixture vs live: [docs/mvp-validation.md](docs/mvp-validation.md)
 
 ## Tài liệu
 
-- [Đặc tả MVP](docs/MVP-SPEC.md) · [Kiến trúc](docs/ARCHITECTURE.md) · [Báo cáo validation](docs/mvp-validation.md)
+- [Đặc tả MVP](docs/MVP-SPEC.md) · [V1.1 hierarchy (#44)](docs/V1-HIERARCHY-SPEC.md) · [Kiến trúc](docs/ARCHITECTURE.md) · [Báo cáo validation](docs/mvp-validation.md)
 - Contributor agents: [AGENTS.md](AGENTS.md)
 
 ## Giấy phép

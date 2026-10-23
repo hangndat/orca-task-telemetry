@@ -19,3 +19,10 @@ MVP đã đạt DoD tại `71ef95e3dbee70d994b542c2c8c18be3ccc46814`. Story [#44
 | V1.1-C — Tài liệu + live evidence | `README.md`, docs, local evidence | independent Codex review exact SHA |
 
 Architecture impact: **Có** — thêm parent relation trong SQLite v2 và báo cáo Project hierarchy. Root coordinator giữ contracts/schema/integration. Ngoài phạm vi: ghi ngược GitHub, tự liên kết session, dùng dependency `blocked by`, tính phí billing, mở rộng ngoài Project.
+
+## Triển khai (worker evidence)
+
+- SQLite v2: `parent_issue_node_id`, `parent_issue_observed` (0 = chưa thu thập parent; identity-only import không ghi đè).
+- `report hierarchy`: `kind: hierarchy`, mỗi node có `direct` / `inclusive` (session + `CostRollup`); parent ngoài Project → `parentStatus: outside_project` (spec prose `outsideProjectParentIssueId` tương đương `parentIssueNodeId` khi status này).
+- Kiểm chứng local: `pnpm test` (250), `pnpm test:pack`; fixture `tests/reports-hierarchy.test.mjs`, `tests/hierarchy-storage.test.mjs`.
+- Live read-only (coordinator probe, Project #4): 103 items, 93 Issue có `parent`; Issue #44 parent `I_kwDOVUhnY88AAAABZZFJ7A` — không ghi GitHub/Project/target repo.

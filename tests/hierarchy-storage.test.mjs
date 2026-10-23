@@ -39,8 +39,9 @@ test('V1.1: parent change and null clear are idempotent; identity-only link look
     });
     importProject([issue('I1', null), issue('I2', 'I1')]);
     importProject([issue('I1', null), issue('I2', 'I1')]);
-    let row = db.prepare('SELECT parent_issue_node_id FROM issues WHERE issue_node_id = ?').get('I2');
+    let row = db.prepare('SELECT parent_issue_node_id, parent_issue_observed FROM issues WHERE issue_node_id = ?').get('I2');
     assert.equal(row.parent_issue_node_id, 'I1');
+    assert.equal(row.parent_issue_observed, 1);
     assert.equal(db.prepare('SELECT count(*) AS n FROM project_memberships').get().n, 2);
 
     importGitHubRecords(db, { issues: [issue('I2')], memberships: [] });
@@ -48,8 +49,9 @@ test('V1.1: parent change and null clear are idempotent; identity-only link look
     assert.equal(row.parent_issue_node_id, 'I1');
 
     importProject([issue('I2', null)]);
-    row = db.prepare('SELECT parent_issue_node_id FROM issues WHERE issue_node_id = ?').get('I2');
+    row = db.prepare('SELECT parent_issue_node_id, parent_issue_observed FROM issues WHERE issue_node_id = ?').get('I2');
     assert.equal(row.parent_issue_node_id, null);
+    assert.equal(row.parent_issue_observed, 1);
     assert.deepEqual(
       db.prepare('SELECT issue_node_id FROM project_memberships WHERE project_id = ?').all('P').map((r) => r.issue_node_id),
       ['I2'],
@@ -84,9 +86,10 @@ test('V1.1: schema v1 migrates to v2 without losing existing issue and link rows
   const handle = openTelemetryDatabase({ dbPath });
   try {
     assert.equal(handle.db.prepare('PRAGMA user_version').get().user_version, 2);
-    const row = handle.db.prepare('SELECT issue_node_id, parent_issue_node_id FROM issues').get();
+    const row = handle.db.prepare('SELECT issue_node_id, parent_issue_node_id, parent_issue_observed FROM issues').get();
     assert.equal(row.issue_node_id, 'I1');
     assert.equal(row.parent_issue_node_id, null);
+    assert.equal(row.parent_issue_observed, 0);
     assert.equal(handle.db.prepare('SELECT count(*) AS n FROM project_memberships').get().n, 1);
     assert.equal(handle.db.prepare('SELECT count(*) AS n FROM session_links').get().n, 1);
     assert.equal(handle.db.prepare('SELECT cost_amount_usd FROM usage_snapshots').get().cost_amount_usd, 0.2);

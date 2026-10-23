@@ -1,5 +1,6 @@
 import { usageError } from '../errors.js';
 import { buildProjectReport, formatProjectReportText } from '../reports/project.js';
+import { buildHierarchyReport, formatHierarchyReportText } from '../reports/hierarchy.js';
 import {
   buildTaskReport,
   buildTasksReport,
@@ -13,7 +14,7 @@ import {
 } from '../reports/unmapped.js';
 import type { RouteResult } from './router.js';
 
-export type ReportSubcommand = 'tasks' | 'task' | 'project' | 'unmapped';
+export type ReportSubcommand = 'tasks' | 'task' | 'project' | 'hierarchy' | 'unmapped';
 
 export async function runReport(
   sub: ReportSubcommand,
@@ -50,6 +51,18 @@ export async function runReport(
         kind: 'text',
         write: () => {
           process.stdout.write(formatProjectReportText(data));
+        },
+      };
+    }
+    if (sub === 'hierarchy') {
+      const data = buildHierarchyReport(ctx);
+      if (options.json) {
+        return { kind: 'ok', data };
+      }
+      return {
+        kind: 'text',
+        write: () => {
+          process.stdout.write(formatHierarchyReportText(data));
         },
       };
     }
