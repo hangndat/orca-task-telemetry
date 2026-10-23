@@ -14,6 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",
     "test": "pnpm run build && vitest run",
+    "test:pack": "node scripts/test-pack.mjs",
     "pack:check": "pnpm run test && pnpm pack --dry-run"
   },
   "devDependencies": {
