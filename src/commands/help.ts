@@ -1,10 +1,10 @@
 const VERSION = '0.1.0';
 
-const IMPLEMENTED = new Set(['doctor', 'projects']);
+const IMPLEMENTED = new Set(['doctor', 'projects', 'init']);
 
 const TOP_LEVEL = [
   { name: 'doctor', summary: 'Check local tools (implemented)' },
-  { name: 'init', summary: 'Initialize telemetry profile (not implemented)' },
+  { name: 'init', summary: 'Initialize telemetry profile for this repository' },
   { name: 'projects', summary: 'List GitHub Projects for the current repository' },
   { name: 'collect', summary: 'Collect Orca/CodeBurn usage (not implemented)' },
   { name: 'link', summary: 'Link a session to an issue (not implemented)' },
@@ -65,6 +65,18 @@ export function commandHelpText(command: string): string {
       '',
       'Resolves the Git repository in the current directory, verifies the GitHub',
       'repository with gh, and lists Projects V2 linked to the repo and owner.',
+    ].join('\n') + '\n';
+  }
+  if (command === 'init') {
+    return [
+      'orca-telemetry init — select a GitHub Project for the current repository',
+      '',
+      'Usage:',
+      '  orca-telemetry init [--project <number|url>] [--remote <name>] [--json]',
+      '',
+      'Resolves the Git repository, discovers Projects V2, and stores a profile in',
+      'the local orca-task-telemetry config. Interactive selection requires a TTY',
+      'unless --project is provided.',
     ].join('\n') + '\n';
   }
   if (command === 'doctor') {

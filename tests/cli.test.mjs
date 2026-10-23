@@ -63,7 +63,7 @@ test('--help documents implemented vs planned commands', () => {
   assert.match(result.stdout, /foundation scaffold/);
   assert.match(result.stdout, /doctor.*implemented/i);
   assert.match(result.stdout, /projects.*implemented/i);
-  assert.match(result.stdout, /init.*not implemented/i);
+  assert.match(result.stdout, /init.*implemented/i);
   assert.doesNotMatch(result.stdout, /__internal_test/);
 });
 
@@ -114,7 +114,6 @@ test('report task without issue id is usage_error', () => {
 });
 
 const NOT_IMPLEMENTED_CASES = [
-  ['init'],
   ['collect'],
   ['link'],
   ['report', 'tasks'],

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { parseArgs } from 'node:util';
 import { rootHelpText, VERSION } from './commands/help.js';
 import {
   emitCliError,
@@ -21,26 +20,13 @@ export async function runCli(argv: string[]): Promise<number> {
   }
 
   let json = false;
-  let positionals: string[] = [];
-
-  try {
-    const parsed = parseArgs({
-      args: argv,
-      options: {
-        help: { type: 'boolean', short: 'h' },
-        version: { type: 'boolean', short: 'v' },
-        json: { type: 'boolean' },
-      },
-      allowPositionals: true,
-      strict: true,
-    });
-    json = parsed.values.json === true;
-    positionals = parsed.positionals;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const cliErr = usageError(message, 'Run orca-telemetry --help for usage.');
-    emitCliError(cliErr, argv.includes('--json'));
-    return cliErr.exitCode;
+  const positionals: string[] = [];
+  for (const arg of argv) {
+    if (arg === '--json') {
+      json = true;
+      continue;
+    }
+    positionals.push(arg);
   }
 
   const wantsHelp = argv.includes('--help') || argv.includes('-h');
@@ -56,7 +42,21 @@ export async function runCli(argv: string[]): Promise<number> {
 
   const [command, ...rest] = positionals;
 
-  if (wantsHelp && command === undefined) {
+  if (
+    command !== undefined &&
+    command.startsWith('-') &&
+    command !== '-h' &&
+    command !== '--help'
+  ) {
+    const err = usageError(
+      `Unknown option '${command}'.`,
+      'Run orca-telemetry --help for usage.',
+    );
+    emitCliError(err, json);
+    return err.exitCode;
+  }
+
+  if (wantsHelp && (command === undefined || command === '-h' || command === '--help')) {
     if (json) {
       writeJsonSuccess({ help: rootHelpText() });
     } else {
@@ -66,6 +66,15 @@ export async function runCli(argv: string[]): Promise<number> {
   }
 
   if (command === undefined) {
+    if (json) {
+      writeJsonSuccess({ help: rootHelpText() });
+    } else {
+      process.stdout.write(rootHelpText());
+    }
+    return 0;
+  }
+
+  if (wantsHelp && (command === '-h' || command === '--help')) {
     if (json) {
       writeJsonSuccess({ help: rootHelpText() });
     } else {

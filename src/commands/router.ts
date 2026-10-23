@@ -2,9 +2,10 @@ import { runDoctor, collectDoctorData } from '../doctor.js';
 import { notImplemented, usageError, unknownCommand } from '../errors.js';
 import { commandHelpText } from './help.js';
 import { writeJsonSuccess } from './output.js';
+import { runInit } from './init.js';
 import { runProjects } from './projects.js';
 
-const STUB_COMMANDS = new Set(['init', 'collect', 'link']);
+const STUB_COMMANDS = new Set(['collect', 'link']);
 
 const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'project', 'unmapped']);
 
@@ -40,6 +41,13 @@ export async function routeCommand(
 
   if (command === 'projects') {
     return runProjects(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
+  }
+
+  if (command === 'init') {
+    return runInit(restPositionals, {
       json,
       cwd: options.cwd ?? process.cwd(),
     });
