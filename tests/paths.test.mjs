@@ -74,6 +74,31 @@ test('AC1: ORCA_TELEMETRY_HOME absolute override', () => {
   assert.equal(resolved.appHome, '/var/orca-telemetry');
 });
 
+test('AC1: unset ORCA_TELEMETRY_HOME uses platform default', () => {
+  const resolved = resolveAppPaths(env('linux', { env: {} }));
+  assert.equal(
+    resolved.appHome,
+    path.join('/home/tester', '.local', 'share', APP_DIR_NAME),
+  );
+});
+
+test('AC1: rejects empty and whitespace-only ORCA_TELEMETRY_HOME', () => {
+  for (const value of ['', '   ', '\t']) {
+    assert.throws(
+      () =>
+        resolveAppPaths(
+          env('linux', { env: { ORCA_TELEMETRY_HOME: value } }),
+        ),
+      (err) => {
+        assert.equal(err.code, 'paths_error');
+        assert.equal(err.exitCode, EXIT_USAGE);
+        return true;
+      },
+      `expected paths_error for ORCA_TELEMETRY_HOME=${JSON.stringify(value)}`,
+    );
+  }
+});
+
 test('AC1: rejects relative ORCA_TELEMETRY_HOME', () => {
   assert.throws(
     () =>
@@ -85,6 +110,19 @@ test('AC1: rejects relative ORCA_TELEMETRY_HOME', () => {
       assert.equal(err.exitCode, EXIT_USAGE);
       return true;
     },
+  );
+});
+
+test('AC1: rejects relative LOCALAPPDATA on Windows', () => {
+  assert.throws(
+    () =>
+      resolveAppPaths(
+        env('win32', {
+          homedir: () => 'C:\\Users\\tester',
+          env: { LOCALAPPDATA: 'relative\\appdata' },
+        }),
+      ),
+    (err) => err.code === 'paths_error',
   );
 });
 

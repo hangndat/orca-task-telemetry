@@ -106,9 +106,13 @@ export function parseConfigJson(text: string): ConfigEnvelopeV1 {
     );
   }
 
+  const profilesValue = parsed['profiles'];
+  const profilesInput =
+    profilesValue === undefined ? {} : profilesValue;
+
   return {
     version: CONFIG_VERSION,
-    profiles: parseProfiles(parsed['profiles'] ?? {}),
+    profiles: parseProfiles(profilesInput),
   };
 }
 
@@ -140,17 +144,49 @@ function assertSafeTempParent(appHome: string): void {
   }
 }
 
-function ensureAppHomeDir(appHome: string): void {
-  mkdirSync(appHome, { recursive: true, mode: 0o700 });
+export type ConfigIo = {
+  mkdirSync: typeof mkdirSync;
+  chmodSync: typeof chmodSync;
+  existsSync: typeof existsSync;
+  lstatSync: typeof lstatSync;
+  openSync: typeof openSync;
+  writeSync: typeof writeSync;
+  closeSync: typeof closeSync;
+  renameSync: typeof renameSync;
+  unlinkSync: typeof unlinkSync;
+  randomTempSuffix: () => string;
+};
+
+export function createDefaultConfigIo(): ConfigIo {
+  return {
+    mkdirSync,
+    chmodSync,
+    existsSync,
+    lstatSync,
+    openSync,
+    writeSync,
+    closeSync,
+    renameSync,
+    unlinkSync,
+    randomTempSuffix: () => randomBytes(8).toString('hex'),
+  };
+}
+
+function ensureAppHomeDir(appHome: string, io: ConfigIo): void {
+  io.mkdirSync(appHome, { recursive: true, mode: 0o700 });
   if (process.platform !== 'win32') {
-    chmodSync(appHome, 0o700);
+    io.chmodSync(appHome, 0o700);
   }
 }
 
 /**
  * Atomically write config to `appHome/config.json`.
  */
-export function saveConfig(appHome: string, config: ConfigEnvelopeV1): void {
+export function saveConfig(
+  appHome: string,
+  config: ConfigEnvelopeV1,
+  io: ConfigIo = createDefaultConfigIo(),
+): void {
   if (config.version !== CONFIG_VERSION) {
     throw configError(
       'config_unsupported_version',
@@ -158,16 +194,16 @@ export function saveConfig(appHome: string, config: ConfigEnvelopeV1): void {
     );
   }
 
-  ensureAppHomeDir(appHome);
+  ensureAppHomeDir(appHome, io);
   assertSafeTempParent(appHome);
 
   const configPath = configPathForAppHome(appHome);
   const payload = `${JSON.stringify(config, null, 2)}\n`;
-  const tempName = `.${CONFIG_FILE_NAME}.${randomBytes(8).toString('hex')}.tmp`;
+  const tempName = `.${CONFIG_FILE_NAME}.${io.randomTempSuffix()}.tmp`;
   const tempPath = path.join(appHome, tempName);
 
-  if (existsSync(tempPath)) {
-    const tempStat = lstatSync(tempPath);
+  if (io.existsSync(tempPath)) {
+    const tempStat = io.lstatSync(tempPath);
     if (tempStat.isSymbolicLink()) {
       throw configError(
         'config_write_error',
@@ -180,28 +216,28 @@ export function saveConfig(appHome: string, config: ConfigEnvelopeV1): void {
 
   let fd: number | undefined;
   try {
-    fd = openSync(tempPath, 'w', 0o600);
-    writeSync(fd, payload, undefined, 'utf8');
-    closeSync(fd);
+    fd = io.openSync(tempPath, 'w', 0o600);
+    io.writeSync(fd, payload, undefined, 'utf8');
+    io.closeSync(fd);
     fd = undefined;
     if (process.platform !== 'win32') {
-      chmodSync(tempPath, 0o600);
+      io.chmodSync(tempPath, 0o600);
     }
-    renameSync(tempPath, configPath);
+    io.renameSync(tempPath, configPath);
     if (process.platform !== 'win32') {
-      chmodSync(configPath, 0o600);
+      io.chmodSync(configPath, 0o600);
     }
   } catch (err) {
     if (fd !== undefined) {
       try {
-        closeSync(fd);
+        io.closeSync(fd);
       } catch {
         // ignore
       }
     }
     try {
-      if (existsSync(tempPath)) {
-        unlinkSync(tempPath);
+      if (io.existsSync(tempPath)) {
+        io.unlinkSync(tempPath);
       }
     } catch {
       // ignore cleanup errors

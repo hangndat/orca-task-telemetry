@@ -54,9 +54,15 @@ function requireAbsolutePath(
 }
 
 function resolveFromTelemetryHome(env: PathEnv): string | null {
-  const raw = env.env['ORCA_TELEMETRY_HOME'];
-  if (raw === undefined || raw.length === 0) {
+  if (!Object.hasOwn(env.env, 'ORCA_TELEMETRY_HOME')) {
     return null;
+  }
+  const raw = env.env['ORCA_TELEMETRY_HOME'];
+  if (raw === undefined || raw.length === 0 || raw.trim().length === 0) {
+    throw pathsError(
+      'ORCA_TELEMETRY_HOME must not be empty.',
+      'Unset the variable to use the default app data directory, or set an absolute path.',
+    );
   }
   return requireAbsolutePath(raw, 'ORCA_TELEMETRY_HOME', env.platform);
 }
