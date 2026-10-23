@@ -7,6 +7,7 @@ const IMPLEMENTED = new Set([
   'collect',
   'link',
   'report',
+  'trace',
 ]);
 
 const TOP_LEVEL = [
@@ -16,6 +17,7 @@ const TOP_LEVEL = [
   { name: 'collect', summary: 'Collect GitHub, Orca, and CodeBurn into local DB' },
   { name: 'link', summary: 'Link a CodeBurn session to a GitHub issue' },
   { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
+  { name: 'trace', summary: 'Manually link a session to a verified PR or commit' },
 ];
 
 const REPORT_SUBCOMMANDS = [
@@ -50,6 +52,19 @@ export function rootHelpText(): string {
 }
 
 export function commandHelpText(command: string): string {
+  if (command === 'trace') {
+    return [
+      'orca-task-telemetry trace — manual GitHub PR and commit links',
+      '',
+      'Usage:',
+      '  orca-telemetry trace link-pr --issue <issue-url|owner/repo#n> --pr <pr-url|owner/repo#n> --provider claude|codex --session <id> [--json]',
+      '  orca-telemetry trace link-commit --pr <pr-url|owner/repo#n> --sha <full-oid> --provider claude|codex --session <id> [--json]',
+      '',
+      'Requires a prior manual session→Issue link; commit links also require a manual session→PR link.',
+      'GitHub closing Issue and PR commit lists must be fully paged before linking.',
+      'Pagination is not an atomic GitHub snapshot.',
+    ].join('\n') + '\n';
+  }
   if (command === 'report') {
     const lines = [
       `orca-task-telemetry report — usage reports (read-only local DB)`,

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'vitest';
-import { openTelemetryDatabase, importGitHubRecords } from '../dist/db/index.js';
+import { openTelemetryDatabase, importGitHubRecords, SUPPORTED_SCHEMA_VERSION } from '../dist/db/index.js';
 import { MIGRATION_V1_STATEMENTS } from '../dist/db/migrations/v1.js';
 
 function withDb(run) {
@@ -62,7 +62,7 @@ test('V1.1: parent change and null clear are idempotent; identity-only link look
   });
 });
 
-test('V1.1: schema v1 migrates to v2 without losing existing issue and link rows', () => {
+test('V1.1: schema v1 migrates to current without losing existing issue and link rows', () => {
   const dir = mkdtempSync(join(tmpdir(), 'hierarchy-migrate-'));
   const dbPath = join(dir, 'telemetry.sqlite');
   const raw = new DatabaseSync(dbPath);
@@ -85,7 +85,7 @@ test('V1.1: schema v1 migrates to v2 without losing existing issue and link rows
   }
   const handle = openTelemetryDatabase({ dbPath });
   try {
-    assert.equal(handle.db.prepare('PRAGMA user_version').get().user_version, 2);
+    assert.equal(handle.db.prepare('PRAGMA user_version').get().user_version, SUPPORTED_SCHEMA_VERSION);
     const row = handle.db.prepare('SELECT issue_node_id, parent_issue_node_id, parent_issue_observed FROM issues').get();
     assert.equal(row.issue_node_id, 'I1');
     assert.equal(row.parent_issue_node_id, null);
