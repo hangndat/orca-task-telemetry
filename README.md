@@ -93,10 +93,12 @@ orca-telemetry writeback --field "Cost USD" --apply --yes --json
 | --- | --- |
 | Mặc định | `mode: dry_run` — preview `kind: writeback_preview`; không mutation GitHub |
 | `--apply` / `--yes` | Ghi qua `gh project item-edit`; `--yes` chỉ sau preview **cùng process**; TTY hỏi xác nhận nếu thiếu `--yes` |
+| Apply scope | Trước preview/write, CLI kiểm tra account `github.com` đang active bằng `gh auth status --json hosts --no-refresh`; thiếu `project` hoặc không xác minh được → exit `2`, kể cả khi không có set dự kiến. `doctor` báo riêng scope đọc và scope apply, gợi ý `gh auth refresh -s project`. |
 | `--force-overwrite` | Ghi khi remote NUMBER ≠ computed; không flag → `skip` `remote_conflict` |
 | Cost | Chỉ **estimated API equivalent**; session `unknown` → `skip` `unknown_cost`; không session → `no_usage` |
 | Field | Owner tạo field NUMBER trên board; tên trùng → exit `2`, dùng `--field-id` |
 | Race | GitHub không CAS nguyên tử; CLI re-read trước write nhưng không loại bỏ xung đột đồng thời |
+| Timeout | Lần `item-edit` timeout/overflow luôn là item failure; trạng thái remote có thể chưa rõ, cần đọc lại field trước khi retry thủ công. |
 
 - **`init` / `collect` / `report` / `writeback` (không `--apply`)**: chỉ đọc GitHub/Orca/agent-top; không gọi mutation Project; không commit repo ứng dụng, không sửa `AGENTS.md`, `.cursor/`, lockfile hay agent config.
 - **`link`**: ghi ánh xạ Issue ↔ session trong DB cục bộ; từ chối xung đột (`attribution_link_conflict`).

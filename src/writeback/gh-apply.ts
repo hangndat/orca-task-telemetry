@@ -9,6 +9,8 @@ import {
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_BUFFER = 1_024 * 1_024;
+const TERMINATE_GRACE_MS = 250;
+const KILL_GRACE_MS = 250;
 const MAX_ERROR_MESSAGE_LEN = 300;
 
 const FORBIDDEN_ITEM_EDIT_FLAGS = new Set([
@@ -180,10 +182,18 @@ function mapProcessFailure(result: GhRunResult): CliError {
 
   const text = combinedText(result.stdout, result.stderr);
 
-  if (result.signal === 'SIGTERM' || spawnErr?.code === 'ETIMEDOUT') {
+  if (spawnErr?.code === 'ETIMEDOUT' || result.signal === 'SIGTERM' || result.signal === 'SIGKILL') {
     return ghApplyError(
       'github_unavailable',
-      'GitHub CLI request timed out or was interrupted.',
+      'GitHub CLI request timed out or was interrupted; remote write state is unknown. Check the field before retrying.',
+      EXIT_SOURCE_UNAVAILABLE,
+    );
+  }
+
+  if (spawnErr?.code === 'ENOBUFS') {
+    return ghApplyError(
+      'github_apply_failed',
+      'GitHub CLI output exceeded the allowed buffer; remote write state is unknown. Check the field before retrying.',
       EXIT_SOURCE_UNAVAILABLE,
     );
   }
@@ -247,41 +257,53 @@ function runGh(
     const stderrChunks: Buffer[] = [];
     let stdoutBytes = 0;
     let stderrBytes = 0;
-    let stdoutEnded = false;
-    let stderrEnded = false;
     let closed = false;
     let exitCode: number | null = null;
     let signal: NodeJS.Signals | null = null;
     let spawnError: NodeJS.ErrnoException | undefined;
     let settled = false;
-    let timedOut = false;
+    let stopReason: 'ETIMEDOUT' | 'ENOBUFS' | null = null;
+    let terminateTimer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
 
-    const tryFinish = () => {
-      if (settled || !stdoutEnded || !stderrEnded || !closed) {
+    const finish = () => {
+      if (settled) {
         return;
       }
       settled = true;
       clearTimeout(timer);
+      clearTimeout(terminateTimer);
+      clearTimeout(killTimer);
+      child.stdout.destroy();
+      child.stderr.destroy();
       resolve({
         stdout: Buffer.concat(stdoutChunks).toString('utf8'),
         stderr: Buffer.concat(stderrChunks).toString('utf8'),
         exitCode,
         signal,
-        spawnError: timedOut
-          ? Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })
+        spawnError: stopReason
+          ? Object.assign(new Error(stopReason), { code: stopReason })
           : spawnError,
       });
     };
 
-    const timer = setTimeout(() => {
-      timedOut = true;
+    const stop = (reason: 'ETIMEDOUT' | 'ENOBUFS') => {
+      if (stopReason || settled || closed) return;
+      stopReason = reason;
       child.kill('SIGTERM');
-    }, timeoutMs);
+      terminateTimer = setTimeout(() => {
+        if (closed || settled) return;
+        child.kill('SIGKILL');
+        killTimer = setTimeout(finish, KILL_GRACE_MS);
+      }, TERMINATE_GRACE_MS);
+    };
+
+    const timer = setTimeout(() => stop('ETIMEDOUT'), timeoutMs);
 
     const onStdout = (chunk: Buffer) => {
       stdoutBytes += chunk.length;
       if (stdoutBytes > maxBuffer) {
-        child.kill('SIGTERM');
+        stop('ENOBUFS');
         return;
       }
       stdoutChunks.push(chunk);
@@ -289,36 +311,26 @@ function runGh(
     const onStderr = (chunk: Buffer) => {
       stderrBytes += chunk.length;
       if (stderrBytes > maxBuffer) {
-        child.kill('SIGTERM');
+        stop('ENOBUFS');
         return;
       }
       stderrChunks.push(chunk);
     };
 
     child.stdout.on('data', onStdout);
-    child.stdout.on('end', () => {
-      stdoutEnded = true;
-      tryFinish();
-    });
     child.stderr.on('data', onStderr);
-    child.stderr.on('end', () => {
-      stderrEnded = true;
-      tryFinish();
-    });
 
     child.on('error', (err: NodeJS.ErrnoException) => {
       spawnError = err;
       closed = true;
-      stdoutEnded = true;
-      stderrEnded = true;
-      tryFinish();
+      finish();
     });
 
     child.on('close', (code, sig) => {
       closed = true;
       exitCode = code;
       signal = sig;
-      tryFinish();
+      finish();
     });
   });
 }
@@ -335,10 +347,16 @@ export async function setProjectItemNumberField(
   const ghExecutable = resolveGhPath(options);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBuffer = options.maxBuffer ?? DEFAULT_MAX_BUFFER;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    throw usageError('timeoutMs must be a positive integer.');
+  }
+  if (!Number.isSafeInteger(maxBuffer) || maxBuffer <= 0) {
+    throw usageError('maxBuffer must be a positive integer.');
+  }
 
   const result = await runGh(ghExecutable, argv, timeoutMs, maxBuffer);
 
-  if (result.spawnError && result.spawnError.code !== 'ETIMEDOUT') {
+  if (result.spawnError) {
     throw mapProcessFailure(result);
   }
 
