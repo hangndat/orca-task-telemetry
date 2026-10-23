@@ -8,7 +8,8 @@ import { test } from 'vitest';
 import { linkSessionToIssue } from '../dist/attribution/link.js';
 import { confirmApply, parseWritebackArgs } from '../dist/commands/writeback.js';
 import { CliError, EXIT_PARTIAL, EXIT_USAGE } from '../dist/errors.js';
-import { applyExitCode, applyWritebackPreview } from '../dist/writeback/apply.js';
+import { applyExitCode, applyWritebackPreview, formatWritebackApplyText } from '../dist/writeback/apply.js';
+import { setProjectItemNumberField } from '../dist/writeback/gh-apply.js';
 import {
   initBareRepo,
   installDatasetInHome,
@@ -18,6 +19,7 @@ import { runCliWriteback } from './helpers/writeback-harness.mjs';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const ghStub = resolve(dir, 'helpers/gh-writeback-stub.mjs');
+const itemEditStub = resolve(dir, 'helpers/gh-project-item-edit-stub.mjs');
 
 function item(number, amount, action = 'set') {
   return {
@@ -116,6 +118,50 @@ test('partial failure retains sanitized item error and continues sequentially', 
   assert.equal(result.summary.applied, 1);
   assert.equal(result.items[0].error.hint, 'gh auth refresh -s project');
   assert.equal(applyExitCode(result), EXIT_PARTIAL);
+});
+
+test('F03: apply JSON and text preserve uncertain remote state for timeout and overflow', async () => {
+  for (const scenario of [
+    { code: 'github_apply_timeout', signal: 'ignore', delay: '3000', timeoutMs: 300 },
+    { code: 'github_apply_output_overflow', signal: 'zero', stdout: 'x'.repeat(1000), maxBuffer: 10 },
+  ]) {
+    process.env.GH_ITEM_EDIT_STUB_SIGNAL = scenario.signal;
+    process.env.GH_ITEM_EDIT_STUB_DELAY_MS = scenario.delay ?? '0';
+    process.env.GH_ITEM_EDIT_STUB_STDOUT = scenario.stdout ?? '';
+    process.env.GH_ITEM_EDIT_STUB_STDERR = 'ghp_SUPERSECRET123';
+    let writes = 0;
+    try {
+      const report = await applyWritebackPreview(preview([item(1, 1), item(2, 2)]), {
+        confirmed: true, forceOverwrite: false,
+      }, {
+        readProjectItemNumberFieldValue: async () => null,
+        setProjectItemNumberField: async (input) => {
+          writes += 1;
+          if (input.projectItemId === 'PVTI_1') {
+            await setProjectItemNumberField(input, {
+              ghPath: itemEditStub,
+              timeoutMs: scenario.timeoutMs ?? 5000,
+              maxBuffer: scenario.maxBuffer ?? 1024,
+            });
+          }
+        },
+      });
+      assert.equal(writes, 2);
+      assert.equal(report.summary.failed, 1);
+      assert.equal(report.summary.applied, 1);
+      assert.equal(applyExitCode(report), EXIT_PARTIAL);
+      assert.equal(report.items[0].error.code, scenario.code);
+      assert.match(report.items[0].error.message, /remote write state is unknown/i);
+      assert.match(report.items[0].error.message, /Read the field before retrying manually/);
+      assert.match(formatWritebackApplyText(report), /remote write state is unknown/);
+      assert.doesNotMatch(JSON.stringify(report) + formatWritebackApplyText(report), /ghp_SUPERSECRET123/);
+    } finally {
+      delete process.env.GH_ITEM_EDIT_STUB_SIGNAL;
+      delete process.env.GH_ITEM_EDIT_STUB_DELAY_MS;
+      delete process.env.GH_ITEM_EDIT_STUB_STDOUT;
+      delete process.env.GH_ITEM_EDIT_STUB_STDERR;
+    }
+  }
 });
 
 test('invalid proposals and unrecognized exceptions fail closed without exposing secrets', async () => {
@@ -291,6 +337,36 @@ test('F02: read:project permits preview but missing project rejects apply before
     rmSync(repo, { recursive: true, force: true });
   }
 });
+
+test('F04: auth child ignoring SIGTERM fails closed before preview or edit', () => {
+  const repo = initBareRepo();
+  const home = mkdtempSync(join(tmpdir(), 'orca-wb-auth-timeout-'));
+  const logPath = join(home, 'log.ndjson');
+  try {
+    writeReportsProfile(home, 'PVT_attr_synthetic_project');
+    installDatasetInHome(home);
+    const started = Date.now();
+    const result = runCliWriteback(['--field-id', 'PVTF_cost', '--apply', '--yes', '--json'], {
+      cwd: repo,
+      timeout: 19_000,
+      env: {
+        ORCA_TELEMETRY_HOME: home,
+        ORCA_TELEMETRY_GH: ghStub,
+        GH_WRITEBACK_STATE_PATH: join(home, 'remote.json'),
+        GH_WRITEBACK_LOG_PATH: logPath,
+        GH_WRITEBACK_AUTH: 'ignore-term',
+      },
+    });
+    assert.equal(result.status, EXIT_USAGE, result.stderr);
+    assert.ok(Date.now() - started < 13_000, 'preflight exceeded the bounded stop window');
+    assert.equal(JSON.parse(result.stdout).error.code, 'github_auth_unverified');
+    const kinds = readFileSync(logPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line).kind);
+    assert.deepEqual(kinds, ['auth']);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+  }
+}, 20_000);
 
 test('F02: apply validates scope even when preview would plan no sets', () => {
   const repo = initBareRepo();

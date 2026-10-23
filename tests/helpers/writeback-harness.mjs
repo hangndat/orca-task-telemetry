@@ -6,11 +6,12 @@ import { openReportContext } from '../../dist/reports/tasks.js';
 const dir = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(dir, '../../dist/cli.js');
 
-export function runCliWriteback(args, { cwd, env = {} }) {
+export function runCliWriteback(args, { cwd, env = {}, timeout = 20_000 }) {
   return spawnSync(process.execPath, [cli, 'writeback', ...args], {
     cwd,
     encoding: 'utf8',
     env: { ...process.env, ...env },
+    timeout,
   });
 }
 

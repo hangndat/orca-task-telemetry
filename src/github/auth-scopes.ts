@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { CliError, EXIT_USAGE } from '../errors.js';
 
 export type GhAuthStatus = {
@@ -8,19 +8,54 @@ export type GhAuthStatus = {
 };
 
 /** Inspect only the active github.com account; never request or retain a token. */
-export function readGhAuthStatus(): GhAuthStatus {
+export async function readGhAuthStatus(): Promise<GhAuthStatus> {
   const executable = process.env['ORCA_TELEMETRY_GH'] || 'gh';
   const args = ['auth', 'status', '--json', 'hosts', '--no-refresh'];
   const isScript = /\.m?js$/.test(executable);
   const command = isScript ? process.execPath : executable;
   const argv = isScript ? [executable, ...args] : args;
-  const result = spawnSync(command, argv, {
-    encoding: 'utf8',
-    timeout: 10_000,
-    maxBuffer: 64 * 1024,
-    stdio: ['ignore', 'pipe', 'pipe'],
+  const result = await new Promise<{ stdout: string; ok: boolean }>((resolve) => {
+    const child = spawn(command, argv, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    let stopped = false;
+    let settled = false;
+    let termTimer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(termTimer);
+      clearTimeout(killTimer);
+      child.stdout.destroy();
+      child.stderr.destroy();
+      resolve({ stdout: ok ? Buffer.concat(chunks).toString('utf8') : '', ok });
+    };
+    const stop = () => {
+      if (stopped || settled) return;
+      stopped = true;
+      child.kill('SIGTERM');
+      termTimer = setTimeout(() => {
+        if (settled) return;
+        child.kill('SIGKILL');
+        killTimer = setTimeout(() => finish(false), 250);
+      }, 250);
+    };
+    const timeoutTimer = setTimeout(stop, 10_000);
+    child.stdout.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > 64 * 1024) { stop(); return; }
+      chunks.push(chunk);
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > 64 * 1024) stop();
+    });
+    child.on('error', () => finish(false));
+    child.on('close', (code) => finish(!stopped && code === 0));
   });
-  if (result.error || result.status !== 0) {
+  if (!result.ok) {
     return { authenticated: false, scopes: [], known: false };
   }
   try {
@@ -58,7 +93,7 @@ export function readGhAuthStatus(): GhAuthStatus {
   }
 }
 
-export function requireGhProjectWriteScope(status: GhAuthStatus = readGhAuthStatus()): void {
+export function requireGhProjectWriteScope(status: GhAuthStatus): void {
   if (!status.known) {
     throw new CliError({
       code: 'github_auth_unverified',

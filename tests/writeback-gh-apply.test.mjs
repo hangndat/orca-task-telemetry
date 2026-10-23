@@ -121,11 +121,11 @@ test('AC2: missing gh binary surfaces gh_not_found', async () => {
   );
 });
 
-test('AC2: timeout maps to github_unavailable', async () => {
+test('AC2: timeout maps to github_apply_timeout', async () => {
   process.env.GH_ITEM_EDIT_STUB_DELAY_MS = '50';
   await assert.rejects(
     () => setProjectItemNumberField(SAMPLE, { ghPath: stub, timeoutMs: 5 }),
-    (err) => err.code === 'github_unavailable',
+    (err) => err.code === 'github_apply_timeout',
   );
   delete process.env.GH_ITEM_EDIT_STUB_DELAY_MS;
 });
@@ -136,7 +136,7 @@ test('F03: timeout remains failure when child handles SIGTERM and exits zero', a
   try {
     await assert.rejects(
       () => setProjectItemNumberField(SAMPLE, { ghPath: stub, timeoutMs: 300 }),
-      (err) => err.code === 'github_unavailable' && /remote write state is unknown/.test(err.message),
+      (err) => err.code === 'github_apply_timeout' && /remote write state is unknown/.test(err.message),
     );
   } finally {
     delete process.env.GH_ITEM_EDIT_STUB_SIGNAL;
@@ -151,7 +151,7 @@ test('F03: ignored SIGTERM escalates to SIGKILL and settles promptly', async () 
   try {
     await assert.rejects(
       () => setProjectItemNumberField(SAMPLE, { ghPath: stub, timeoutMs: 300 }),
-      (err) => err.code === 'github_unavailable',
+      (err) => err.code === 'github_apply_timeout',
     );
     assert.ok(Date.now() - started < 2000);
   } finally {
@@ -166,7 +166,7 @@ test('F03: output overflow fails even if child exits zero on SIGTERM', async () 
   try {
     await assert.rejects(
       () => setProjectItemNumberField(SAMPLE, { ghPath: stub, maxBuffer: 10 }),
-      (err) => err.code === 'github_apply_failed' && /remote write state is unknown/.test(err.message),
+      (err) => err.code === 'github_apply_output_overflow' && /remote write state is unknown/.test(err.message),
     );
   } finally {
     delete process.env.GH_ITEM_EDIT_STUB_SIGNAL;

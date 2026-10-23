@@ -58,6 +58,18 @@ function itemError(error: unknown): NonNullable<WritebackApplyItem['error']> {
     if (error.code === 'gh_not_found') {
       return { code: error.code, message: 'GitHub CLI (gh) was not found on PATH.' };
     }
+    if (error.code === 'github_apply_timeout') {
+      return {
+        code: error.code,
+        message: 'GitHub CLI item-edit timed out or was interrupted; remote write state is unknown. Read the field before retrying manually.',
+      };
+    }
+    if (error.code === 'github_apply_output_overflow') {
+      return {
+        code: error.code,
+        message: 'GitHub CLI item-edit output exceeded the allowed buffer; remote write state is unknown. Read the field before retrying manually.',
+      };
+    }
     if (error.code === 'github_unavailable') {
       return { code: error.code, message: 'GitHub was unavailable for this item.' };
     }

@@ -12,7 +12,10 @@ const log = (kind) => appendFileSync(logPath, `${JSON.stringify({ kind, argv })}
 if (argv[0] === 'auth' && argv[1] === 'status') {
   log('auth');
   const mode = process.env.GH_WRITEBACK_AUTH ?? 'project';
-  if (mode === 'unknown') {
+  if (mode === 'ignore-term') {
+    process.on('SIGTERM', () => {});
+    setTimeout(() => process.exit(0), 16_000);
+  } else if (mode === 'unknown') {
     process.stdout.write('{invalid json');
   } else {
     const accounts = mode === 'unauthenticated' ? [] : [{
