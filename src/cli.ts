@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runDoctor } from './doctor.js';
+import { checkNodeVersion } from './node-version.js';
 
 const VERSION = '0.1.0';
 
@@ -8,6 +9,12 @@ function help(): void {
 }
 
 function main(argv: string[]): number {
+  const nodeCheck = checkNodeVersion(process.version);
+  if (!nodeCheck.ok) {
+    process.stderr.write(`${nodeCheck.message}\n`);
+    return 1;
+  }
+
   const [command] = argv;
   if (command === undefined || command === '-h' || command === '--help' || command === 'help') {
     help();

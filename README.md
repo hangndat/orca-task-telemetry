@@ -24,12 +24,13 @@ GitHub là nguồn dữ liệu chuẩn cho Issue và việc lập kế hoạch P
 ## Phát triển cục bộ
 
 ```bash
-npm install
-npm run build
-npm test
+corepack enable
+pnpm install
+pnpm build
+pnpm test
 node dist/cli.js --help
 node dist/cli.js doctor
-npm pack
+pnpm pack
 ```
 
 npm package sẽ cung cấp lệnh `orca-telemetry` qua entry point `bin`. Sau khi được triển khai và đóng gói, bạn có thể cài đặt tarball trên toàn hệ thống hoặc cài đặt từ Git. Package dùng trong production phải hoạt động bên ngoài thư mục mã nguồn hiện tại.

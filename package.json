@@ -4,6 +4,7 @@
   "private": true,
   "description": "GitHub Projects-first AI coding session telemetry for Orca, Claude Code, and Codex",
   "type": "module",
+  "packageManager": "pnpm@10.32.1",
   "bin": {
     "orca-telemetry": "./dist/cli.js"
   },
@@ -12,11 +13,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",
-    "test": "npm run build && node --test tests/*.test.mjs",
-    "pack:check": "npm run test && npm pack --dry-run"
+    "test": "pnpm run build && vitest run",
+    "pack:check": "pnpm run test && pnpm pack --dry-run"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
   }
 }
