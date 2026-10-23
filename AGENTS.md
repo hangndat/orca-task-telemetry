@@ -1,29 +1,29 @@
-# Contributor instructions for coding agents
+# Hướng dẫn đóng góp dành cho coding agent
 
-## Mission
+## Mục tiêu
 
-Build `orca-task-telemetry` as a reusable, install-once Node.js/TypeScript CLI that links GitHub Projects V2 work items with Orca execution metadata and CodeBurn usage for Claude Code and Codex.
+Xây dựng `orca-task-telemetry` thành một CLI Node.js/TypeScript có thể tái sử dụng, chỉ cần cài đặt một lần, liên kết các mục công việc trong GitHub Projects V2 với metadata thực thi của Orca và mức sử dụng Claude Code, Codex do CodeBurn cung cấp.
 
-## Read first
+## Đọc trước
 
-- `docs/MVP-SPEC.md` — bounded scope and Definition of Done.
-- `docs/ARCHITECTURE.md` — integration boundaries and trust model.
-- `BACKLOG.md` — features explicitly excluded from MVP.
+- `docs/MVP-SPEC.md` — phạm vi giới hạn và Definition of Done.
+- `docs/ARCHITECTURE.md` — ranh giới tích hợp và mô hình tin cậy.
+- `BACKLOG.md` — các tính năng được xác định rõ là ngoài phạm vi MVP.
 
-## Engineering rules
+## Quy tắc kỹ thuật
 
-- Treat GitHub Projects as the canonical work-management source.
-- Use TypeScript strict mode; pin and validate the minimum Node.js runtime.
-- Keep one npm package (no monorepo, server, frontend or framework).
-- Prefer verified, documented CLI JSON interfaces; inspect versions and `--help` before implementation.
-- Never invent Orca, CodeBurn or GitHub data fields.
-- Never write to existing target repositories, GitHub Project fields or agent configurations during MVP.
-- Preserve session provenance, provider token semantics, unknown values, and idempotent usage snapshots.
-- Manual Issue ↔ session linking is sufficient for MVP. Do not silently auto-attribute ambiguous sessions.
-- Avoid retries/parallelism that waste AI tokens, and do not dispatch work owned by an existing worker.
-- Add tests and create a conventional commit after each validated vertical slice.
-- Distinguish fixture-tested behavior from live integration evidence.
-- Do not claim a feature is complete unless its acceptance criteria are satisfied.
+- Xem GitHub Projects là nguồn dữ liệu chuẩn để quản lý công việc.
+- Sử dụng TypeScript strict mode; chốt và kiểm tra phiên bản Node.js runtime tối thiểu.
+- Chỉ duy trì một npm package (không có monorepo, server, frontend hay framework).
+- Ưu tiên các giao diện CLI JSON đã được xác minh và có tài liệu; kiểm tra phiên bản và `--help` trước khi triển khai.
+- Không tự đặt ra các trường dữ liệu của Orca, CodeBurn hoặc GitHub.
+- Không ghi vào các repository đích hiện có, các trường của GitHub Project hoặc cấu hình agent trong giai đoạn MVP.
+- Bảo toàn nguồn gốc session, ngữ nghĩa token của từng provider, các giá trị chưa biết và tính idempotent của snapshot mức sử dụng.
+- Liên kết Issue ↔ session thủ công là đủ cho MVP. Không âm thầm tự quy các session chưa rõ thuộc về Issue nào.
+- Tránh retry hoặc xử lý song song gây lãng phí token AI; không giao lại công việc đã có worker phụ trách.
+- Bổ sung test và tạo conventional commit sau mỗi vertical slice đã được kiểm chứng.
+- Phân biệt hành vi đã kiểm thử bằng fixture với bằng chứng tích hợp thực tế.
+- Không tuyên bố một tính năng đã hoàn thành khi chưa đáp ứng các tiêu chí nghiệm thu.
 
 ## Agent setup và workflow
 
@@ -39,13 +39,13 @@ Build `orca-task-telemetry` as a reusable, install-once Node.js/TypeScript CLI t
 - Code complete khác acceptance complete và MVP complete. Worker completion không thay review; phân biệt local/CI/fixture/live evidence.
 - Đây là contributor setup của chính repo này; không implement tính năng cài/sửa agent config trong target repositories (vẫn thuộc BACKLOG).
 
-## Delivery order
+## Thứ tự triển khai
 
-1. Inspect local tools and document relevant compatibility facts in `docs/discovery.md`.
-2. Complete package foundation and install test.
-3. Implement GitHub Project/Issue reader and `init` profile.
-4. Implement Orca/CodeBurn collectors and persistent storage.
-5. Add explicit session mapping and Issue-level accounting.
-6. Add Task/Project CLI reports, fixtures, and live integration validation.
+1. Kiểm tra các công cụ cục bộ và ghi lại thông tin tương thích liên quan trong `docs/discovery.md`.
+2. Hoàn thiện nền tảng package và kiểm thử cài đặt.
+3. Triển khai bộ đọc GitHub Project/Issue và khởi tạo profile bằng `init`.
+4. Triển khai collector Orca/CodeBurn và cơ chế lưu trữ bền vững.
+5. Bổ sung ánh xạ session tường minh và tổng hợp mức sử dụng, chi phí theo Issue.
+6. Bổ sung báo cáo Task/Project qua CLI, fixture và kiểm chứng tích hợp thực tế.
 
-Do not implement anything in `BACKLOG.md` before the MVP meets Definition of Done.
+Không triển khai bất kỳ nội dung nào trong `BACKLOG.md` trước khi MVP đáp ứng Definition of Done.

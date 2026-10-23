@@ -1,13 +1,14 @@
-# Compatibility Discovery
+# Khảo sát khả năng tương thích
 
-> Pending first implementation session. No Orca, CodeBurn, GitHub Projects schema, or provider usage formats have yet been verified for this project.
+> Chờ phiên triển khai đầu tiên. Dự án chưa xác minh Orca, CodeBurn, schema GitHub Projects hoặc định dạng dữ liệu mức sử dụng của provider.
 
-Record, for each integration:
-- Installed version and command syntax (from `--help`).
-- Sanitized sample output / fixture provenance.
-- Stable IDs and nullable fields.
-- Authentication scopes and capability limitations.
-- Known schema/version differences.
-- Exact tests run and live verification evidence.
+Với mỗi tích hợp, ghi lại:
 
-Do not put raw credentials, prompt transcripts, or private repository contents in this document.
+- Phiên bản đã cài đặt và cú pháp lệnh (từ `--help`).
+- Đầu ra mẫu đã loại bỏ thông tin nhạy cảm / nguồn gốc fixture.
+- ID ổn định và các trường có thể nhận giá trị null.
+- Scope xác thực và giới hạn khả năng hỗ trợ.
+- Các khác biệt đã biết về schema/phiên bản.
+- Chính xác những test đã chạy và bằng chứng kiểm chứng thực tế.
+
+Không đưa thông tin xác thực thô, bản ghi prompt hoặc nội dung repository riêng tư vào tài liệu này.
