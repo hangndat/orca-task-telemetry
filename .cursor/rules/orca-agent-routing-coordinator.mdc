@@ -1,0 +1,17 @@
+---
+description: Coordinator-only — dispatch, ownership, model evidence và review
+alwaysApply: false
+---
+
+# Routing coordinator
+
+Chỉ coordinator gốc dispatch khi task authorize. Dùng skill orchestration và CLI guide/version/help hiện có trước implementation; không copy lệnh/JSON fields chưa verify từ ticket-solution.
+
+1. Xác minh worker/task/worktree hiện có trong scope; không lấy task có owner. Lập spec với paths không xung đột, deps chỉ cho artifact/contract thật.
+2. Chọn [role/persona](../../docs/agents/README.md), [cost tier/model](../../docs/agents/cost-catalog.md), capacity và budget. Một package: mặc định một implementation worker + một reviewer; không copy fan-out 5+3 của monorepo.
+3. Dùng task-create → worker-start đúng guide host, có display-name và task-title cùng prefix persona khi flags được hỗ trợ. Kiểm launch state và error thật; ok:true không tự chứng minh worker đã chạy. requested không chứng minh effective model.
+4. Chờ/xử lý event theo coordinator-mailbox; không dùng polling/read transcript liên tục. Không kết thúc với worker thuộc task còn live/unsettled mà chưa bàn giao rõ.
+5. Bàn giao implementation SHA rồi giao review độc lập. Cùng SHA dùng một reviewer DoD+security nếu cần, một evidence packet. Không chạy model đối chứng hay duplicate reviewer cùng checklist.
+6. Trước fix đọc convergence và checkpoint n/2. Root tooling/lockfile/contracts/integration do coordinator xử lý hoặc giao paths rõ ràng.
+
+Không dùng script spawn/preflight/metrics ở project nguồn. Không thay đổi target repos/GitHub fields; không cài hooks toàn máy hoặc thu raw session logs. Thiếu interface/evidence giữ unknown và báo limitation.

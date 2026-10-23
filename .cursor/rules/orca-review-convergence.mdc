@@ -1,0 +1,18 @@
+---
+description: Review/fix — stable findings, exact SHA, giới hạn hai lượt sửa
+alwaysApply: false
+---
+
+# Review convergence
+
+Trước implementation chốt AC/paths/non-goals/checks; review không tự thêm scope. Initial review đủ diff trong scope, reviewer khác tác giả. Bàn giao exact SHA và evidence có source/input.
+
+Mỗi finding giữ ID F01/F02 xuyên SHA/session, có loại (code/evidence/environment/contract/đề xuất), severity, chặn Có/Không + lý do, AC/path:dòng, expected/actual/evidence và điều kiện đóng. Nit/out-of-scope không chặn; correctness/security/acceptance bắt buộc phải chặn. Finding mới ghi regression/bỏ sót/evidence mới.
+
+Gom findings cùng SHA trước batch fix. Tối đa **2 lượt fix tự động** trên cùng Task/Issue, xuyên worker/PR/run; không reset bằng đổi tên task. Ngắt sớm nếu cùng finding tái hiện sau khi báo đã sửa hoặc fixes phá nhau. Lỗi hạ tầng chỉ retry một lần khi có căn cứ transient, không sửa runtime để vượt lỗi môi trường.
+
+Revalidate đọc report trước, findings mở, diff SHA cũ → mới và vùng regression; mở rộng khi contract/schema/dependency/trust boundary đổi. Không gọi tests SHA cũ là đã chạy trên SHA mới, không kế thừa PASS. SHA/scope/evidence không đổi thì reuse kết luận hiện có. Report-only commit cũng cần xác minh diff; ưu tiên ghi xác nhận tại artifact/comment đã được authorize, tránh commit loop cập nhật chính SHA.
+
+Khi ngắt/hết lượt: checkpoint findings, fix n/2, SHA, owner và blocker; không PASS/Hoàn thành. Một lượt chẩn đoán có giới hạn phải có câu hỏi, output và budget; chỉ tiếp tục nếu có căn cứ mới và kế hoạch trong thẩm quyền. Sau hai lượt, một lượt ngoại lệ tối đa cần quyết định có lý do/owner/điểm dừng; không lặp chẩn đoán/ngoại lệ vô hạn. Chỉ hỏi user khi thiếu quyết định vượt scope hoặc hết đường xử lý được giao.
+
+Checkpoint local/artifact không tự cập nhật GitHub Project. Không dùng known gap miễn gate bắt buộc. Không claim review độc lập nếu chỉ self-check.

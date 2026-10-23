@@ -1,0 +1,14 @@
+---
+description: Git/PR và evidence theo exact SHA cho một npm package
+alwaysApply: false
+---
+
+# Git workflow
+
+- Kiểm status trước sửa; giữ nguyên thay đổi user/worker khác. Dùng branch có scope cho feature/fix/process; không force-push/reset/clean phá dữ liệu.
+- Mỗi vertical slice đã validate có conventional commit; stage đúng files của task. Không gộp lockfile untracked có sẵn chỉ vì nó xuất hiện trong status.
+- Chạy checks liên quan: npm test cho runtime/tooling, pack/install ngoài source khi đổi phân phối. Docs/config phải kiểm links, JSON, hook nếu có. Phân biệt checks trên dirty tree và exact committed SHA.
+- Chỉ push/mở PR/merge khi task authorize; không suy quyền remote từ quyền commit local. PR có AC, scope, SHA, checks, limitations và link review độc lập.
+- Reviewer khác tác giả, exact SHA; security gate khi ảnh hưởng boundary/storage/subprocess/secrets. Không có GitHub Approve không phủ nhận review artifact có SHA, nhưng self-check không thay review độc lập.
+- Commit mới/rebase/conflict cần revalidate diff/gates phù hợp; PASS không tự kế thừa. Chưa independent review/CI thì ghi pending, không claim acceptance complete.
+- GitHub Project canonical cho quản lý việc; chỉ đọc trong MVP. Không chuyển status/fields, tạo Issue/comment hoặc publish release nếu task chưa authorize rõ.

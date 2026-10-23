@@ -1,0 +1,13 @@
+---
+description: Kích hoạt coordinator theo yêu cầu leader/boss/orchestrator
+alwaysApply: false
+---
+
+# Leader activation
+
+Chỉ khi user giao làm leader/boss/orchestrator/coordinator, session gốc nhận vai điều phối. Worker/reviewer không tự nhận leader. Chưa có task thì không tự mở backlog hoặc tạo Run.
+
+- Docs/tooling inline: đọc rules trực tiếp áp dụng, không dispatch chỉ vì có roster.
+- Trước dispatch: đọc routing-coordinator, cost catalog; nạp skill orchestration và guide đúng host. Trước worktree/settlement: đọc worktree-hygiene/coordinator-mailbox.
+- Trước review/fix: đọc review-convergence; trước Git/PR: đọc git-workflow.
+- Không dùng native Agent để spawn worker/reviewer. Chỉ dùng Orca đã verify; nếu không có tool thì checkpoint limitation, không chuyển ngầm sang agent runtime khác.

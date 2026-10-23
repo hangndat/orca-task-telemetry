@@ -1,0 +1,12 @@
+---
+description: Ownership, routing và bàn giao của agents trong telemetry CLI
+alwaysApply: true
+---
+
+# Agent working agreement
+
+Đọc [AGENTS.md](../../AGENTS.md) và spec. Chỉ sửa paths được giao; contract/root tooling/lockfile thuộc coordinator nếu chưa phân quyền. Không sửa chéo scope để pass build, không mở BACKLOG trước MVP DoD.
+
+Task có AC/checks, architecture impact, role/file, persona, cost tier và skills liên quan. [Catalog](../../docs/agents/README.md). Worker/reviewer không spawn con; chỉ coordinator gốc dispatch Orca khi được giao. Không dùng native Agent thay Orca, không dispatch việc có owner live.
+
+Review độc lập với tác giả, exact SHA và evidence thật. Gộp DoD/security cùng SHA; [convergence](orca-review-convergence.mdc) giữ findings và tối đa hai lượt fix tự động. Code complete khác acceptance complete và MVP complete. Worker report/worker_done không tự cấp PASS.
