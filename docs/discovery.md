@@ -422,7 +422,7 @@ Fixture: `tests/fixtures/orca/` (README + JSON đã redact).
 | Task (spec cắt) | `task-supervised-brief.json` | `task-list --run run_1a060327fe49 --brief` |
 | Dispatch settled | `dispatch-show.json`, `worker-show-settled.json` | `dispatch-show --task …`; `worker-show --dispatch ctx_005f2513ac06` |
 | Worker accounting | `worker-list-snippet.json` | `worker-list --run run_1a060327fe49` |
-| Worktree thủ công | `worktree-manual-show.json`, `worktree-manual-ps-row.json` | `worktree show` + `worktree ps` trên `ticket-solution` |
+| Worktree thủ công | `worktree-manual-show.json`, `worktree-manual-ps-row.json` | `worktree show` + `worktree ps` trên worktree `<OTHER_REPO>` (placeholder) |
 | Reference / issue link | `reference-list-empty.json`, `reference-find-no-match.json` | Foundation chưa gắn reference; find #64 trả `matches: []` |
 | Runtime | `status-trimmed.json`, `agent-context-snippets.json` | `status --json`; mẫu từ `agent-context --json` |
 
