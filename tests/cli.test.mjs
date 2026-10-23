@@ -67,6 +67,7 @@ test('--help documents implemented vs planned commands', () => {
   assert.match(result.stdout, /collect.*implemented/i);
   assert.match(result.stdout, /link.*implemented/i);
   assert.match(result.stdout, /report.*implemented/i);
+  assert.match(result.stdout, /writeback.*implemented/i);
   assert.doesNotMatch(result.stdout, /__internal_test/);
 });
 

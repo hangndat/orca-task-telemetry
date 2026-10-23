@@ -11,6 +11,7 @@ import { runProjects } from './projects.js';
 import { runCollect } from './collect.js';
 import { runLink } from './link.js';
 import { runReport, runReportTask } from './report.js';
+import { runWriteback } from './writeback.js';
 
 const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'project', 'hierarchy', 'unmapped']);
 
@@ -72,6 +73,13 @@ export async function routeCommand(
 
   if (command === 'init') {
     return runInit(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
+  }
+
+  if (command === 'writeback') {
+    return runWriteback(restPositionals, {
       json,
       cwd: options.cwd ?? process.cwd(),
     });
