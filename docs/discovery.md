@@ -492,6 +492,14 @@ Chỉ các argv sau (cùng binary `orca`, tùy chọn `--json`, `--pairing-code`
 | `reference find` bare issue key | Help: cần full URL; `#64` shorthand không hợp lệ |
 | Task `spec` đầy đủ | Chỉ qua `task-list` không `--brief` — tránh trong collector |
 
+### V1.4 — kiểm tra lại provenance Run (Orca 1.4.237, 2026-10-24)
+
+- `orca --version` trả `1.4.237`. Help thực tế xác nhận `run-show --id`, `task-list --run --brief`, `dispatch-show --task` (không `--preamble`) và `worker-list --run --limit <1-100> --cursor`; cả bốn hỗ trợ `--json`. `task-list` không công bố cursor.
+- Live read trên Run `run_fc4dc513b317`: `run-show.result.run.id`; `task-list.result.tasks[]`, `count`, `spec_truncated: true` ở từng Task do `--brief`; `dispatch-show.result.dispatch` có `run_id`, `task_id`, `host_scope` JSON `hostId`; `worker-list` có `scope.run/source=flag`, `page.{limit,total,hasMore,nextCursor}`, `projection.host.id`. `--limit 2` trả `hasMore: true` và cursor. Không lưu nội dung `spec`, `result`, `objective`, preview, hash hoặc receipt trong adapter V1.4.
+- `spec_truncated: true` chỉ cắt **nội dung spec**, không chứng minh danh sách Task bị cắt. Adapter yêu cầu `count === tasks.length`, không có marker truncation cấp danh sách; trường hợp thiếu count/marker bất thường là `partial`. Worker pagination bị chặn ở 100 trang và 10.000 rows; cursor lặp, trang lỗi, tổng số không khớp là `partial`.
+- `run-show` không có host. Host được chọn tường minh cho nguồn CLI local, rồi đối chiếu với `dispatch.host_scope.hostId` và `worker.projection.host.id`; Run rỗng không đủ chứng cứ host nên `partial`. `runtimeId` chỉ định danh runtime, không dùng làm host key. Chưa kiểm remote selector/host nhiều máy; adapter này không đưa remote vào DB và integration thuộc coordinator.
+- Chạy trực tiếp adapter đọc Run live trên host local: `complete=true`, 7 Task, 7 Dispatch, 7 worker, 1 trang, không có error code tại thời điểm kiểm. Đây chỉ là chứng cứ Orca metadata; không xác minh liên kết CodeBurn session, không có DB/CLI integration và không thay volume fixture.
+
 ## Contracts & boundaries
 
 Module: `src/contracts.ts` (T05). Unknown trong contract luôn là `null` (không dùng `0` hay `""` thay unknown). Trường optional/thiếu ở nguồn → `T | null` và phải có key (collector gán `null`).
