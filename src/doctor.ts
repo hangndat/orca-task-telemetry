@@ -343,7 +343,7 @@ export async function buildDefaultDoctorDeps(
       const resolved = await resolveRepository(cwd);
       return { gitRoot: resolved.gitRoot, github: resolved.github };
     },
-    ghAuthStatus: defaultGhAuthStatus,
+    ghAuthStatus: readGhAuthStatus,
     orcaVersion: defaultOrcaVersion,
     codeburnVersion: defaultCodeburnVersion,
     readDbUserVersion: readUserVersionReadOnly,
@@ -354,10 +354,6 @@ export async function runDoctorCommand(cwd?: string): Promise<number> {
   const report = await runDoctorWithDeps(await buildDefaultDoctorDeps(cwd));
   process.stdout.write(formatDoctorText(report));
   return report.exitCode;
-}
-
-async function defaultGhAuthStatus(): Promise<GhAuthStatus> {
-  return readGhAuthStatus();
 }
 
 async function defaultOrcaVersion(): Promise<string | null> {

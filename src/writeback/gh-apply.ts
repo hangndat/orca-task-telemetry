@@ -184,7 +184,7 @@ function mapProcessFailure(result: GhRunResult): CliError {
 
   if (spawnErr?.code === 'ETIMEDOUT' || result.signal === 'SIGTERM' || result.signal === 'SIGKILL') {
     return ghApplyError(
-      'github_unavailable',
+      'github_apply_timeout',
       'GitHub CLI request timed out or was interrupted; remote write state is unknown. Check the field before retrying.',
       EXIT_SOURCE_UNAVAILABLE,
     );
@@ -192,7 +192,7 @@ function mapProcessFailure(result: GhRunResult): CliError {
 
   if (spawnErr?.code === 'ENOBUFS') {
     return ghApplyError(
-      'github_apply_failed',
+      'github_apply_output_overflow',
       'GitHub CLI output exceeded the allowed buffer; remote write state is unknown. Check the field before retrying.',
       EXIT_SOURCE_UNAVAILABLE,
     );

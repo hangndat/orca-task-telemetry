@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import { EXIT_USAGE } from '../dist/errors.js';
 import { runDoctorWithDeps } from '../dist/doctor.js';
 import { openTelemetryDatabase, SUPPORTED_SCHEMA_VERSION } from '../dist/db/index.js';
 import { readUserVersionReadOnly } from '../dist/db/read-only.js';
+import { readGhAuthStatus } from '../dist/github/auth-scopes.js';
 
 const distDir = dirname(fileURLToPath(import.meta.url));
 
@@ -49,6 +50,37 @@ test('F02: doctor warns when active auth state is unknown or unauthenticated', a
   ]) {
     const report = await runDoctorWithDeps({ nodeVersion: 'v24.1.0', ghAuthStatus: async () => status });
     assert.equal(report.checks.find((c) => c.id === 'gh_apply_scope')?.status, 'warn');
+  }
+});
+
+test('F04: doctor handles async unknown auth without invoking project writes', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'orca-doctor-auth-'));
+  const previous = process.env.ORCA_TELEMETRY_GH;
+  const previousState = process.env.GH_WRITEBACK_STATE_PATH;
+  const previousLog = process.env.GH_WRITEBACK_LOG_PATH;
+  const previousMode = process.env.GH_WRITEBACK_AUTH;
+  const logPath = join(home, 'gh-log.ndjson');
+  try {
+    process.env.ORCA_TELEMETRY_GH = resolve(distDir, 'helpers/gh-writeback-stub.mjs');
+    process.env.GH_WRITEBACK_STATE_PATH = join(home, 'remote.json');
+    process.env.GH_WRITEBACK_LOG_PATH = logPath;
+    process.env.GH_WRITEBACK_AUTH = 'unknown';
+    const report = await runDoctorWithDeps({ nodeVersion: 'v24.1.0', ghAuthStatus: readGhAuthStatus });
+    assert.equal(report.summary, 'warn');
+    assert.equal(report.checks.find((check) => check.id === 'gh_apply_scope')?.status, 'warn');
+    const kinds = readFileSync(logPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line).kind);
+    assert.deepEqual(kinds, ['auth']);
+  } finally {
+    for (const [key, value] of [
+      ['ORCA_TELEMETRY_GH', previous],
+      ['GH_WRITEBACK_STATE_PATH', previousState],
+      ['GH_WRITEBACK_LOG_PATH', previousLog],
+      ['GH_WRITEBACK_AUTH', previousMode],
+    ]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(home, { recursive: true, force: true });
   }
 });
 
