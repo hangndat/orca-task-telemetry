@@ -1,0 +1,17 @@
+{
+  "_fixture": "synthetic partial worker-show — missing optional fields",
+  "ok": true,
+  "result": {
+    "dispatch": {
+      "id": "ctx_synthetic00000003",
+      "hostScope": { "kind": "local", "hostId": "local" }
+    },
+    "worker": {
+      "dispatchId": "ctx_synthetic00000003",
+      "worktreeId": "00000000-0000-4000-8000-00000000a003::<SYNTH>/repo-c"
+    },
+    "projection": {
+      "host": { "id": "local" }
+    }
+  }
+}

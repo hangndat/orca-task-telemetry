@@ -1,0 +1,13 @@
+{
+  "_fixture": "synthetic manual worktree show",
+  "ok": true,
+  "result": {
+    "worktree": {
+      "id": "00000000-0000-4000-8000-00000000d001::<SYNTH>/manual-only",
+      "hostId": "local",
+      "repoId": "00000000-0000-4000-8000-00000000d000",
+      "path": "<SYNTH>/manual-only",
+      "linkedIssue": null
+    }
+  }
+}
