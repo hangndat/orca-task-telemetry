@@ -1,91 +1,116 @@
 # Orca Task Telemetry
 
-**Phân tích chi phí lập trình AI cho Orca, Claude Code và Codex, lấy GitHub Projects làm trung tâm.**
-
-> **Trạng thái: bộ khung nền tảng — chưa có collector telemetry hoạt động.** CLI hiện hỗ trợ `--help`, `--version` và `doctor`. Các lệnh tích hợp liệt kê bên dưới là mục tiêu triển khai, chưa phải tính năng đã hoàn thành.
-
-## Mục tiêu
-
-Cài đặt một CLI trên toàn hệ thống, sau đó quy mức sử dụng session Claude Code / Codex về GitHub Issue trong các repository hiện có mà không thay đổi mã ứng dụng hoặc cấu hình agent.
+**CLI Node.js đọc GitHub Projects V2, metadata Orca và mức sử dụng Claude Code / Codex (qua CodeBurn), lưu SQLite cục bộ và báo cáo theo Issue/Project — không sửa repository ứng dụng.**
 
 ```text
-GitHub Project -> GitHub Issue -> Thực thi Orca -> Session của provider -> Mức sử dụng từ CodeBurn -> SQLite -> Báo cáo CLI
+GitHub Project → GitHub Issue → Orca (read-only) → CodeBurn sessions → SQLite → báo cáo CLI
 ```
 
-GitHub là nguồn dữ liệu chuẩn cho Issue và việc lập kế hoạch Project; Orca cung cấp metadata thực thi; CodeBurn cung cấp mức sử dụng session. MVP đầu tiên sử dụng liên kết session với Issue tường minh, đã được xác minh khi không có định danh chính xác.
+Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, `init`, `collect`, `link`, `report`). Chưa phát hành npm công khai; chưa được reviewer độc lập ký nhận MVP hoàn tất.
 
-## Điều kiện tiên quyết
+## Điều kiện tiên quyết (đã xác minh trên máy phát triển)
 
-- Node.js 24+
-- npm hoặc pnpm
-- GitHub CLI (`gh`) và quyền truy cập GitHub Projects V2, dành cho tích hợp sau này
-- Orca và CodeBurn, dành cho thực thi cục bộ và thu thập token sau này
+| Thành phần | Yêu cầu | Ghi chú |
+| --- | --- | --- |
+| Node.js | **≥ 24.0.0** (bắt buộc) | CLI thoát mã 3 khi phiên bản không đạt (`checkNodeVersion`). Trên Node &lt; 24, import `node:sqlite` cũng thất bại trước khi chạy lệnh. |
+| pnpm | 10.x (khuyến nghị) | `packageManager` trong `package.json`. |
+| GitHub CLI | `gh` đã đăng nhập | Scope **`read:project`** cần cho Project/items; `doctor` cảnh báo nếu thiếu (`gh auth refresh -s read:project`). |
+| Orca | CLI đọc-only | `doctor` kiểm tra `--version` (ví dụ 1.4.237 trên môi trường thử). |
+| CodeBurn | `codeburn@0.9.27` (tùy chọn) | `collect` đọc `sessions --provider claude|codex --format json`. Không có binary → collect **partial** (exit 5), nguồn khác vẫn ghi DB. |
 
-## Phát triển cục bộ
+Chi tiết lệnh và schema: [docs/discovery.md](docs/discovery.md).
+
+## Cài đặt và phát triển
 
 ```bash
 corepack enable
 pnpm install
 pnpm build
-pnpm test
+pnpm test          # build + vitest (fixture)
+pnpm test:pack     # pack tarball, cài prefix tạm, smoke CLI ngoài source
 node dist/cli.js --help
 node dist/cli.js doctor
-pnpm pack
+node dist/cli.js doctor --json
 ```
 
-npm package sẽ cung cấp lệnh `orca-telemetry` qua entry point `bin`. Sau khi được triển khai và đóng gói, bạn có thể cài đặt tarball trên toàn hệ thống hoặc cài đặt từ Git. Package dùng trong production phải hoạt động bên ngoài thư mục mã nguồn hiện tại.
+Sau `pnpm pack`, cài tarball vào prefix sạch (xem `scripts/test-pack.mjs`). Bin: **`orca-telemetry`** → `dist/cli.js`.
 
-## Exit codes & JSON output
+## Dữ liệu cục bộ (ngoài repository Git)
+
+| Biến / đường dẫn | Mục đích |
+| --- | --- |
+| `ORCA_TELEMETRY_HOME` | Thư mục gốc profile + SQLite (mặc định dưới home người dùng). **Không** được nằm trong git root của repo đích. |
+| `config.json` | Profile repository ↔ GitHub Project. |
+| `telemetry.sqlite` | DB telemetry (schema có version; đọc báo cáo qua kết nối read-only). |
+
+Override binary (test/integration): `ORCA_TELEMETRY_GH`, `ORCA_TELEMETRY_ORCA`, `ORCA_TELEMETRY_CODEBURN` — chỉ dùng khi kiểm thử; không bắt buộc trong vận hành thường.
+
+## Quy trình MVP (repository ứng dụng)
+
+Chạy trong thư mục git của repo cần theo dõi (ví dụ `ticket-solution`), với `ORCA_TELEMETRY_HOME` trỏ tới thư mục **bên ngoài** repo:
+
+```bash
+export ORCA_TELEMETRY_HOME=/path/to/telemetry-home-outside-repo
+
+orca-telemetry doctor
+orca-telemetry projects --json
+orca-telemetry init --project https://github.com/users/OWNER/projects/4 --json
+orca-telemetry collect --json
+orca-telemetry link --issue OWNER/REPO#123 --provider codex --session '<session-uuid>' --json
+orca-telemetry report tasks --json
+orca-telemetry report task OWNER/REPO#123 --json
+orca-telemetry report project --json
+orca-telemetry report unmapped --json
+```
+
+- **`init` / `collect` / `report`**: chỉ đọc GitHub/Orca/CodeBurn; không commit, không sửa `AGENTS.md`, `.cursor/`, lockfile hay Project fields.
+- **`link`**: ghi ánh xạ Issue ↔ session trong DB cục bộ; từ chối xung đột (`attribution_link_conflict`).
+- **`collect` lần 2**: upsert idempotent — tổng usage trong báo cáo không đổi (đã kiểm bằng fixture E2E).
+
+### Exit codes và JSON
 
 | Exit | Ý nghĩa |
 | --- | --- |
 | 0 | Thành công |
-| 1 | Lỗi nội bộ không mong đợi |
-| 2 | Usage (`usage_error`, `unknown_command`, `not_implemented`, tham số sai) |
-| 3 | Môi trường (ví dụ Node.js không đạt yêu cầu) |
+| 1 | Lỗi nội bộ |
+| 2 | Usage / validation |
+| 3 | Môi trường (Node &lt; 24) |
 | 4 | Nguồn ngoài không khả dụng (toàn phần) |
-| 5 | Một phần nguồn lỗi, vẫn có kết quả một phần |
+| 5 | Thu thập **partial** (một số nguồn lỗi, vẫn có dữ liệu) |
 
-Với `--json`, stdout chỉ có một object: thành công `{"ok":true,"data":...}`, lỗi `{"ok":false,"error":{"code","message","hint"?}}`. Không JSON: lỗi in ra stderr dạng `error: …` và tùy chọn `hint: …`. Đặt `ORCA_TELEMETRY_DEBUG=1` để in stack trace lỗi không mong đợi ra stderr.
+`--json`: một object JSON trên stdout (`ok` + `data` hoặc `error`). `ORCA_TELEMETRY_DEBUG=1` in stack trace lỗi không mong đợi.
 
-## Contributor agents
+### Ánh xạ session thủ công
 
-Setup chung cho Codex, Claude và Cursor nằm ở [AGENTS.md](AGENTS.md) và [agent workflow](docs/agents/README.md): role/persona theo scope CLI, mẫu giao việc, review độc lập theo SHA và giới hạn vòng fix. Bộ hướng dẫn được điều chỉnh từ `ticket-solution`; xem [provenance và giới hạn validation](docs/agents/PROVENANCE.md).
+Chỉ liên kết khi bạn **chủ đích** chọn cặp Issue + `provider` + `session` (UUID CodeBurn). Không tự suy session từ timestamp hay branch. Gợi ý lệnh: `report unmapped`.
 
-Cấu hình này chỉ dành cho contributor của repo; telemetry CLI không cài/sửa agent setup trong repository người dùng.
+### Cache, subagent, cost
 
-## Cách sử dụng MVP dự kiến (CHƯA TRIỂN KHAI)
+- Token cache Claude (`cacheRead` / `cacheWrite`) và reasoning Codex được lưu trong snapshot; báo cáo tách provider/model.
+- Subagent Claude là **session riêng** (`agent-…`), không gộp vào parent.
+- Cost: `estimated_api_equivalent` hoặc `unknown`; báo cáo project/tasks/unmapped phải khớp phân hoạch known/unknown (xem `assertUsageIntegrity` / E2E).
 
-```bash
-cd /path/to/ticket-solution
-orca-telemetry init
-orca-telemetry collect
-orca-telemetry link --issue https://github.com/OWNER/REPO/issues/123 --provider codex --session SESSION_ID
-orca-telemetry report tasks
-orca-telemetry report project
-orca-telemetry report unmapped
-```
+## Kiểm thử
 
-Các lệnh này minh họa giao diện sẽ triển khai, chưa phải hướng dẫn có thể chạy được với bộ khung hiện tại.
+| Lệnh | Phạm vi |
+| --- | --- |
+| `pnpm test` | Unit + integration fixture (Vitest), gồm `tests/e2e.test.mjs` (stub `gh`/`orca`/`codeburn`). |
+| `pnpm test:pack` | Archive, cài prefix tạm, `--help` / `doctor` — **gọi riêng**; không chạy trong `pnpm test`. |
 
-## Định nghĩa MVP
+Bằng chứng fixture vs live: [docs/mvp-validation.md](docs/mvp-validation.md).
 
-Lát cắt đầu tiên được kiểm chứng phải ánh xạ **một GitHub Issue có thật** với **một session Claude Code hoặc Codex có thật**, đồng thời hiển thị mức sử dụng token cùng nguồn gốc quy thuộc rõ ràng. Khi làm việc với nhiều repository, không được thay đổi `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.codex/`, `.cursor/` hoặc dependency ứng dụng của các repository đó.
+## Giới hạn đã biết
 
-Xem [đặc tả MVP](docs/MVP-SPEC.md), [kiến trúc](docs/ARCHITECTURE.md) và [backlog](BACKLOG.md).
+- Không ghi GitHub Project/Issue, không cài agent config trong repo người dùng (xem [BACKLOG.md](BACKLOG.md)).
+- Thiếu `read:project` → GitHub collector lỗi; có thể vẫn partial nếu Orca/CodeBurn ok.
+- CodeBurn không có trên PATH → không import session; báo cáo chỉ phản ánh dữ liệu đã collect.
+- Chưa publish npm; không tuyên bố “MVP complete” cho đến khi review độc lập trên cùng candidate SHA.
 
-## Tạo repository GitHub của bạn
+## Tài liệu
 
-Sau khi giải nén bộ khung này, xác thực GitHub CLI (`gh auth login`) và chạy:
-
-```bash
-bash scripts/publish-github.sh
-```
-
-Script khởi tạo repository Git (nếu cần), tạo một commit cho bộ khung, tạo `hangndat/orca-task-telemetry` dưới dạng repository **private** và push `main`. Để chủ động tạo repository công khai, sử dụng `VISIBILITY=public bash scripts/publish-github.sh`.
-
-Dự án này độc lập với `ticket-solution`. Không commit secret, log session cục bộ, cơ sở dữ liệu telemetry hoặc mã nguồn ứng dụng từ các dự án khác.
+- [Đặc tả MVP](docs/MVP-SPEC.md) · [Kiến trúc](docs/ARCHITECTURE.md) · [Báo cáo validation](docs/mvp-validation.md)
+- Contributor agents: [AGENTS.md](AGENTS.md)
 
 ## Giấy phép
 
-Chưa chọn. Cần chọn giấy phép trước khi phân phối công khai.
+Chưa chọn.
