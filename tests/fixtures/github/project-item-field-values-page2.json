@@ -1,0 +1,20 @@
+{
+  "data": {
+    "node": {
+      "id": "PVTI_test_item_1",
+      "fieldValues": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": "fv_cursor_page2"
+        },
+        "nodes": [
+          {
+            "__typename": "ProjectV2ItemFieldNumberValue",
+            "number": 42.5,
+            "field": { "id": "PVTF_lAHOBqA1Ws4Bom2ZzgKEstCost" }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -27,7 +27,7 @@ Story [#45](https://github.com/hangndat/orca-task-telemetry/issues/45) · Epic [
 gh version 2.103.0 (2026-10-21)
 ```
 
-**Đọc field / item / giá trị (dry-run):** Client GraphQL read-only hiện có (`src/github/client.ts`) — query Projects V2 để discovery field (`dataType`), paginate `items` (`readProjectItems`: `itemId`, content, field values NUMBER) và validate Issue thuộc Project profile so với `project_memberships`. **Không** gọi mutation/subscription qua client này (guard giữ nguyên).
+**Đọc field / item / giá trị (dry-run):** Client GraphQL read-only hiện có (`src/github/client.ts`) — `readProjectItems` paginate `items` và trả `itemId` + nội dung Issue/PR/Draft (query vẫn fetch `fieldValues` nhưng mapper **bỏ** giá trị field); discovery field NUMBER (`dataType`, `id`, `name`) và đọc giá trị NUMBER hiện tại trên item qua adapter `src/github/fields.ts` (`readProjectFields`, `readProjectItemNumberFieldValue`). Validate Issue thuộc Project profile so với `project_memberships`. **Không** gọi mutation/subscription qua client này (guard giữ nguyên).
 
 **Liệt kê field (tham chiếu CLI, không bắt buộc dry-run):** `gh project field-list <number> --owner <login> [--format json]` — help: một field mỗi lần fetch, `--limit` (mặc định 30).
 

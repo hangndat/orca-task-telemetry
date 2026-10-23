@@ -1,0 +1,17 @@
+{
+  "data": {
+    "node": {
+      "id": "PVTI_zero",
+      "fieldValues": {
+        "pageInfo": { "hasNextPage": false, "endCursor": null },
+        "nodes": [
+          {
+            "__typename": "ProjectV2ItemFieldNumberValue",
+            "number": 0,
+            "field": { "id": "PVTF_number_target" }
+          }
+        ]
+      }
+    }
+  }
+}
