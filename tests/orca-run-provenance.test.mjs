@@ -7,7 +7,8 @@ const hostId = 'local';
 const response = (result) => ({ stdout: JSON.stringify({ ok: true, result }), stderr: '', exitCode: 0 });
 
 function fixture({ tasks = 102, host = hostId, workerHost = host, run = runId, brokenPage = false,
-  cursorLoop = false, truncatedTasks = false, duplicate = false } = {}) {
+  cursorLoop = false, truncatedTasks = false, taskListTruncated = false,
+  missingWorker = false, duplicate = false } = {}) {
   const calls = [];
   const taskRows = Array.from({ length: tasks }, (_, i) => ({
     id: `task_${i}`, run_id: run, parent_id: null, status: 'completed',
@@ -19,13 +20,13 @@ function fixture({ tasks = 102, host = hostId, workerHost = host, run = runId, b
     resource: { worktreeId: null, preview: 'SECRET_PREVIEW' },
     projection: { dispatchId: duplicate && i === 1 ? 'ctx_0' : `ctx_${i}`,
       taskId: task.id, runId: run, host: { id: workerHost }, provider: { secret: 'SECRET_PROVIDER' } },
-  }));
+  })).filter((_, i) => !missingWorker || i !== 0);
   async function invoke(argv) {
     calls.push(argv);
     const command = argv[1];
     if (command === 'run-show') return response({ run: { id: run, coordinator_handle: null, objective: 'SECRET_OBJECTIVE' } });
     if (command === 'task-list') return response({ runId: run, tasks: taskRows,
-      count: tasks + Number(truncatedTasks), truncated: truncatedTasks });
+      count: tasks + Number(truncatedTasks), truncated: truncatedTasks || taskListTruncated });
     if (command === 'dispatch-show') {
       const index = Number(argv[argv.indexOf('--task') + 1].split('_')[1]);
       return response({ dispatch: { id: duplicate && index === 1 ? 'ctx_0' : `ctx_${index}`,
@@ -74,6 +75,18 @@ test('task-list count disagreement is partial, never silently complete', async (
   const result = await collect(fixture({ tasks: 1, truncatedTasks: true }));
   assert.equal(result.complete, false);
   assert.ok(result.errors.some((error) => error.code === 'unprovable_completeness'));
+});
+
+test('task-list truncation marker is partial even when count equals returned rows', async () => {
+  const result = await collect(fixture({ tasks: 1, taskListTruncated: true }));
+  assert.equal(result.complete, false);
+  assert.ok(result.errors.some((error) => error.code === 'unprovable_completeness'));
+});
+
+test('verified Dispatch without a worker row is partial', async () => {
+  const result = await collect(fixture({ tasks: 1, missingWorker: true }));
+  assert.equal(result.complete, false);
+  assert.ok(result.errors.some((error) => error.code === 'missing_worker'));
 });
 
 test('second worker page failure is partial with no inferred workers', async () => {
