@@ -3,8 +3,13 @@
 const CONTROL_OR_ANSI =
   /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]|\u001B\[[0-9;]*[A-Za-z]/g;
 
+/** Strip terminal controls and line breaks for human-readable report text (not JSON). */
 export function sanitizeDisplayText(value: string): string {
-  return value.replace(CONTROL_OR_ANSI, '').trim();
+  return value
+    .replace(CONTROL_OR_ANSI, '')
+    .replace(/[\n\r\t]/g, ' ')
+    .replace(/ +/g, ' ')
+    .trim();
 }
 
 export function shellSingleQuote(value: string): string {

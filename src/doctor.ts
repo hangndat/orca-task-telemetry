@@ -1,5 +1,4 @@
 import { existsSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
 import { CODEBURN_VERIFIED_VERSION } from './codeburn/adapter.js';
 import { ORCA_VERIFIED_VERSION } from './orca/adapter.js';
 import { loadConfig } from './config.js';
@@ -7,6 +6,7 @@ import { EXIT_ENVIRONMENT, EXIT_SUCCESS, EXIT_USAGE } from './errors.js';
 import { checkNodeVersion } from './node-version.js';
 import { createDefaultPathEnv, resolveAppPaths } from './paths.js';
 import { getProfile } from './profiles.js';
+import { readUserVersionReadOnly } from './db/read-only.js';
 import { SUPPORTED_SCHEMA_VERSION } from './db/migrate.js';
 import type { ResolveRepositoryOptions } from './repo.js';
 import { resolveRepository } from './repo.js';
@@ -37,7 +37,7 @@ export type DoctorDeps = {
   codeburnVersion?: () => Promise<string | null>;
   appHome?: string;
   configExists?: boolean;
-  readDbUserVersion?: (dbPath: string) => number | null;
+  readDbUserVersion?: (dbPath: string) => number | null | Promise<number | null>;
 };
 
 function worstStatus(checks: DoctorCheck[]): DoctorStatus {
@@ -55,21 +55,6 @@ function exitForSummary(summary: DoctorStatus): number {
     return EXIT_USAGE;
   }
   return EXIT_SUCCESS;
-}
-
-function readDbSchemaVersionReadOnly(dbPath: string): number | null {
-  if (!existsSync(dbPath)) {
-    return null;
-  }
-  const db = new DatabaseSync(dbPath, { readOnly: true });
-  try {
-    const row = db.prepare('PRAGMA user_version').get() as
-      | { user_version: number }
-      | undefined;
-    return row?.user_version ?? null;
-  } finally {
-    db.close();
-  }
 }
 
 export async function runDoctorChecks(
@@ -256,8 +241,8 @@ export async function runDoctorChecks(
     }
   }
   if (dbPath) {
-    const reader = deps.readDbUserVersion ?? readDbSchemaVersionReadOnly;
-    const version = reader(dbPath);
+    const reader = deps.readDbUserVersion ?? readUserVersionReadOnly;
+    const version = await Promise.resolve(reader(dbPath));
     if (version === null) {
       checks.push({
         id: 'database',
@@ -317,7 +302,7 @@ export async function buildDefaultDoctorDeps(
     ghAuthStatus: defaultGhAuthStatus,
     orcaVersion: defaultOrcaVersion,
     codeburnVersion: defaultCodeburnVersion,
-    readDbUserVersion: readDbSchemaVersionReadOnly,
+    readDbUserVersion: readUserVersionReadOnly,
   };
 }
 

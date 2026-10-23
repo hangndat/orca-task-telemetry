@@ -1,0 +1,38 @@
+{
+  "label": "malicious-display",
+  "projectId": "PVT_attr_synthetic_project",
+  "issues": [
+    {
+      "issueNodeId": "I_attr_issue_alpha",
+      "repository": { "nameWithOwner": "org-a/repo" },
+      "number": 1,
+      "url": "https://github.com/org-a/repo/issues/1",
+      "title": "Evil\nINJECTED\u001b[31mANSI",
+      "state": "OPEN"
+    },
+    {
+      "issueNodeId": "I_attr_issue_beta",
+      "repository": { "nameWithOwner": "org-b/repo" },
+      "number": 2,
+      "url": "https://github.com/org-b/repo/issues/2",
+      "title": "Beta",
+      "state": "OPEN"
+    }
+  ],
+  "memberships": [
+    { "projectId": "PVT_attr_synthetic_project", "issueNodeId": "I_attr_issue_alpha" },
+    { "projectId": "PVT_attr_synthetic_project", "issueNodeId": "I_attr_issue_beta" }
+  ],
+  "sharedRawSessionId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "sessions": [
+    {
+      "provider": "claude",
+      "rawId": "aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01",
+      "observedAt": "2026-05-01T12:00:00.000Z",
+      "tokens": { "provider": "claude", "input": 100, "output": 50, "cacheRead": 10, "cacheWrite": 5 },
+      "cost": { "amountUsd": 1.5, "kind": "estimated_api_equivalent", "source": null },
+      "claudeModels": ["Sonnet 5"],
+      "claudeTokenAllocation": "known"
+    }
+  ]
+}

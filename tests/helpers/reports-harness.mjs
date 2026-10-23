@@ -1,7 +1,11 @@
+import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
+  existsSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
   mkdirSync,
@@ -26,6 +30,17 @@ const fixture = JSON.parse(
 );
 
 const LINKED_AT = '2026-06-01T10:00:00.000Z';
+const FIXTURE_COLLECTION_TIME = '2026-01-01T00:00:00.000Z';
+
+export function seedDeterministicCollectionLogs(db) {
+  db.exec('DELETE FROM collection_logs');
+  for (const source of ['codeburn', 'github', 'orca']) {
+    db.prepare(
+      `INSERT INTO collection_logs (source, status, message, recorded_at)
+       VALUES (?, 'success', 'fixture import', ?)`,
+    ).run(source, FIXTURE_COLLECTION_TIME);
+  }
+}
 
 export function initBareRepo() {
   const root = mkdtempSync(join(tmpdir(), 'orca-report-repo-'));
@@ -41,7 +56,7 @@ export function initBareRepo() {
   return root;
 }
 
-export function writeReportsProfile(appHome) {
+export function writeReportsProfile(appHome, projectId = fixture.projectId) {
   mkdirSync(appHome, { recursive: true });
   let config = emptyConfig();
   const { config: next } = upsertProfile(
@@ -52,7 +67,7 @@ export function writeReportsProfile(appHome) {
       url: 'https://github.com/org-a/repo',
     },
     {
-      id: fixture.projectId,
+      id: projectId,
       number: 1,
       title: 'Synthetic',
       url: 'https://github.com/users/org-a/projects/1',
@@ -64,15 +79,15 @@ export function writeReportsProfile(appHome) {
   saveConfig(appHome, next);
 }
 
-export function installDatasetInHome(appHome, linkFn) {
+export function installDatasetInHome(appHome, linkFn, datasetFixture = fixture) {
   mkdirSync(appHome, { recursive: true });
   const dest = join(appHome, 'telemetry.sqlite');
   const handle = openTelemetryDatabase({ dbPath: dest });
   importGitHubRecords(handle.db, {
-    issues: fixture.issues,
-    memberships: fixture.memberships,
+    issues: datasetFixture.issues,
+    memberships: datasetFixture.memberships,
   });
-  const rows = fixture.sessions.map((s) => {
+  const rows = datasetFixture.sessions.map((s) => {
     const key = sessionKey(s.provider, 'codeburn', s.rawId);
     return {
       session: {
@@ -93,6 +108,7 @@ export function installDatasetInHome(appHome, linkFn) {
     };
   });
   importCodeBurnUsage(handle.db, rows);
+  seedDeterministicCollectionLogs(handle.db);
   const ctx = { db: handle.db, dir: appHome, path: dest, close: () => handle.close() };
   if (linkFn) {
     linkFn(ctx);
@@ -136,8 +152,36 @@ export function linkBetaClaudeShared(ctx) {
   });
 }
 
-export function loadReportsDataset() {
-  return loadSyntheticDataset(fixture);
+export function loadReportsDataset(datasetFixture = fixture) {
+  const ctx = loadSyntheticDataset(datasetFixture);
+  seedDeterministicCollectionLogs(ctx.db);
+  return ctx;
+}
+
+export function listAppHomeFiles(appHome) {
+  if (!existsSync(appHome)) {
+    return [];
+  }
+  return readdirSync(appHome).sort();
+}
+
+export function assertNoWalShmSidecars(appHome) {
+  const names = listAppHomeFiles(appHome);
+  assert.ok(!names.some((n) => n.endsWith('-wal') || n.endsWith('-shm')));
+}
+
+export function sha256File(path) {
+  const data = readFileSync(path);
+  return createHash('sha256').update(data).digest('hex');
+}
+
+export function appHomeInventory(appHome) {
+  const files = listAppHomeFiles(appHome);
+  const inventory = {};
+  for (const name of files) {
+    inventory[name] = sha256File(join(appHome, name));
+  }
+  return inventory;
 }
 
 export function snapshotDbCounts(db) {

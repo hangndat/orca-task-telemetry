@@ -1,0 +1,15 @@
+Task report — https://github.com/org-a/repo/issues/1
+Title: Alpha
+Mapping: mapped
+Usage: has_usage
+
+By provider:
+  claude: in=120 out=60 cacheR=10 cacheW=5 models=Sonnet 5, Opus (allocation unknown)
+  codex: in=200 out=80 cacheR=0 cacheW=0 models=unknown
+Cost known (est. API-equiv): $1.75; unknown cost sessions: 1
+
+Provider  Session                               Models                In      Out     Cost        Orca    
+--------  ------------------------------------  --------------------  ------  ------  ----------  --------
+claude    aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01  Sonnet 5                 100      50       $1.50  unknown 
+claude    aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee02  Opus, Sonnet 5 (alloc unknown)      20      10     unknown  unknown 
+codex     bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb  unknown                  200      80       $0.25  unknown

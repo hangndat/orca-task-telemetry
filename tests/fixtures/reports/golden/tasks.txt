@@ -1,0 +1,11 @@
+Tasks report — project PVT_attr_synthetic_project
+Repository: org-a/repo
+Collection snapshot (latest per source):
+  codeburn: success @ 2026-01-01T00:00:00.000Z
+  github: success @ 2026-01-01T00:00:00.000Z
+  orca: success @ 2026-01-01T00:00:00.000Z
+
+Issue                         Mapping             Sessions  Cost (est.) 
+----------------------------  ------------------  --------  ------------
+org-a/repo#1                  mapped                     3         $1.75
+org-b/repo#2                  no linked sessions         0       no data

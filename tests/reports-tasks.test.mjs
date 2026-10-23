@@ -7,16 +7,25 @@ import {
   buildTaskReport,
   buildTasksReport,
   formatTaskReportText,
+  formatTasksReportText,
 } from '../dist/reports/tasks.js';
+import { linkSessionToIssue } from '../dist/attribution/link.js';
 import {
   disposeDataset,
   fixture,
   linkAlphaSessions,
   loadReportsDataset,
-  snapshotDbCounts,
 } from './helpers/reports-harness.mjs';
 
-const goldenDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures/reports');
+const LINKED_AT = '2026-06-01T10:00:00.000Z';
+
+const goldenDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures/reports/golden');
+const maliciousFixture = JSON.parse(
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), 'fixtures/reports/malicious-titles.json'),
+    'utf8',
+  ),
+);
 
 function fakeProfile() {
   return {
@@ -36,45 +45,53 @@ function fakeProfile() {
   };
 }
 
-test('T35: tasks report lists issues with mapping and cost fields', () => {
+test('T35: golden tasks text and JSON', () => {
   const ctx = loadReportsDataset();
   linkAlphaSessions(ctx);
-  const before = snapshotDbCounts(ctx.db);
   const report = buildTasksReport({
     profile: fakeProfile(),
     db: ctx.db,
     close: () => {},
   });
-  const after = snapshotDbCounts(ctx.db);
-  assert.deepEqual(after, before);
-  assert.equal(report.kind, 'tasks');
-  assert.equal(report.issues.length, 2);
-  const alpha = report.issues.find((i) => i.issue.issueNodeId === 'I_attr_issue_alpha');
-  assert.equal(alpha.sessionCount, 3);
-  assert.equal(alpha.mappingStatus, 'mapped');
-  assert.equal(alpha.cost.knownAmountUsd, 1.75);
-  assert.equal(alpha.cost.unknownAmountCount, 1);
-  const beta = report.issues.find((i) => i.issue.issueNodeId === 'I_attr_issue_beta');
-  assert.equal(beta.usageStatus, 'no_usage_data');
+  const expectedText = readFileSync(join(goldenDir, 'tasks.txt'), 'utf8');
+  const expectedJson = JSON.parse(readFileSync(join(goldenDir, 'tasks.json'), 'utf8'));
+  assert.equal(formatTasksReportText(report), expectedText);
+  assert.deepEqual(report, expectedJson);
   disposeDataset(ctx);
 });
 
-test('T35: task report golden JSON shape for alpha', () => {
+test('T35: golden task-alpha text and JSON', () => {
   const ctx = loadReportsDataset();
   linkAlphaSessions(ctx);
   const report = buildTaskReport(
     { profile: fakeProfile(), db: ctx.db, close: () => {} },
     'I_attr_issue_alpha',
   );
-  const golden = JSON.parse(
-    readFileSync(join(goldenDir, 'task-alpha.json'), 'utf8'),
+  const expectedText = readFileSync(join(goldenDir, 'task-alpha.txt'), 'utf8');
+  const expectedJson = JSON.parse(readFileSync(join(goldenDir, 'task-alpha.json'), 'utf8'));
+  assert.equal(formatTaskReportText(report), expectedText);
+  assert.deepEqual(report, expectedJson);
+  disposeDataset(ctx);
+});
+
+test('T35: malicious issue title does not inject newlines in text report', () => {
+  const ctx = loadReportsDataset(maliciousFixture);
+  linkSessionToIssue(ctx.db, {
+    provider: 'claude',
+    source: 'codeburn',
+    rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
+    issueNodeId: 'I_attr_issue_alpha',
+    linkedAt: LINKED_AT,
+  });
+  const report = buildTaskReport(
+    { profile: fakeProfile(), db: ctx.db, close: () => {} },
+    'I_attr_issue_alpha',
   );
-  assert.equal(report.issue.sessionCount, golden.sessionCount);
-  assert.equal(report.issue.cost.knownAmountUsd, golden.cost.knownAmountUsd);
-  assert.equal(report.issue.sessions.length, golden.sessions);
   const text = formatTaskReportText(report);
-  assert.match(text, /Sonnet 5/);
-  assert.match(text, /unknown/);
+  assert.doesNotMatch(text, /\nINJECTED/);
+  assert.match(text, /Evil INJECTED/);
+  const roundtrip = JSON.parse(JSON.stringify(report));
+  assert.equal(roundtrip.issue.issue.title, maliciousFixture.issues[0].title);
   disposeDataset(ctx);
 });
 

@@ -4,6 +4,11 @@ export {
   type TelemetryDatabase,
 } from './connection.js';
 export {
+  openReadOnlyTelemetryDb,
+  readUserVersionReadOnly,
+  type ReadOnlyTelemetryHandle,
+} from './read-only.js';
+export {
   migrateDatabase,
   assertSchemaCurrent,
   SUPPORTED_SCHEMA_VERSION,

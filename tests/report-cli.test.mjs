@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import { openTelemetryDatabase } from '../dist/db/index.js';
 import {
+  appHomeInventory,
+  assertNoWalShmSidecars,
   initBareRepo,
   installDatasetInHome,
   linkAlphaSessions,
@@ -30,25 +32,30 @@ function reportEnv(appHome) {
 }
 
 function parseJsonStdout(result) {
-  return JSON.parse(result.stdout.trim());
+  const line = result.stdout.trim().split('\n').filter(Boolean).pop();
+  return JSON.parse(line);
 }
 
-test('report tasks --json via CLI (read-only DB)', () => {
+test('T35-F01: CLI reports do not mutate app home files or DB rows', () => {
   const repo = initBareRepo();
   const appHome = mkdtempSync(join(tmpdir(), 'orca-report-home-'));
   writeReportsProfile(appHome);
   const { beforeCounts } = installDatasetInHome(appHome, linkAlphaSessions);
-  const result = runCliReport(['report', 'tasks', '--json'], {
-    cwd: repo,
-    env: reportEnv(appHome),
-  });
-  if (result.status !== 0) {
-    throw new Error(`exit ${result.status}: ${result.stderr || result.stdout}`);
+  const inventoryBefore = appHomeInventory(appHome);
+  const commands = [
+    ['report', 'tasks', '--json'],
+    ['report', 'project', '--json'],
+    ['report', 'unmapped', '--json'],
+    ['report', 'task', '1', '--json'],
+  ];
+  for (const args of commands) {
+    const result = runCliReport(args, { cwd: repo, env: reportEnv(appHome) });
+    if (result.status !== 0) {
+      throw new Error(`${args.join(' ')} exit ${result.status}: ${result.stderr || result.stdout}`);
+    }
   }
-  const body = parseJsonStdout(result);
-  assert.equal(body.ok, true);
-  assert.equal(body.data.kind, 'tasks');
-  assert.ok(Array.isArray(body.data.issues));
+  assert.deepEqual(appHomeInventory(appHome), inventoryBefore);
+  assertNoWalShmSidecars(appHome);
   const handle = openTelemetryDatabase({
     dbPath: join(appHome, 'telemetry.sqlite'),
     gitRoot: repo,
@@ -57,7 +64,7 @@ test('report tasks --json via CLI (read-only DB)', () => {
   handle.close();
   rmSync(appHome, { recursive: true, force: true });
   rmSync(repo, { recursive: true, force: true });
-});
+}, 60_000);
 
 test('report unmapped text includes safe link suggestion', () => {
   const repo = initBareRepo();

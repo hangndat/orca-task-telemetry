@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { buildProjectReport } from '../dist/reports/project.js';
+import { linkSessionToIssue } from '../dist/attribution/link.js';
+import { buildProjectReport, formatProjectReportText } from '../dist/reports/project.js';
+import { buildTaskReport } from '../dist/reports/tasks.js';
 import {
   disposeDataset,
   fixture,
@@ -8,6 +13,16 @@ import {
   loadReportsDataset,
   snapshotDbCounts,
 } from './helpers/reports-harness.mjs';
+
+const goldenDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures/reports/golden');
+const multiFixture = JSON.parse(
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), 'fixtures/reports/multi-project-dataset.json'),
+    'utf8',
+  ),
+);
+
+const LINKED_AT = '2026-06-01T10:00:00.000Z';
 
 function fakeProfile() {
   return {
@@ -27,7 +42,70 @@ function fakeProfile() {
   };
 }
 
-test('T36: project report dedupes session across duplicate memberships', () => {
+test('T36: golden project text and JSON', () => {
+  const ctx = loadReportsDataset();
+  linkAlphaSessions(ctx);
+  const report = buildProjectReport({
+    profile: fakeProfile(),
+    db: ctx.db,
+    close: () => {},
+  });
+  const expectedText = readFileSync(join(goldenDir, 'project.txt'), 'utf8');
+  const expectedJson = JSON.parse(readFileSync(join(goldenDir, 'project.json'), 'utf8'));
+  assert.equal(formatProjectReportText(report), expectedText);
+  assert.deepEqual(report, expectedJson);
+  disposeDataset(ctx);
+});
+
+test('T36: two projects — shared issue deduped, project B includes B-only issue', () => {
+  const ctx = loadReportsDataset(multiFixture);
+  linkSessionToIssue(ctx.db, {
+    provider: 'claude',
+    source: 'codeburn',
+    rawSessionId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    issueNodeId: 'I_shared_cross_project',
+    linkedAt: LINKED_AT,
+  });
+  linkSessionToIssue(ctx.db, {
+    provider: 'claude',
+    source: 'codeburn',
+    rawSessionId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    issueNodeId: 'I_only_project_b',
+    linkedAt: LINKED_AT,
+  });
+  const profileA = {
+    ...fakeProfile(),
+    project: {
+      id: multiFixture.projectIdA,
+      number: 1,
+      url: 'https://github.com/users/org-a/projects/a',
+      owner: { kind: 'organization', login: 'org-a' },
+    },
+  };
+  const profileB = {
+    ...fakeProfile(),
+    project: {
+      id: multiFixture.projectIdB,
+      number: 2,
+      url: 'https://github.com/users/org-b/projects/b',
+      owner: { kind: 'organization', login: 'org-b' },
+    },
+  };
+  const reportA = buildProjectReport({ profile: profileA, db: ctx.db, close: () => {} });
+  const reportB = buildProjectReport({ profile: profileB, db: ctx.db, close: () => {} });
+  assert.equal(reportA.linkedSessionCount, 1);
+  assert.equal(reportB.linkedSessionCount, 2);
+  const taskShared = buildTaskReport(
+    { profile: profileA, db: ctx.db, close: () => {} },
+    'I_shared_cross_project',
+  );
+  assert.equal(taskShared.issue.sessionCount, 1);
+  assert.equal(reportA.cost.knownAmountUsd, 0.5);
+  assert.equal(reportB.cost.knownAmountUsd, 0.6);
+  disposeDataset(ctx);
+});
+
+test('T36: unmapped totals are not folded into project cost', () => {
   const ctx = loadReportsDataset();
   linkAlphaSessions(ctx);
   const before = snapshotDbCounts(ctx.db);
@@ -37,25 +115,6 @@ test('T36: project report dedupes session across duplicate memberships', () => {
     close: () => {},
   });
   assert.deepEqual(snapshotDbCounts(ctx.db), before);
-  assert.equal(report.linkedSessionCount, 3);
-  assert.equal(report.cost.knownAmountUsd, 1.75);
   assert.ok(report.unmappedNotInProjectTotals.sessionCount >= 1);
-  const claude = report.totalsByProvider.find((p) => p.provider === 'claude');
-  assert.ok(claude);
-  assert.equal(claude.mixedModelAllocation, 'unknown');
-  disposeDataset(ctx);
-});
-
-test('T36: unmapped totals are not folded into project cost', () => {
-  const ctx = loadReportsDataset();
-  linkAlphaSessions(ctx);
-  const report = buildProjectReport({
-    profile: fakeProfile(),
-    db: ctx.db,
-    close: () => {},
-  });
-  const unmappedCost = report.unmappedNotInProjectTotals.costKnownUsd;
-  assert.ok(unmappedCost >= 0);
-  assert.notEqual(report.cost.knownAmountUsd, report.cost.knownAmountUsd + unmappedCost);
   disposeDataset(ctx);
 });

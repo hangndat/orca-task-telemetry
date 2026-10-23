@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
-import { DatabaseSync as SqliteDatabase } from 'node:sqlite';
 import {
   aggregateLinkedUsageForIssue,
   type IssueUsageRollup,
@@ -9,7 +8,7 @@ import {
 import { loadConfig } from '../config.js';
 import type { GitHubIssue, UsageProvider } from '../contracts.js';
 import { parseSessionKey } from '../contracts.js';
-import { assertSchemaCurrent } from '../db/migrate.js';
+import { openReadOnlyTelemetryDb } from '../db/read-only.js';
 import { parseTokensJson } from '../db/serialize.js';
 import { parseIssueRef } from '../github/identity.js';
 import { CliError, EXIT_ENVIRONMENT } from '../errors.js';
@@ -42,19 +41,6 @@ function reportSetupError(message: string, hint?: string): CliError {
   });
 }
 
-export function openReportDatabase(dbPath: string): DatabaseSync {
-  if (!fs.existsSync(dbPath)) {
-    throw reportSetupError(
-      'Telemetry database not found.',
-      'Run orca-telemetry init and orca-telemetry collect first.',
-    );
-  }
-  const db = new SqliteDatabase(dbPath, { readOnly: true });
-  db.exec('PRAGMA foreign_keys = ON');
-  assertSchemaCurrent(db);
-  return db;
-}
-
 export async function openReportContext(cwd: string): Promise<ReportContext> {
   const pathEnv = createDefaultPathEnv();
   const paths = resolveAppPaths(pathEnv);
@@ -72,12 +58,18 @@ export async function openReportContext(cwd: string): Promise<ReportContext> {
     }
     throw err;
   }
-  const db = openReportDatabase(paths.dbPath);
+  if (!fs.existsSync(paths.dbPath)) {
+    throw reportSetupError(
+      'Telemetry database not found.',
+      'Run orca-telemetry init and orca-telemetry collect first.',
+    );
+  }
+  const readHandle = await openReadOnlyTelemetryDb(paths.dbPath);
   return {
     profile,
-    db,
+    db: readHandle.db,
     close() {
-      db.close();
+      readHandle.release();
     },
   };
 }
