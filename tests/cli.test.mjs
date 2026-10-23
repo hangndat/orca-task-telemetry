@@ -66,6 +66,7 @@ test('--help documents implemented vs planned commands', () => {
   assert.match(result.stdout, /init.*implemented/i);
   assert.match(result.stdout, /collect.*implemented/i);
   assert.match(result.stdout, /link.*implemented/i);
+  assert.match(result.stdout, /report.*implemented/i);
   assert.doesNotMatch(result.stdout, /__internal_test/);
 });
 
@@ -115,12 +116,7 @@ test('report task without issue id is usage_error', () => {
   assert.equal(result.status, 2);
 });
 
-const NOT_IMPLEMENTED_CASES = [
-  ['report', 'tasks'],
-  ['report', 'task', '42'],
-  ['report', 'project'],
-  ['report', 'unmapped'],
-];
+const NOT_IMPLEMENTED_CASES = [];
 
 for (const args of NOT_IMPLEMENTED_CASES) {
   const label = args.join(' ');

@@ -1,6 +1,13 @@
 const VERSION = '0.1.0';
 
-const IMPLEMENTED = new Set(['doctor', 'projects', 'init', 'collect', 'link']);
+const IMPLEMENTED = new Set([
+  'doctor',
+  'projects',
+  'init',
+  'collect',
+  'link',
+  'report',
+]);
 
 const TOP_LEVEL = [
   { name: 'doctor', summary: 'Check local tools (implemented)' },
@@ -8,14 +15,14 @@ const TOP_LEVEL = [
   { name: 'projects', summary: 'List GitHub Projects for the current repository' },
   { name: 'collect', summary: 'Collect GitHub, Orca, and CodeBurn into local DB' },
   { name: 'link', summary: 'Link a CodeBurn session to a GitHub issue' },
-  { name: 'report', summary: 'Usage reports (not implemented)' },
+  { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
 ];
 
 const REPORT_SUBCOMMANDS = [
-  { name: 'tasks', summary: 'Report across tasks (not implemented)' },
-  { name: 'task <issue-id>', summary: 'Report for one issue (not implemented)' },
-  { name: 'project', summary: 'Project-level report (not implemented)' },
-  { name: 'unmapped', summary: 'Unmapped sessions (not implemented)' },
+  { name: 'tasks', summary: 'Report across issues in the selected project' },
+  { name: 'task <issue-id>', summary: 'Report for one issue (node id, URL, or owner/repo#n)' },
+  { name: 'project', summary: 'Project-level totals with deduped linked sessions' },
+  { name: 'unmapped', summary: 'Sessions without an Issue link and link suggestions' },
 ];
 
 export function rootHelpText(): string {
@@ -44,7 +51,7 @@ export function rootHelpText(): string {
 export function commandHelpText(command: string): string {
   if (command === 'report') {
     const lines = [
-      `orca-task-telemetry report — usage reports (not implemented)`,
+      `orca-task-telemetry report — usage reports (read-only local DB)`,
       '',
       'Usage:',
       '  orca-telemetry report <subcommand> [--help] [--json]',

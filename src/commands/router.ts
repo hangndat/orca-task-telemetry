@@ -3,13 +3,14 @@ import {
   runDoctorWithDeps,
   buildDefaultDoctorDeps,
 } from '../doctor.js';
-import { notImplemented, usageError, unknownCommand } from '../errors.js';
+import { usageError, unknownCommand } from '../errors.js';
 import { commandHelpText } from './help.js';
 import { writeJsonSuccess } from './output.js';
 import { runInit } from './init.js';
 import { runProjects } from './projects.js';
 import { runCollect } from './collect.js';
 import { runLink } from './link.js';
+import { runReport, runReportTask } from './report.js';
 
 const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'project', 'unmapped']);
 
@@ -87,8 +88,27 @@ export async function routeCommand(
     if (!REPORT_SUBCOMMANDS.has(sub)) {
       throw usageError(`Unknown report subcommand: ${sub}.`, 'Run orca-telemetry report --help.');
     }
-    const label = sub === 'task' ? `report task ${subRest[0]}` : `report ${sub}`;
-    throw notImplemented(label);
+    if (subRest.length > 0 && sub !== 'task') {
+      throw usageError(
+        `Unexpected arguments: ${subRest.join(' ')}`,
+        `Usage: orca-telemetry report ${sub}`,
+      );
+    }
+    const cwd = options.cwd ?? process.cwd();
+    if (sub === 'task') {
+      const issueArg = subRest[0];
+      if (!issueArg) {
+        throw usageError(
+          'Missing issue id for report task.',
+          'Usage: orca-telemetry report task <issue-id>',
+        );
+      }
+      return runReportTask(issueArg, subRest.slice(1), { json, cwd });
+    }
+    return runReport(sub as 'tasks' | 'project' | 'unmapped', subRest, {
+      json,
+      cwd,
+    });
   }
 
   throw unknownCommand(command);
