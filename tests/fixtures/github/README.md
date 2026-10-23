@@ -1,6 +1,6 @@
 # GitHub Projects V2 — fixtures
 
-Nguồn live (read-only), không mutation. Thu thập trên máy worker **2026-10-23** (UTC+8).
+Nguồn live (read-only), không mutation. Thu thập trên máy worker **2026-10-23** (UTC+8). `project-items-page2.json` — `rateLimit` thu lại **2026-10-23 ~23:00** (UTC+8) từ response GraphQL trang 2 (cursor = `pageInfo.endCursor` của trang 1 trong fixture).
 
 | Thuộc tính | Giá trị |
 | --- | --- |
@@ -18,7 +18,7 @@ Nguồn live (read-only), không mutation. Thu thập trên máy worker **2026-1
 | `repository-projectsV2.json` | `repository.projectsV2` |
 | `project-view-cli.json` | `gh project view 4 --owner hangndat --format json` |
 | `project-items-page1.json` | `items(first:100)` — **2** node mẫu; `pageInfo` và `rateLimit` **đầy đủ** từ live |
-| `project-items-page2.json` | `items(first:100, after:<page1.endCursor>)` — **3** node; `pageInfo` **đầy đủ** |
+| `project-items-page2.json` | `items(first:100, after:<page1.endCursor>)` — **3** node; `pageInfo` **đầy đủ**; `rateLimit` **chỉ** từ response trang 2 (không dùng lại trang 1) |
 
 ## Redact
 
