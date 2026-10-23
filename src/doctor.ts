@@ -1,9 +1,15 @@
 import { spawnSync } from 'node:child_process';
 
-interface ToolStatus {
+export interface ToolStatus {
   name: string;
   found: boolean;
   version: string | null;
+}
+
+export interface DoctorData {
+  nodeVersion: string;
+  tools: ToolStatus[];
+  note: string;
 }
 
 function checkTool(name: string): ToolStatus {
@@ -19,12 +25,26 @@ function checkTool(name: string): ToolStatus {
   return { name, found, version };
 }
 
-export function runDoctor(): number {
-  process.stdout.write(`Node.js: ${process.version}\n`);
+export function collectDoctorData(): DoctorData {
+  const tools: ToolStatus[] = [];
   for (const name of ['git', 'gh', 'orca', 'codeburn']) {
-    const status = checkTool(name);
-    process.stdout.write(`${name}: ${status.found ? 'found' : 'not found'}${status.version ? ` (${status.version})` : ''}\n`);
+    tools.push(checkTool(name));
   }
-  process.stdout.write('Note: tool presence does not verify authentication or supported JSON schemas.\n');
+  return {
+    nodeVersion: process.version,
+    tools,
+    note: 'Tool presence does not verify authentication or supported JSON schemas.',
+  };
+}
+
+export function runDoctor(): number {
+  const data = collectDoctorData();
+  process.stdout.write(`Node.js: ${data.nodeVersion}\n`);
+  for (const status of data.tools) {
+    process.stdout.write(
+      `${status.name}: ${status.found ? 'found' : 'not found'}${status.version ? ` (${status.version})` : ''}\n`,
+    );
+  }
+  process.stdout.write(`Note: ${data.note}\n`);
   return 0;
 }

@@ -1,38 +1,102 @@
 #!/usr/bin/env node
-import { runDoctor } from './doctor.js';
+import { parseArgs } from 'node:util';
+import { rootHelpText, VERSION } from './commands/help.js';
+import {
+  emitCliError,
+  emitUnexpectedError,
+  writeJsonSuccess,
+} from './commands/output.js';
+import { finishRoute, routeCommand } from './commands/router.js';
+import { CliError, nodeVersionError, usageError } from './errors.js';
 import { checkNodeVersion } from './node-version.js';
 
-const VERSION = '0.1.0';
+const INTERNAL_TEST_COMMAND = '__internal_test_unexpected_error';
 
-function help(): void {
-  process.stdout.write(`orca-task-telemetry ${VERSION} — foundation scaffold\n\nUsage:\n  orca-telemetry --help\n  orca-telemetry --version\n  orca-telemetry doctor\n\nPlanned MVP commands (not implemented yet):\n  init, projects, collect, link, report tasks, report task, report project, report unmapped\n\nSee docs/MVP-SPEC.md for acceptance criteria.\n`);
+export function runCli(argv: string[]): number {
+  const nodeCheck = checkNodeVersion(process.version);
+  if (!nodeCheck.ok) {
+    const err = nodeVersionError(nodeCheck.message);
+    emitCliError(err, argv.includes('--json'));
+    return err.exitCode;
+  }
+
+  let json = false;
+  let positionals: string[] = [];
+
+  try {
+    const parsed = parseArgs({
+      args: argv,
+      options: {
+        help: { type: 'boolean', short: 'h' },
+        version: { type: 'boolean', short: 'v' },
+        json: { type: 'boolean' },
+      },
+      allowPositionals: true,
+      strict: true,
+    });
+    json = parsed.values.json === true;
+    positionals = parsed.positionals;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const cliErr = usageError(message, 'Run orca-telemetry --help for usage.');
+    emitCliError(cliErr, argv.includes('--json'));
+    return cliErr.exitCode;
+  }
+
+  const wantsHelp = argv.includes('--help') || argv.includes('-h');
+
+  if (argv.includes('--version') || argv.includes('-v')) {
+    if (json) {
+      writeJsonSuccess({ version: VERSION });
+    } else {
+      process.stdout.write(`${VERSION}\n`);
+    }
+    return 0;
+  }
+
+  const [command, ...rest] = positionals;
+
+  if (wantsHelp && command === undefined) {
+    if (json) {
+      writeJsonSuccess({ help: rootHelpText() });
+    } else {
+      process.stdout.write(rootHelpText());
+    }
+    return 0;
+  }
+
+  if (command === undefined) {
+    if (json) {
+      writeJsonSuccess({ help: rootHelpText() });
+    } else {
+      process.stdout.write(rootHelpText());
+    }
+    return 0;
+  }
+
+  if (command === INTERNAL_TEST_COMMAND) {
+    throw new Error('internal test unexpected error');
+  }
+
+  try {
+    const result = routeCommand(command, rest, { json, wantsHelp });
+    return finishRoute(result, json);
+  } catch (err) {
+    if (err instanceof CliError) {
+      emitCliError(err, json);
+      return err.exitCode;
+    }
+    return emitUnexpectedError(err, json);
+  }
 }
 
 function main(argv: string[]): number {
-  const nodeCheck = checkNodeVersion(process.version);
-  if (!nodeCheck.ok) {
-    process.stderr.write(`${nodeCheck.message}\n`);
-    return 1;
+  try {
+    return runCli(argv);
+  } catch (err) {
+    const json = argv.includes('--json');
+    return emitUnexpectedError(err, json);
   }
-
-  const [command] = argv;
-  if (command === undefined || command === '-h' || command === '--help' || command === 'help') {
-    help();
-    return 0;
-  }
-  if (command === '-v' || command === '--version') {
-    process.stdout.write(`${VERSION}\n`);
-    return 0;
-  }
-  if (command === 'doctor') {
-    return runDoctor();
-  }
-  if (['init', 'projects', 'collect', 'link', 'report'].includes(command)) {
-    process.stderr.write(`Command '${command}' is planned but not implemented. See docs/MVP-SPEC.md.\n`);
-    return 2;
-  }
-  process.stderr.write(`Unknown command: ${command}. Run --help.\n`);
-  return 2;
 }
 
 process.exitCode = main(process.argv.slice(2));

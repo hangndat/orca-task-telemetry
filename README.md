@@ -35,6 +35,19 @@ pnpm pack
 
 npm package sẽ cung cấp lệnh `orca-telemetry` qua entry point `bin`. Sau khi được triển khai và đóng gói, bạn có thể cài đặt tarball trên toàn hệ thống hoặc cài đặt từ Git. Package dùng trong production phải hoạt động bên ngoài thư mục mã nguồn hiện tại.
 
+## Exit codes & JSON output
+
+| Exit | Ý nghĩa |
+| --- | --- |
+| 0 | Thành công |
+| 1 | Lỗi nội bộ không mong đợi |
+| 2 | Usage (`usage_error`, `unknown_command`, `not_implemented`, tham số sai) |
+| 3 | Môi trường (ví dụ Node.js không đạt yêu cầu) |
+| 4 | Nguồn ngoài không khả dụng (toàn phần) |
+| 5 | Một phần nguồn lỗi, vẫn có kết quả một phần |
+
+Với `--json`, stdout chỉ có một object: thành công `{"ok":true,"data":...}`, lỗi `{"ok":false,"error":{"code","message","hint"?}}`. Không JSON: lỗi in ra stderr dạng `error: …` và tùy chọn `hint: …`. Đặt `ORCA_TELEMETRY_DEBUG=1` để in stack trace lỗi không mong đợi ra stderr.
+
 ## Contributor agents
 
 Setup chung cho Codex, Claude và Cursor nằm ở [AGENTS.md](AGENTS.md) và [agent workflow](docs/agents/README.md): role/persona theo scope CLI, mẫu giao việc, review độc lập theo SHA và giới hạn vòng fix. Bộ hướng dẫn được điều chỉnh từ `ticket-solution`; xem [provenance và giới hạn validation](docs/agents/PROVENANCE.md).
