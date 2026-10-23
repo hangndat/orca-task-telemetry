@@ -19,11 +19,11 @@ Bộ hướng dẫn được điều chỉnh từ `ticket-solution` cho một pa
 | architect | Dexter · arch | Contract, storage/trust boundaries và handoff trong docs |
 | cli | Gonic, Colin · cli | CLI và tests được giao |
 | collectors | Remy, Monica · collect | Adapters GitHub/Orca/CodeBurn và fixtures được giao |
-| reviewer-dod | James · dod | Nghiệm thu độc lập trên exact SHA |
-| reviewer-security | James · sec | Review độc lập secrets, subprocess, storage, external mutation |
-| dod+sec | James · dod+sec | Một reviewer, chung evidence, verdict DoD/security riêng |
+| reviewer-dod | James · dod | Codex nghiệm thu độc lập trên exact SHA |
+| reviewer-security | James · sec | Codex review độc lập secrets, subprocess, storage, external mutation |
+| dod+sec | James · dod+sec | Một reviewer Codex, chung evidence, verdict DoD/security riêng |
 
-Mỗi worker chỉ sở hữu paths trong Task Spec, không phải toàn bộ scope của role. Khi paths chưa tồn tại, coordinator chốt tên trước dispatch; không tự dựng monorepo hoặc sửa chéo scope để build pass. Persona là nhãn, không chứng minh reviewer độc lập: session reviewer phải khác session tác giả. Chọn persona chưa live cho role; không đổi tên worker đang chạy.
+Mỗi worker chỉ sở hữu paths trong Task Spec, không phải toàn bộ scope của role. Khi paths chưa tồn tại, coordinator chốt tên trước dispatch; không tự dựng monorepo hoặc sửa chéo scope để build pass. Persona là nhãn, không chứng minh reviewer độc lập: reviewer Codex phải chạy trong session khác session tác giả. Chọn persona chưa live cho role; không đổi tên worker đang chạy.
 
 Role files: [BA](roles/product-ba.md), [architect](roles/architect.md), [CLI](roles/cli.md), [collectors](roles/collectors.md), [DoD](roles/reviewer-dod.md), [security](roles/reviewer-security.md), [gộp](roles/reviewer-merged.md).
 
