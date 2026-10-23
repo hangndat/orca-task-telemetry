@@ -349,7 +349,7 @@ test('duplicate field name fails with exit 2 semantics', async () => {
   );
 });
 
-test('CLI: --apply and inclusive without --issue exit 2', () => {
+test('CLI: non-TTY --apply without --yes and inclusive without --issue exit 2', () => {
   const repo = initBareRepo();
   const appHome = mkdtempSync(join(tmpdir(), 'orca-wb-home-'));
   writeReportsProfile(appHome, 'PVT_attr_synthetic_project');
@@ -357,7 +357,7 @@ test('CLI: --apply and inclusive without --issue exit 2', () => {
   const env = writebackEnv(appHome);
   const apply = runCliWriteback(['--field', 'Cost', '--apply'], { cwd: repo, env });
   assert.equal(apply.status, EXIT_USAGE);
-  assert.match(apply.stderr + apply.stdout, /not available/i);
+  assert.match(apply.stderr + apply.stdout, /requires --yes/i);
   const inclusive = runCliWriteback(['--field', 'Cost', '--rollup', 'inclusive'], {
     cwd: repo,
     env,

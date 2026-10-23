@@ -1,6 +1,14 @@
 import { parseArgs } from 'node:util';
-import { usageError } from '../errors.js';
+import { createInterface } from 'node:readline/promises';
+import type { Readable, Writable } from 'node:stream';
+import { CliError, usageError } from '../errors.js';
 import { openReportContext } from '../reports/tasks.js';
+import { sanitizeDisplayText } from '../reports/render.js';
+import {
+  applyExitCode,
+  applyWritebackPreview,
+  formatWritebackApplyText,
+} from '../writeback/apply.js';
 import {
   buildWritebackPreview,
   formatWritebackPreviewText,
@@ -31,6 +39,8 @@ export function parseWritebackArgs(rest: string[]): {
   fieldId?: string;
   rollup: WritebackRollup;
   issues: string[];
+  apply: boolean;
+  yes: boolean;
   forceOverwrite: boolean;
 } {
   try {
@@ -58,13 +68,7 @@ export function parseWritebackArgs(rest: string[]): {
       );
     }
 
-    if (parsed.values.apply) {
-      throw usageError(
-        '--apply is not available in this release.',
-        'Writeback runs in dry-run preview mode only; live apply ships in a later slice.',
-      );
-    }
-    if (parsed.values.yes) {
+    if (parsed.values.yes && !parsed.values.apply) {
       throw usageError(
         '--yes requires --apply.',
         'Dry-run preview does not prompt or write to GitHub.',
@@ -110,6 +114,8 @@ export function parseWritebackArgs(rest: string[]): {
       fieldId,
       rollup: parseRollup(parsed.values.rollup),
       issues,
+      apply: parsed.values.apply === true,
+      yes: parsed.values.yes === true,
       forceOverwrite: parsed.values['force-overwrite'] === true,
     };
   } catch (err) {
@@ -117,6 +123,23 @@ export function parseWritebackArgs(rest: string[]): {
       throw usageError(err.message, 'Usage: orca-telemetry writeback --field <name> [--json]');
     }
     throw err;
+  }
+}
+
+export async function confirmApply(
+  count: number,
+  owner: string,
+  project: number,
+  field: string,
+  io: { input: Readable; output: Writable } = { input: process.stdin, output: process.stderr },
+): Promise<boolean> {
+  const prompt = `Apply ${count} changes to project ${sanitizeDisplayText(owner)}/${project} field "${sanitizeDisplayText(field)}"? [y/N] `;
+  const rl = createInterface({ input: io.input, output: io.output, terminal: true });
+  try {
+    const answer = await rl.question(prompt);
+    return answer.trim().toLowerCase() === 'y' || answer.trim().toLowerCase() === 'yes';
+  } finally {
+    rl.close();
   }
 }
 
@@ -131,8 +154,22 @@ export async function runWriteback(
       'Pass a NUMBER custom field from the init profile project.',
     );
   }
+  if (args.apply && !args.yes && !process.stdin.isTTY) {
+    throw usageError(
+      'Non-TTY --apply requires --yes.',
+      'Review a dry-run preview, then pass --apply --yes explicitly.',
+    );
+  }
 
-  const ctx = await openReportContext(options.cwd);
+  let ctx;
+  try {
+    ctx = await openReportContext(options.cwd);
+  } catch (error) {
+    if (error instanceof CliError && error.code === 'report_setup' && error.message === 'No telemetry profile for this repository.') {
+      throw usageError(error.message, error.hint);
+    }
+    throw error;
+  }
   try {
     const data = await buildWritebackPreview(ctx, {
       fieldName: args.field,
@@ -141,6 +178,28 @@ export async function runWriteback(
       issueSelectors: args.issues.length > 0 ? args.issues : undefined,
       forceOverwrite: args.forceOverwrite,
     });
+
+    if (args.apply) {
+      const confirmed = args.yes || await confirmApply(
+        data.summary.wouldSet,
+        data.project.owner.login,
+        data.project.number,
+        data.field.name,
+      );
+      const result = await applyWritebackPreview(data, {
+        forceOverwrite: args.forceOverwrite,
+        confirmed,
+      });
+      const exitCode = applyExitCode(result);
+      if (options.json) {
+        return { kind: 'ok', data: result, exitCode };
+      }
+      return {
+        kind: 'text',
+        exitCode,
+        write: () => { process.stdout.write(formatWritebackApplyText(result)); },
+      };
+    }
 
     if (options.json) {
       return { kind: 'ok', data };

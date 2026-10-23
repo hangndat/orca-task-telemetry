@@ -17,7 +17,7 @@ const TOP_LEVEL = [
   { name: 'collect', summary: 'Collect GitHub, Orca, and CodeBurn into local DB' },
   { name: 'link', summary: 'Link a CodeBurn session to a GitHub issue' },
   { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
-  { name: 'writeback', summary: 'Dry-run preview of GitHub Project NUMBER field writeback' },
+  { name: 'writeback', summary: 'Preview or explicitly apply GitHub Project NUMBER field writeback' },
 ];
 
 const REPORT_SUBCOMMANDS = [
@@ -91,15 +91,18 @@ export function commandHelpText(command: string): string {
   }
   if (command === 'writeback') {
     return [
-      'orca-telemetry writeback — dry-run preview for Project NUMBER field (read-only)',
+      'orca-telemetry writeback — Project NUMBER field cost writeback',
       '',
       'Usage:',
-      '  orca-telemetry writeback --field <name> [--field-id <id>] [--rollup direct|inclusive]',
-      '    [--issue <selector>] [--force-overwrite] [--json]',
+      '  orca-telemetry writeback (--field <name> | --field-id <id>) [--rollup direct|inclusive]',
+      '    [--issue <selector>] [--force-overwrite] [--apply [--yes]] [--json]',
       '',
       'Computes estimated API equivalent usage from the local DB and compares to the',
-      'current GitHub Project field value. Does not call item-edit or write SQLite.',
-      'Live --apply is not available in this release.',
+      'current GitHub Project field value. Default is read-only dry-run.',
+      '--apply re-reads each candidate and writes one NUMBER field per item with gh item-edit.',
+      'A TTY prompts for confirmation; non-TTY apply requires --yes. --yes requires --apply.',
+      'A changed remote value is skipped unless --force-overwrite is explicit.',
+      'Partial item failures exit 5; no automatic rollback. Apply requires gh project scope.',
       '',
       'Project and owner come from orca-telemetry init (no --project/--owner).',
       '--rollup inclusive requires at least one --issue.',
