@@ -31,7 +31,8 @@ process.stdin.on('end', () => {
     process.stderr.write('GH_STUB_PAGE1_PATH / GH_STUB_PAGE2_PATH required\n');
     process.exit(1);
   }
-  process.stdout.write(readFileSync(path, 'utf8'));
-  process.exit(0);
+  process.stdout.write(readFileSync(path, 'utf8'), () => {
+    process.exit(0);
+  });
 });
 process.stdin.resume();

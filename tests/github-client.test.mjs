@@ -190,7 +190,7 @@ test('AC3: mutation rejected without invoking gh stub', async () => {
   });
 
   await expectCliError(
-    callGraphql('mutation { x }', {}, env, { ghPath: process.execPath }),
+    callGraphql('mutation { x }', {}, env, { ghPath: stub }),
     { code: 'usage_error', exitCode: EXIT_USAGE },
   );
 
@@ -214,4 +214,89 @@ test('AC4: spawn uses gh api graphql --input - without token argv', async () => 
   const joinedArgv = recorded.argv.join(' ');
   assert.doesNotMatch(joinedArgv, /token|pat|bearer/i);
   rmSync(record, { force: true });
+});
+
+async function expectUsageNoGh(query, envExtra = {}) {
+  const counter = join(tmpdir(), `gh-stub-count-${Date.now()}-${Math.random()}`);
+  writeFileSync(counter, '', 'utf8');
+  const env = stubEnv({
+    stdout: '{}',
+    extra: { GH_STUB_COUNTER_FILE: counter, ...envExtra },
+  });
+  await expectCliError(callGraphql(query, {}, env, { ghPath: stub }), {
+    code: 'usage_error',
+    exitCode: EXIT_USAGE,
+  });
+  const lines = readFileSync(counter, 'utf8').trim();
+  assert.equal(lines, '', 'gh stub must not run');
+  rmSync(counter, { force: true });
+}
+
+test('T13-F02: comment-prefixed mutation rejected without gh', async () => {
+  await expectUsageNoGh('# hidden\nmutation { updateProjectV2Item { item { id } } }');
+});
+
+test('T13-F02: MUTATION and leading whitespace/BOM rejected', async () => {
+  await expectUsageNoGh('\uFEFF\n\n  MUTATION { x }');
+});
+
+test('T13-F02: subscription and query+mutation document rejected', async () => {
+  await expectUsageNoGh('subscription { x }');
+  await expectUsageNoGh('query A { viewer { login } } mutation B { x }');
+});
+
+test('T13-F02: query with mutation string literal is allowed', async () => {
+  const counter = join(tmpdir(), `gh-stub-ok-${Date.now()}`);
+  writeFileSync(counter, '', 'utf8');
+  const env = stubEnv({
+    stdout: '{"data":{"viewer":{"login":"u"}}}',
+    extra: { GH_STUB_COUNTER_FILE: counter },
+  });
+  const data = await callGraphql(
+    'query { field(arg: "mutation") { __typename } }',
+    {},
+    env,
+    { ghPath: stub },
+  );
+  assert.equal(data.viewer.login, 'u');
+  assert.equal(readFileSync(counter, 'utf8').trim(), '1');
+  rmSync(counter, { force: true });
+});
+
+test('T13-F03: redacts token-like substrings in github_bad_response', async () => {
+  await expectCliError(
+    callGraphql(
+      'query { viewer { login } }',
+      {},
+      stubEnv({
+        exitCode: '1',
+        stderr: 'failed: gho_AbCdEf1234567890 and Bearer secret-token-xyz',
+      }),
+      { ghPath: stub },
+    ),
+    { code: 'github_bad_response', exitCode: EXIT_SOURCE_UNAVAILABLE },
+  ).then((err) => {
+    assert.match(err.message, /<REDACTED>/);
+    assert.doesNotMatch(err.message, /gho_AbCdEf/);
+    assert.doesNotMatch(err.message, /secret-token-xyz/);
+  });
+});
+
+test('T13-F04: parses full stdout payload ≥1 MiB', async () => {
+  const padBytes = 1024 * 1024 + 50_000;
+  const prevPad = process.env.GH_STUB_PAD_BYTES;
+  process.env.GH_STUB_PAD_BYTES = String(padBytes);
+  try {
+    const data = await callGraphql(
+      'query { viewer { login } }',
+      {},
+      stubEnv({ stdout: '{}' }),
+      { ghPath: stub },
+    );
+    assert.equal(data.ok, true);
+    assert.equal(data.pad.length, padBytes);
+  } finally {
+    if (prevPad === undefined) delete process.env.GH_STUB_PAD_BYTES;
+    else process.env.GH_STUB_PAD_BYTES = prevPad;
+  }
 });

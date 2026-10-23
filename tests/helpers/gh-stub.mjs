@@ -8,6 +8,7 @@
  * GH_STUB_EXIT_CODE  — process exit code (default: 0)
  * GH_STUB_COUNTER_FILE — if set, append "1\n" on each invocation (call counting)
  * GH_STUB_RECORD_FILE — if set, write JSON { argv, envTokenKeys } for AC4 checks
+ * GH_STUB_PAD_BYTES   — if set, emit JSON `data.pad` with this many bytes (≥1 MiB tests)
  */
 import { appendFileSync, writeFileSync } from 'node:fs';
 
@@ -57,9 +58,18 @@ function finishRun(stdinBody) {
     process.stderr.write(stderr);
   }
 
-  const stdout = process.env.GH_STUB_STDOUT ?? '{}';
-  process.stdout.write(stdout);
-
+  const padBytes = process.env.GH_STUB_PAD_BYTES;
+  let stdout;
+  if (padBytes) {
+    const n = Number.parseInt(padBytes, 10);
+    const pad = 'x'.repeat(Number.isFinite(n) && n > 0 ? n : 0);
+    stdout = JSON.stringify({ data: { ok: true, pad } });
+  } else {
+    stdout = process.env.GH_STUB_STDOUT ?? '{}';
+  }
   const code = Number.parseInt(process.env.GH_STUB_EXIT_CODE ?? '0', 10);
-  process.exit(Number.isFinite(code) ? code : 0);
+  const exitCode = Number.isFinite(code) ? code : 0;
+  process.stdout.write(stdout, () => {
+    process.exit(exitCode);
+  });
 }

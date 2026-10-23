@@ -47,22 +47,15 @@ function buildFullPagingFixtures() {
   const pageInfo1 = sample1.data.node.items.pageInfo;
   const pageInfo2 = sample2.data.node.items.pageInfo;
 
+  const template = sample1.data.node.items.nodes[0];
   const page1Nodes = [];
   for (let i = 0; i < 100; i += 1) {
-    page1Nodes.push({
-      id: `PVTI_page1_${i}`,
-      type: 'ISSUE',
-      content: {
-        __typename: 'Issue',
-        id: `I_page1_${i}`,
-        number: 1000 + i,
-        title: `Issue ${i}`,
-        url: `https://github.com/hangndat/orca-task-telemetry/issues/${1000 + i}`,
-        state: 'OPEN',
-        repository: { nameWithOwner: 'hangndat/orca-task-telemetry' },
-      },
-      fieldValues: { nodes: [] },
-    });
+    const clone = JSON.parse(JSON.stringify(template));
+    clone.id = `PVTI_page1_${i}`;
+    clone.content.id = `I_page1_${i}`;
+    clone.content.number = 1000 + i;
+    clone.content.url = `https://github.com/hangndat/orca-task-telemetry/issues/${1000 + i}`;
+    page1Nodes.push(clone);
   }
 
   const page1 = {

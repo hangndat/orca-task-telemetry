@@ -66,13 +66,82 @@ function githubCliError(
   });
 }
 
-function assertReadOnlyQuery(query: string): void {
-  const trimmed = query.trimStart();
-  if (/^mutation\b/i.test(trimmed)) {
-    throw usageError(
-      'GraphQL mutations are not supported; only read-only queries are allowed.',
-    );
+const READ_ONLY_REJECTED =
+  'GraphQL mutations are not supported; only read-only queries are allowed.';
+
+/** Strip comments and string literals so mutation/subscription tokens in strings are ignored. */
+function stripGraphqlForReadOnlyCheck(query: string): string {
+  let i = 0;
+  let out = '';
+  const len = query.length;
+
+  if (query.charCodeAt(0) === 0xfeff) {
+    i = 1;
   }
+
+  while (i < len) {
+    const ch = query[i];
+    const next = query[i + 1];
+    const next2 = query[i + 2];
+
+    if (ch === '#') {
+      while (i < len && query[i] !== '\n' && query[i] !== '\r') {
+        i += 1;
+      }
+      continue;
+    }
+
+    if (ch === '"' && next === '"' && next2 === '"') {
+      i += 3;
+      while (i < len) {
+        if (query[i] === '"' && query[i + 1] === '"' && query[i + 2] === '"') {
+          i += 3;
+          break;
+        }
+        if (query[i] === '\\' && i + 1 < len) {
+          i += 2;
+          continue;
+        }
+        i += 1;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      i += 1;
+      while (i < len) {
+        if (query[i] === '\\' && i + 1 < len) {
+          i += 2;
+          continue;
+        }
+        if (query[i] === '"') {
+          i += 1;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+
+    out += ch;
+    i += 1;
+  }
+
+  return out;
+}
+
+function assertReadOnlyQuery(query: string): void {
+  const stripped = stripGraphqlForReadOnlyCheck(query);
+  if (/\b(mutation|subscription)\b/i.test(stripped)) {
+    throw usageError(READ_ONLY_REJECTED);
+  }
+}
+
+function redactGhSecrets(text: string): string {
+  return text
+    .replace(/gh[pousr]_[A-Za-z0-9_]+/g, '<REDACTED>')
+    .replace(/github_pat_[A-Za-z0-9_]+/g, '<REDACTED>')
+    .replace(/Bearer\s+\S+/g, 'Bearer <REDACTED>');
 }
 
 function combinedText(stdout: string, stderr: string): string {
@@ -164,7 +233,9 @@ function mapGraphqlErrors(envelope: GraphqlEnvelope, raw: string): CliError {
     );
   }
 
-  const first = errors?.[0]?.message ?? 'GitHub GraphQL returned errors.';
+  const first = redactGhSecrets(
+    errors?.[0]?.message ?? 'GitHub GraphQL returned errors.',
+  );
   return githubCliError(
     'github_bad_response',
     first,
@@ -233,9 +304,16 @@ function mapProcessFailure(result: GhRunResult): CliError {
     );
   }
 
-  const snippet = (result.stderr || result.stdout || spawnErr?.message || 'gh failed')
-    .trim()
-    .split('\n')[0];
+  const rawSnippet =
+    (
+      result.stderr ||
+      result.stdout ||
+      spawnErr?.message ||
+      'gh failed'
+    )
+      .trim()
+      .split('\n')[0] ?? '';
+  const snippet = redactGhSecrets(rawSnippet);
   return githubCliError(
     'github_bad_response',
     snippet || 'GitHub CLI returned an error.',
@@ -255,64 +333,90 @@ function runGhGraphql(
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    let stdout = '';
-    let stderr = '';
-    let stdoutLen = 0;
-    let stderrLen = 0;
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let stdoutEnded = false;
+    let stderrEnded = false;
+    let closed = false;
+    let exitCode: number | null = null;
+    let signal: NodeJS.Signals | null = null;
+    let spawnError: NodeJS.ErrnoException | undefined;
     let settled = false;
+    let timedOut = false;
+    let overBuffer = false;
 
-    const finish = (partial: Partial<GhRunResult>) => {
-      if (settled) {
+    const tryFinish = () => {
+      if (settled || !stdoutEnded || !stderrEnded || !closed) {
         return;
       }
       settled = true;
       clearTimeout(timer);
+      const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+      const stderr = Buffer.concat(stderrChunks).toString('utf8');
       resolve({
         stdout,
         stderr,
-        exitCode: child.exitCode,
-        signal: null,
-        ...partial,
+        exitCode,
+        signal,
+        spawnError: timedOut
+          ? Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })
+          : spawnError,
       });
     };
 
+    const killForLimit = () => {
+      if (!overBuffer) {
+        overBuffer = true;
+        child.kill('SIGTERM');
+      }
+    };
+
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill('SIGTERM');
-      finish({
-        exitCode: child.exitCode,
-        signal: 'SIGTERM',
-        spawnError: Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }),
-      });
     }, timeoutMs);
 
-    child.stdout.on('data', (chunk: Buffer | string) => {
-      const piece = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-      stdoutLen += piece.length;
-      if (stdoutLen > maxBuffer) {
-        child.kill('SIGTERM');
-        finish({ signal: 'SIGTERM' });
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdoutBytes += chunk.length;
+      if (stdoutBytes > maxBuffer) {
+        killForLimit();
         return;
       }
-      stdout += piece;
+      stdoutChunks.push(chunk);
+    });
+    child.stdout.on('end', () => {
+      stdoutEnded = true;
+      tryFinish();
     });
 
-    child.stderr.on('data', (chunk: Buffer | string) => {
-      const piece = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-      stderrLen += piece.length;
-      if (stderrLen > maxBuffer) {
-        child.kill('SIGTERM');
-        finish({ signal: 'SIGTERM' });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderrBytes += chunk.length;
+      if (stderrBytes > maxBuffer) {
+        killForLimit();
         return;
       }
-      stderr += piece;
+      stderrChunks.push(chunk);
+    });
+    child.stderr.on('end', () => {
+      stderrEnded = true;
+      tryFinish();
     });
 
     child.on('error', (err: NodeJS.ErrnoException) => {
-      finish({ spawnError: err, exitCode: null, signal: null });
+      spawnError = err;
+      closed = true;
+      stdoutEnded = true;
+      stderrEnded = true;
+      tryFinish();
     });
 
-    child.on('close', (code, signal) => {
-      finish({ exitCode: code, signal });
+    child.on('close', (code, sig) => {
+      closed = true;
+      exitCode = code;
+      signal = sig;
+      tryFinish();
     });
 
     child.stdin.write(body);
