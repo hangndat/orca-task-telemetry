@@ -65,3 +65,31 @@ export function nodeVersionError(message: string): CliError {
     exitCode: EXIT_ENVIRONMENT,
   });
 }
+
+/** User-supplied issue ref does not resolve to an accessible Issue (exit 3 — input/env). */
+export function githubIssueNotFoundError(
+  owner: string,
+  repo: string,
+  number: number,
+): CliError {
+  return new CliError({
+    code: 'github_issue_not_found',
+    message: `Issue ${owner}/${repo}#${number} was not found or is not accessible.`,
+    hint: 'Check the issue number and repository, and that gh auth can read the repo.',
+    exitCode: EXIT_ENVIRONMENT,
+  });
+}
+
+/** Number resolves to a pull request, not an issue (exit 2 — wrong ref kind). */
+export function githubNotAnIssueError(
+  owner: string,
+  repo: string,
+  number: number,
+): CliError {
+  return new CliError({
+    code: 'github_not_an_issue',
+    message: `Number ${number} in ${owner}/${repo} is a pull request, not an issue.`,
+    hint: 'Use an issue URL or owner/repo#issue_number.',
+    exitCode: EXIT_USAGE,
+  });
+}
