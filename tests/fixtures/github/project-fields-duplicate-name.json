@@ -1,0 +1,25 @@
+{
+  "data": {
+    "node": {
+      "id": "PVT_kwHOAGoDWs4BoZ5m",
+      "fields": {
+        "totalCount": 2,
+        "pageInfo": { "hasNextPage": false, "endCursor": null },
+        "nodes": [
+          {
+            "__typename": "ProjectV2Field",
+            "id": "PVTF_dup_a",
+            "name": "Budget",
+            "dataType": "NUMBER"
+          },
+          {
+            "__typename": "ProjectV2Field",
+            "id": "PVTF_dup_b",
+            "name": "Budget",
+            "dataType": "NUMBER"
+          }
+        ]
+      }
+    }
+  }
+}

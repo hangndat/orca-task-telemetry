@@ -1,0 +1,23 @@
+{
+  "data": {
+    "node": {
+      "id": "PVTI_test_item_1",
+      "fieldValues": {
+        "pageInfo": {
+          "hasNextPage": true,
+          "endCursor": "fv_cursor_page1"
+        },
+        "nodes": [
+          {
+            "__typename": "ProjectV2ItemFieldTextValue",
+            "field": { "id": "PVTF_text_other" }
+          },
+          {
+            "__typename": "ProjectV2ItemFieldSingleSelectValue",
+            "field": { "id": "PVTF_status" }
+          }
+        ]
+      }
+    }
+  }
+}

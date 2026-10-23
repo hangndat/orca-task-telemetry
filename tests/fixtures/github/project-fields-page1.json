@@ -1,0 +1,29 @@
+{
+  "data": {
+    "rateLimit": { "cost": 1, "remaining": 4999, "resetAt": "2026-10-24T00:00:00Z" },
+    "node": {
+      "id": "PVT_kwHOAGoDWs4BoZ5m",
+      "fields": {
+        "totalCount": 3,
+        "pageInfo": {
+          "hasNextPage": true,
+          "endCursor": "Y3Vyc29yOnYyOpK5MDAwMDAwMDAuMDAwMDAwMDA="
+        },
+        "nodes": [
+          {
+            "__typename": "ProjectV2Field",
+            "id": "PVTF_lAHOBqA1Ws4Bom2Zzg",
+            "name": "Status",
+            "dataType": "SINGLE_SELECT"
+          },
+          {
+            "__typename": "ProjectV2Field",
+            "id": "PVTF_lAHOBqA1Ws4Bom2ZzgKEstCost",
+            "name": "Estimated cost",
+            "dataType": "NUMBER"
+          }
+        ]
+      }
+    }
+  }
+}
