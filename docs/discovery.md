@@ -490,3 +490,79 @@ Chỉ các argv sau (cùng binary `orca`, tùy chọn `--json`, `--pairing-code`
 | Runtime app stopped | Chưa quan sát lỗi cụ thể |
 | `reference find` bare issue key | Help: cần full URL; `#64` shorthand không hợp lệ |
 | Task `spec` đầy đủ | Chỉ qua `task-list` không `--brief` — tránh trong collector |
+
+## Contracts & boundaries
+
+Module: `src/contracts.ts` (T05). Unknown trong contract luôn là `null` (không dùng `0` hay `""` thay unknown). Trường optional/thiếu ở nguồn → `T | null` và phải có key (collector gán `null`).
+
+### Định danh
+
+| Contract field | Nguồn (lệnh + trường + fixture) | Nullable | Ghi chú |
+| --- | --- | --- | --- |
+| `sessionKey` | `codeburn sessions --format json` → `sessionId` + `provider`; hàm `sessionKey(provider,'codeburn',sessionId)` | Không | Namespace `<provider>:codeburn:<rawId>`; `claude` vs `codex` cùng UUID vẫn khác key |
+| `UsageSession.rawId` | Cùng `sessionId` row (cha hoặc phần tử `subagents[]`) | Không | Subagent: `agent-…` trong `session-with-subagent-aggregated.json` |
+| `UsageSession.provider` | Row `provider` (`"claude"` \| `"codex"`) | Không | Fixture Claude/Codex |
+| `UsageSession.source` | Hằng `codeburn` (MVP) | Không | Không có field trong JSON — do collector gán |
+| `executionKey` | `orcaExecutionKey(hostId, rawId)`; `hostId` từ `dispatch.host_scope` / `hostScope` JSON `hostId` (`local` trong `dispatch-show.json`); `rawId` = `dispatch.id` (`ctx_…`) hoặc `worktreeId` (`worker.resource.worktreeId`, discovery § Orca) | Không | `orca:<hostId>:<rawId>`; `rawId` worktree có `::` — parser chỉ tách sau segment `hostId` thứ hai |
+| `Execution.runId` | `dispatch-show` → `run_id`; `run-show` → `runId` | Có nếu thiếu trong payload | Fixture `run-show.json` |
+| `Execution.taskId` | `dispatch-show` → `task_id` | Có nếu thiếu | `dispatch-show.json` |
+| `Execution.dispatchId` | `dispatch-show` → `id` (`ctx_…`) | Có khi chỉ có worktree | `worker-show-settled.json` |
+| `GitHubIssue.issueNodeId` | GraphQL `Issue.id` (node ID) | Không khi content là Issue | Query MVP chưa fetch `Issue.id` trong fixture items — **gap**; key SessionLink vẫn là node ID khi collector bổ sung fragment |
+| `GitHubIssue.repository.nameWithOwner` | `content.repository.nameWithOwner` | Không trên Issue | `project-items-page1.json` |
+| `GitHubIssue.number` | `content.number` | Không trên Issue; **không** invent cho DraftIssue | Fixture Issue |
+| `GitHubIssue.url` | `content.url` | Không trên Issue; absent trên DraftIssue | GraphQL schema discovery § GitHub |
+| `GitHubIssue.title` | `content.title` | Không | Fixture |
+| `GitHubIssue.state` | `content.state` | Không trên Issue | Fixture `OPEN` |
+| `ProjectItem.projectId` | `node(id).id` project (`PVT_…`) | Không | `project-items-page1.json` `data.node.id` |
+| `ProjectItem.itemId` | `items.nodes[].id` (`PVTI_…`) | Không | Fixture |
+| `ProjectItem.contentType` | Map `type` + `content.__typename` → `Issue` \| `PullRequest` \| `DraftIssue` \| `Redacted` | Không | Live `ISSUE` + `Issue`; PR/Draft/Redacted **gap** fixture |
+| `ProjectItem.issue` | Chỉ khi `contentType === 'Issue'` và có `issueNodeId` | `null` cho PR/Draft/Redacted | DraftIssue: không tạo `number`/`url` giả |
+
+### Usage snapshot & token
+
+| Contract field | Nguồn | Nullable | Ghi chú |
+| --- | --- | --- | --- |
+| `UsageSnapshot.sessionKey` | Cùng `sessionKey` của session | Không | Định danh snapshot = session; lần thu sau **thay thế** (upsert), không cộng |
+| `UsageSnapshot.observedAt` | Thời điểm collector chạy (ISO 8601) | Không | Không có trong CodeBurn row — metadata thu |
+| `tokens` (Claude) | `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens` | Số ≥0 từ nguồn; không gộp cache vào input | `session-sonnet-aggregated.json` |
+| `tokens` (Codex) | Cùng bốn bucket + `reasoning` | `reasoning` luôn `null` khi chỉ đọc `sessions` JSON | `session-gpt-small-aggregated.json`; `reasoningTokens` chỉ trong `audit` (gap per-session) |
+| `Cost.amountUsd` | Row `cost` khi map được | `null` khi unknown | Float CodeBurn; không phải hóa đơn |
+| `Cost.kind` | `isEstimated` + semantics discovery | `'unknown'` khi không phân loại được | Live toàn `isEstimated: false` → `'estimated_api_equivalent'`; chưa thấy `true` |
+| `Cost.source` | Collector biết `codeburn@0.9.27` | `null` nếu chưa ghi version | Không có field trong session JSON |
+
+**Subagent (Claude):** policy `CLAUDE_SUBAGENT_POLICY = separate_session_per_row` — mỗi object trong `subagents[]` là session tích lũy riêng; row cha **không** chứa token subagent (bằng chứng `calls` cha ≠ tổng con). Collector emit một snapshot per row; báo cáo Issue cộng theo **distinct `sessionKey`**, không auto-roll subagent vào cha.
+
+### SessionLink
+
+| Contract field | Nguồn | Nullable | Ghi chú |
+| --- | --- | --- | --- |
+| `sessionKey` | Usage session đã chuẩn hóa | Không | |
+| `issueNodeId` | GitHub `Issue.id` user chọn | Không | Một session tối đa một Issue (architecture invariant 3) |
+| `method` | Luôn `'manual'` (MVP) | Không | CLI `link` tường minh |
+| `linkedAt` | Thời điểm link (ISO) | Không | |
+| `linkedBy` | Operator (string) nếu có | `null` | MVP chưa xác minh field Orca/GitHub |
+
+### Khả năng còn thiếu (unknown-capable)
+
+| Khả năng | Lý do |
+| --- | --- |
+| `Issue.id` trong project items query hiện tại | Fixture chỉ có `content.number`; collector GitHub cần fragment bổ sung |
+| `isEstimated: true` / `estimatedCost` semantics | Chưa quan sát live (mục CodeBurn) |
+| Codex `reasoning` per session | Chỉ `audit`, không `sessions` JSON |
+| Orca ↔ CodeBurn `sessionId` | Không field usage UUID trong JSON Orca read-only |
+| `PullRequest` / `DraftIssue` / `Redacted` project items | Không fixture; DraftIssue không có `number`/`url` |
+| `Cost.kind === 'unknown'` khi nào | Cần rule collector khi thiếu `cost` hoặc `isEstimated` không map |
+
+### Ranh giới tin cậy
+
+- **CodeBurn `sessions`:** tin cậy cho token buckets và `cost` ước tính local; không coi là billing thực.
+- **GitHub GraphQL:** tin cậy cho membership và Issue metadata đã query; field values tùy project schema.
+- **Orca orchestration read-only:** tin cậy cho `run_id` / `task_id` / `dispatch_id` / worktree khi `runtime.reachable`; không chứa Claude/Codex usage UUID.
+- **Contract module:** không I/O; adapter (E05+) chịu trách nhiệm map và gán `null`.
+
+### Câu hỏi mở
+
+1. Khi `isEstimated` thành `true`, `amountUsd` lấy từ `cost` hay `estimatedCost`?
+2. Báo cáo Project: nếu user chỉ link session cha, subagent `agent-…` có hiển thị unlinked usage hay bị loại?
+3. `Issue.id` lấy từ query items (thêm field) hay query Issue riêng theo `number`?
+4. `linkedBy` có chuẩn hóa từ `gh auth status` login / Orca handle hay luôn `null` trong MVP?
