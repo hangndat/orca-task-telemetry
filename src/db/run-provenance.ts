@@ -111,6 +111,22 @@ const COUNTER_NAMES: readonly string[] = [
   'runs', 'tasks', 'dispatches', 'workers', 'pages', 'sessions', 'snapshots',
 ];
 
+function serializeCounters(
+  counters: Partial<Record<CollectionCounter, number>> | null | undefined,
+): string | null {
+  if (counters == null) return null;
+  if (Array.isArray(counters) || typeof counters !== 'object') {
+    throw new TypeError('Collection counters must be an object.');
+  }
+  for (const [key, value] of Object.entries(counters)) {
+    if (!COUNTER_NAMES.includes(key) || !Number.isSafeInteger(value)
+      || value < 0 || value > 100000) {
+      throw new TypeError('Collection counters must use bounded allowlisted integers.');
+    }
+  }
+  return JSON.stringify(counters);
+}
+
 export function insertCollectionAttempt(db: DatabaseSync, input: {
   source: 'orca' | 'codeburn';
   hostId?: string | null;
@@ -126,27 +142,41 @@ export function insertCollectionAttempt(db: DatabaseSync, input: {
   if (code !== null && !ERROR_CODES.includes(code)) {
     throw new TypeError('Collection error code is not allowlisted.');
   }
-  const counters = input.counters ?? null;
-  if (counters !== null) {
-    if (Array.isArray(counters) || typeof counters !== 'object') {
-      throw new TypeError('Collection counters must be an object.');
-    }
-    for (const [key, value] of Object.entries(counters)) {
-      if (!COUNTER_NAMES.includes(key) || !Number.isSafeInteger(value)
-        || value < 0 || value > 100000) {
-        throw new TypeError('Collection counters must use bounded allowlisted integers.');
-      }
-    }
-  }
+  const countersJson = serializeCounters(input.counters);
   const result = db.prepare(`INSERT INTO collection_attempts
     (source, host_id, run_id, provider, started_at, completed_at,
       status, error_code, counters_json)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       input.source, input.hostId ?? null, input.runId ?? null,
       input.provider ?? null, input.startedAt, input.completedAt ?? null,
-      input.status, code, counters === null ? null : JSON.stringify(counters),
+      input.status, code, countersJson,
     );
   return result.lastInsertRowid;
+}
+
+export function finishCodeburnCollectionAttempt(db: DatabaseSync, input: {
+  attemptId: number | bigint;
+  provider: 'claude' | 'codex';
+  completedAt: string;
+  status: 'success' | 'failed' | 'partial';
+  errorCode?: CollectionErrorCode | null;
+  counters?: Partial<Record<CollectionCounter, number>> | null;
+}): void {
+  const code = input.errorCode ?? null;
+  if (code !== null && !ERROR_CODES.includes(code)) {
+    throw new TypeError('Collection error code is not allowlisted.');
+  }
+  const countersJson = serializeCounters(input.counters);
+  const result = db.prepare(`UPDATE collection_attempts
+    SET completed_at = ?, status = ?, error_code = ?, counters_json = ?
+    WHERE attempt_id = ? AND source = 'codeburn' AND provider = ?
+      AND status = 'running'`).run(
+    input.completedAt, input.status, code, countersJson,
+    input.attemptId, input.provider,
+  );
+  if (result.changes !== 1) {
+    throw new Error('CodeBurn collection attempt is not running.');
+  }
 }
 
 export function verifierIdentityHash(verifier: string): string {

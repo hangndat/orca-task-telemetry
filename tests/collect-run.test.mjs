@@ -128,9 +128,11 @@ console.log(JSON.stringify({ ok: true, result }));
       assert.match(rendered, /orca: partial collect_source_error — Orca status returned invalid JSON\./);
       assert.ok(!rendered.includes('SECRET_STATUS_'));
       const db = openTelemetryDatabase({ dbPath: join(home, 'telemetry.sqlite') });
-      for (const table of ['orca_runs', 'orca_tasks', 'orca_dispatches', 'scoped_executions', 'collection_attempts']) {
+      for (const table of ['orca_runs', 'orca_tasks', 'orca_dispatches', 'scoped_executions']) {
         assert.equal(db.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0);
       }
+      assert.equal(db.db.prepare("SELECT COUNT(*) AS n FROM collection_attempts WHERE source = 'orca'").get().n, 0);
+      assert.equal(db.db.prepare("SELECT COUNT(*) AS n FROM collection_attempts WHERE source = 'codeburn'").get().n, 6);
       db.close();
       await assert.rejects(() => runCollect(['--run'], { json: true, cwd: repo }), (error) => error.code === 'usage_error');
     } finally {

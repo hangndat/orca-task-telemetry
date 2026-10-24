@@ -7,6 +7,7 @@ import {
   mkdirSync,
   symlinkSync,
   existsSync,
+  readFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -144,7 +145,123 @@ function assertNoSecrets(text) {
   assert.doesNotMatch(text, /Bearer\s+\S{8,}/);
 }
 
+function attemptRows(appHome) {
+  const handle = openTelemetryDatabase({ dbPath: join(appHome, 'telemetry.sqlite') });
+  try {
+    return handle.db.prepare(`SELECT attempt_id, provider, started_at, completed_at,
+      status, error_code, counters_json FROM collection_attempts
+      WHERE source = 'codeburn' ORDER BY attempt_id`).all();
+  } finally {
+    handle.close();
+  }
+}
+
 describe.sequential('T33 collect integration', () => {
+  test('version failure journals both providers before sessions and repeated collect advances attempts', () => {
+    const repo = initRepo();
+    const appHome = mkdtempSync(join(tmpdir(), 'orca-collect-home-'));
+    const callsPath = join(appHome, 'codeburn-calls.jsonl');
+    writeProfile(appHome);
+    try {
+      const base = { CODEBURN_STUB_CALLS_PATH: callsPath,
+        CODEBURN_STUB_REQUIRE_RUNNING_ATTEMPTS_DB: join(appHome, 'telemetry.sqlite') };
+      const failed = runCliCollect(repo, stubEnv(appHome, repo, {
+        ...base, CODEBURN_STUB_VERSION: '0.0.0',
+      }), '--json');
+      assert.equal(failed.status, EXIT_PARTIAL);
+      assert.equal(parseStdoutJson(failed).data.sources.find((s) => s.source === 'codeburn').status, 'error');
+      assert.deepEqual(readFileSync(callsPath, 'utf8').trim().split('\n').map(JSON.parse), [['--version']]);
+      let attempts = attemptRows(appHome);
+      assert.deepEqual(attempts.map((a) => [a.provider, a.status, a.error_code]), [
+        ['claude', 'failed', 'source_version_unsupported'],
+        ['codex', 'failed', 'source_version_unsupported'],
+      ]);
+      assert.ok(attempts.every((a) => a.started_at && a.completed_at));
+
+      for (let i = 0; i < 2; i += 1) {
+        const collected = runCliCollect(repo, stubEnv(appHome, repo, base), '--json');
+        assert.equal(collected.status, EXIT_SUCCESS);
+      }
+      attempts = attemptRows(appHome);
+      assert.deepEqual(attempts.map((a) => a.attempt_id), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(attempts.slice(2).map((a) => [a.provider, a.status]), [
+        ['claude', 'success'], ['codex', 'success'],
+        ['claude', 'success'], ['codex', 'success'],
+      ]);
+      assert.ok(attempts.slice(2).every((a) => JSON.parse(a.counters_json).snapshots > 0));
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(appHome, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('Claude commit survives Codex failure, and latest invalid JSON supersedes older success', () => {
+    const repo = initRepo();
+    const appHome = mkdtempSync(join(tmpdir(), 'orca-collect-home-'));
+    writeProfile(appHome);
+    try {
+      const baseline = runCliCollect(repo, stubEnv(appHome, repo), '--json');
+      assert.equal(baseline.status, EXIT_SUCCESS);
+      const failed = runCliCollect(repo, stubEnv(appHome, repo, {
+        CODEBURN_STUB_CODEX_EXIT_CODE: '7',
+        CODEBURN_STUB_STDERR: 'SECRET_CODEBURN_STDERR',
+      }), '--json');
+      assert.equal(failed.status, EXIT_PARTIAL);
+      const codeburn = parseStdoutJson(failed).data.sources.find((s) => s.source === 'codeburn');
+      assert.equal(codeburn.status, 'partial');
+      assert.ok(codeburn.counts.sessions > 0);
+      assertNoSecrets(failed.stdout + failed.stderr);
+      assert.ok(!(failed.stdout + failed.stderr).includes('SECRET_CODEBURN_STDERR'));
+      let attempts = attemptRows(appHome);
+      assert.deepEqual(attempts.slice(-2).map((a) => [a.provider, a.status, a.error_code]), [
+        ['claude', 'success', null], ['codex', 'failed', 'source_unavailable'],
+      ]);
+
+      const invalid = runCliCollect(repo, stubEnv(appHome, repo, {
+        CODEBURN_STUB_CODEX_INVALID_JSON: '1',
+      }), '--json');
+      assert.equal(invalid.status, EXIT_PARTIAL);
+      assert.ok(!invalid.stdout.includes('SECRET_INVALID_JSON'));
+      attempts = attemptRows(appHome);
+      assert.deepEqual(attempts.slice(-2).map((a) => [a.provider, a.status, a.error_code]), [
+        ['claude', 'success', null], ['codex', 'failed', 'source_invalid_json'],
+      ]);
+      const handle = openTelemetryDatabase({ dbPath: join(appHome, 'telemetry.sqlite') });
+      assert.ok(handle.db.prepare("SELECT COUNT(*) AS n FROM usage_sessions WHERE provider = 'claude'").get().n > 0);
+      handle.close();
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(appHome, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('snapshot import rollback marks only affected provider storage failure', () => {
+    const repo = initRepo();
+    const appHome = mkdtempSync(join(tmpdir(), 'orca-collect-home-'));
+    writeProfile(appHome);
+    try {
+      const initial = openTelemetryDatabase({ dbPath: join(appHome, 'telemetry.sqlite') });
+      initial.db.exec(`CREATE TRIGGER reject_claude_snapshot BEFORE INSERT ON usage_snapshots
+        WHEN NEW.session_key LIKE 'claude:%'
+        BEGIN SELECT RAISE(ABORT, 'SECRET_STORAGE_ERROR'); END`);
+      initial.close();
+      const result = runCliCollect(repo, stubEnv(appHome, repo), '--json');
+      assert.equal(result.status, EXIT_PARTIAL);
+      assert.equal(parseStdoutJson(result).data.sources.find((s) => s.source === 'codeburn').status, 'partial');
+      assert.ok(!result.stdout.includes('SECRET_STORAGE_ERROR'));
+      assert.deepEqual(attemptRows(appHome).map((a) => [a.provider, a.status, a.error_code]), [
+        ['claude', 'failed', 'storage_error'], ['codex', 'success', null],
+      ]);
+      const handle = openTelemetryDatabase({ dbPath: join(appHome, 'telemetry.sqlite') });
+      assert.equal(handle.db.prepare("SELECT COUNT(*) AS n FROM usage_sessions WHERE provider = 'claude'").get().n, 0);
+      assert.ok(handle.db.prepare("SELECT COUNT(*) AS n FROM usage_sessions WHERE provider = 'codex'").get().n > 0);
+      handle.close();
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(appHome, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   test('collect all sources ok and idempotent business counts', async () => {
     const repo = initRepo();
     const appHome = mkdtempSync(join(tmpdir(), 'orca-collect-home-'));

@@ -21,6 +21,11 @@ import { normalizeProjectMemberships } from '../github/memberships.js';
 import { readProjectItems } from '../github/items.js';
 import { openTelemetryDatabase } from '../db/index.js';
 import {
+  finishCodeburnCollectionAttempt,
+  insertCollectionAttempt,
+  type CollectionErrorCode,
+} from '../db/run-provenance.js';
+import {
   countRows,
   importCodeBurnUsage,
   importGitHubRecords,
@@ -260,9 +265,38 @@ async function collectOrcaRun(
 async function collectCodeburn(
   db: import('node:sqlite').DatabaseSync,
   observedAt: string,
+  now: () => string,
 ): Promise<CollectSourceResult> {
+  const providers = ['claude', 'codex'] as const;
+  const attempts = new Map<(typeof providers)[number], number | bigint>();
+  // Commit both running rows before any CodeBurn subprocess can run. A crash
+  // leaves running rows as evidence that collection did not finish.
+  db.exec('BEGIN IMMEDIATE');
   try {
-    const version = await readCodeburnVersion();
+    for (const provider of providers) {
+      attempts.set(provider, insertCollectionAttempt(db, {
+        source: 'codeburn', provider, startedAt: now(), status: 'running',
+      }));
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+
+  function errorCode(err: unknown, phase: 'source' | 'import'): CollectionErrorCode {
+    if (phase === 'import') return 'storage_error';
+    if (err instanceof CliError) {
+      if (err.code === 'codeburn_version_unsupported') return 'source_version_unsupported';
+      if (err.code === 'codeburn_schema_drift') return 'source_invalid_json';
+      if (err.code === 'codeburn_runtime_unavailable') return 'source_unavailable';
+    }
+    return 'source_error';
+  }
+
+  let version: string;
+  try {
+    version = await readCodeburnVersion();
     if (version !== CODEBURN_VERIFIED_VERSION) {
       throw new CliError({
         code: 'codeburn_version_unsupported',
@@ -270,8 +304,21 @@ async function collectCodeburn(
         exitCode: EXIT_SOURCE_UNAVAILABLE,
       });
     }
-    const rows: CodeBurnImportRow[] = [];
-    for (const provider of ['claude', 'codex'] as const) {
+  } catch (err) {
+    for (const provider of providers) {
+      finishCodeburnCollectionAttempt(db, {
+        attemptId: attempts.get(provider)!, provider, completedAt: now(),
+        status: 'failed', errorCode: errorCode(err, 'source'),
+      });
+    }
+    return { source: 'codeburn', status: 'error', error: mapSourceError(err) };
+  }
+
+  let imported = 0;
+  const failures: { code: string; message: string }[] = [];
+  for (const provider of providers) {
+    let phase: 'source' | 'import' = 'source';
+    try {
       const result = await invokeCodeburn([
         'sessions',
         '--provider',
@@ -290,6 +337,7 @@ async function collectCodeburn(
         });
       }
       const array = parseSessionsJsonArray(result.stdout);
+      const rows: CodeBurnImportRow[] = [];
       if (provider === 'claude') {
         for (const parsed of parseClaudeSessions(array, observedAt, version)) {
           rows.push(
@@ -317,16 +365,27 @@ async function collectCodeburn(
           );
         }
       }
+      phase = 'import';
+      importCodeBurnUsage(db, rows);
+      finishCodeburnCollectionAttempt(db, {
+        attemptId: attempts.get(provider)!, provider, completedAt: now(),
+        status: 'success', counters: { sessions: rows.length, snapshots: rows.length },
+      });
+      imported += rows.length;
+    } catch (err) {
+      finishCodeburnCollectionAttempt(db, {
+        attemptId: attempts.get(provider)!, provider, completedAt: now(),
+        status: 'failed', errorCode: errorCode(err, phase),
+      });
+      failures.push(phase === 'import'
+        ? { code: 'codeburn_storage_error', message: 'CodeBurn snapshot import failed.' }
+        : mapSourceError(err));
     }
-    importCodeBurnUsage(db, rows);
-    return {
-      source: 'codeburn',
-      status: 'ok',
-      counts: { sessions: rows.length },
-    };
-  } catch (err) {
-    return { source: 'codeburn', status: 'error', error: mapSourceError(err) };
   }
+  return failures.length === 0
+    ? { source: 'codeburn', status: 'ok', counts: { sessions: imported } }
+    : { source: 'codeburn', status: failures.length === providers.length ? 'error' : 'partial',
+        counts: { sessions: imported }, error: failures[0] };
 }
 
 function computeExitCode(sources: CollectSourceResult[]): number {
@@ -362,25 +421,27 @@ export async function runCollectCommand(
     dbPath: paths.dbPath,
     gitRoot: resolved.gitRoot,
   });
-  const observedAt = (options.now ?? (() => new Date().toISOString()))();
+  try {
+    const now = options.now ?? (() => new Date().toISOString());
+    const observedAt = now();
+    const sources: CollectSourceResult[] = [];
+    sources.push(await collectGithub(profile.project.id, handle.db));
+    sources.push(options.runId === undefined
+      ? await collectOrca(handle.db)
+      : await collectOrcaRun(options.runId));
+    sources.push(await collectCodeburn(handle.db, observedAt, now));
 
-  const sources: CollectSourceResult[] = [];
-  sources.push(await collectGithub(profile.project.id, handle.db));
-  sources.push(options.runId === undefined
-    ? await collectOrca(handle.db)
-    : await collectOrcaRun(options.runId));
-  sources.push(await collectCodeburn(handle.db, observedAt));
-
-  const exitCode = computeExitCode(sources);
-  const counts = {
-    issues: countRows(handle.db, 'issues'),
-    sessions: countRows(handle.db, 'usage_sessions'),
-    executions: countRows(handle.db, 'executions'),
-    collectionLogs: countRows(handle.db, 'collection_logs'),
-  };
-  handle.close();
-
-  return { sources, exitCode, counts };
+    const exitCode = computeExitCode(sources);
+    const counts = {
+      issues: countRows(handle.db, 'issues'),
+      sessions: countRows(handle.db, 'usage_sessions'),
+      executions: countRows(handle.db, 'executions'),
+      collectionLogs: countRows(handle.db, 'collection_logs'),
+    };
+    return { sources, exitCode, counts };
+  } finally {
+    handle.close();
+  }
 }
 
 export async function runCollect(
