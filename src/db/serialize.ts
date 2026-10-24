@@ -12,12 +12,35 @@ export function serializeTokens(tokens: TokenUsage): string {
   return JSON.stringify(tokens);
 }
 
+const TOKEN_NUMERIC_FIELDS = ['input', 'output', 'cacheRead', 'cacheWrite'] as const;
+
+function isFiniteNonNegative(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
 export function parseTokensJson(json: string): TokenUsage {
-  const parsed = JSON.parse(json) as TokenUsage;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw dbSchemaError('Invalid tokens_json in usage_snapshots.');
+  }
   if (!parsed || typeof parsed !== 'object' || !('provider' in parsed)) {
     throw dbSchemaError('Invalid tokens_json in usage_snapshots.');
   }
-  return parsed;
+  const obj = parsed as Record<string, unknown>;
+  if (obj.provider !== 'claude' && obj.provider !== 'codex') {
+    throw dbSchemaError('Invalid tokens_json.provider in usage_snapshots.');
+  }
+  for (const field of TOKEN_NUMERIC_FIELDS) {
+    if (!isFiniteNonNegative(obj[field])) {
+      throw dbSchemaError(`Invalid tokens_json.${field} in usage_snapshots.`);
+    }
+  }
+  if (obj.provider === 'codex' && obj.reasoning !== null && !isFiniteNonNegative(obj.reasoning)) {
+    throw dbSchemaError('Invalid tokens_json.reasoning in usage_snapshots.');
+  }
+  return parsed as TokenUsage;
 }
 
 export function serializeCost(cost: Cost): {

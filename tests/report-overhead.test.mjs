@@ -358,3 +358,177 @@ test('CLI: report overhead requires explicit --host/--run, reports a safe error 
     rmSync(appHome, { recursive: true, force: true });
   }
 });
+
+test('V14-01 golden: exactly one coordinator and two workers, correct per-role cardinality', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1', 'dispatch-2']);
+    insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 2.0 } });
+    linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    insertSession(db, { key: 'claude:codeburn:w1', provider: 'claude', rawId: 'w1',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+    linkRole(db, { key: 'claude:codeburn:w1', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
+    insertSession(db, { key: 'claude:codeburn:w2', provider: 'claude', rawId: 'w2',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 0.5 } });
+    linkRole(db, { key: 'claude:codeburn:w2', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-2' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    const report = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+
+    assert.equal(report.coordinator.sessionCount, 1);
+    assert.equal(report.coordinator.byProvider.length, 1);
+    assert.equal(report.workers.sessionCount, 2);
+    assert.equal(report.workers.dispatchCount, 2);
+    assert.equal(report.classifiedSessionCount, 3);
+    assert.equal(report.coordinator.costUsd, 2.0);
+    assert.equal(report.workers.costUsd, 1.5);
+    assert.equal(report.overheadShare.value, 2.0 / 3.5);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('RPT-F01: a codex provider/role reasoning total stays null when any session in that group has no snapshot, never a partial sum', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'codex:codeburn:coord-with-snapshot', provider: 'codex', rawId: 'coord-with-snapshot',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0, tokensOverride: { reasoning: 3 } } });
+    linkRole(db, { key: 'codex:codeburn:coord-with-snapshot', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    // Second coordinator Codex session has no snapshot at all.
+    insertSession(db, { key: 'codex:codeburn:coord-missing', provider: 'codex', rawId: 'coord-missing' });
+    linkRole(db, { key: 'codex:codeburn:coord-missing', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    insertSession(db, { key: 'claude:codeburn:w1', provider: 'claude', rawId: 'w1',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+    linkRole(db, { key: 'claude:codeburn:w1', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    const report = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    const coordCodex = report.coordinator.byProvider.find((p) => p.provider === 'codex');
+    assert.equal(coordCodex.sessionCount, 2);
+    assert.equal(coordCodex.missingSnapshotCount, 1);
+    assert.equal(coordCodex.tokens.reasoning, null, 'must not report the one known reasoning value as a partial total');
+  } finally {
+    fixture.close();
+  }
+});
+
+test('RPT-F02: malformed tokens_json numeric bucket is a structured DB schema error, never a string-concatenated total', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0, tokensOverride: { input: 'oops' } } });
+    linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    assert.throws(
+      () => buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW),
+      (err) => err.code === 'db_schema_drift',
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test('RPT-F02: an Infinity cost_amount_usd is a structured DB schema error, never a silent JSON null', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: Infinity } });
+    linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    assert.throws(
+      () => buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW),
+      (err) => err.code === 'db_schema_drift',
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test('RPT-F03: --format json renders JSON for usage errors, a missing DB, an unknown Run, and a schema error, with exit codes preserved', () => {
+  const appHome = mkdtempSync(join(tmpdir(), 'orca-overhead-cli-json-'));
+  try {
+    // Missing --host entirely, no DB set up yet: usage error before DB is touched.
+    const missingFlag = runCli(appHome, 'report', 'overhead', '--run', 'run-1', '--format', 'json');
+    assert.equal(missingFlag.status, 2);
+    assert.equal(missingFlag.stdout.trim().length > 0, true, 'stdout must carry the JSON error body');
+    const missingFlagBody = JSON.parse(missingFlag.stdout.trim());
+    assert.equal(missingFlagBody.ok, false);
+    assert.equal(missingFlagBody.error.code, 'usage_error');
+
+    // DB not initialized yet: report_setup error, still as JSON via --format.
+    const missingDb = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-1', '--format', 'json');
+    assert.equal(missingDb.status, 3);
+    const missingDbBody = JSON.parse(missingDb.stdout.trim());
+    assert.equal(missingDbBody.ok, false);
+    assert.equal(missingDbBody.error.code, 'report_setup');
+
+    const dbPath = join(appHome, 'telemetry.sqlite');
+    const handle = openTelemetryDatabase({ dbPath });
+    insertRunGraph(handle.db, 'host-a', 'run-1', ['dispatch-1']);
+    handle.close();
+
+    // Run exists in no DB row yet for host-b: unknown Run, still JSON via --format.
+    const unknownRun = runCli(appHome, 'report', 'overhead', '--host', 'host-b', '--run', 'run-x', '--format', 'json');
+    assert.equal(unknownRun.status, 3);
+    const unknownRunBody = JSON.parse(unknownRun.stdout.trim());
+    assert.equal(unknownRunBody.ok, false);
+    assert.equal(unknownRunBody.error.code, 'report_setup');
+
+    const handle2 = openTelemetryDatabase({ dbPath });
+    insertSession(handle2.db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: new Date().toISOString(), cost: 1.0, tokensOverride: { input: 'oops' } } });
+    linkRole(handle2.db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    handle2.close();
+
+    // Schema error (malformed tokens_json), still JSON via --format, not global --json.
+    const schemaErr = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-1', '--format', 'json');
+    assert.equal(schemaErr.status, 4);
+    const schemaErrBody = JSON.parse(schemaErr.stdout.trim());
+    assert.equal(schemaErrBody.ok, false);
+    assert.equal(schemaErrBody.error.code, 'db_schema_drift');
+
+    // Global --json behavior is unchanged when --format json is absent.
+    const globalJsonOnly = runCli(appHome, 'report', 'overhead', '--run', 'run-1', '--json');
+    assert.equal(globalJsonOnly.status, 2);
+    const globalJsonOnlyBody = JSON.parse(globalJsonOnly.stdout.trim());
+    assert.equal(globalJsonOnlyBody.ok, false);
+  } finally {
+    rmSync(appHome, { recursive: true, force: true });
+  }
+});
+
+test('RPT-F04: ANSI/control characters in a DB-sourced completedAt never reach the text report', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+    linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    attempt(db, { source: 'orca', hostId: 'host-a', runId: 'run-1', startedAt: isoMinus(NOW, 3700),
+      completedAt: 'bad\u001b[31mRED\u001b[0m', status: 'success' });
+    attempt(db, { source: 'codeburn', provider: 'claude', startedAt: isoMinus(NOW, 3700),
+      completedAt: isoMinus(NOW, 3600), status: 'success' });
+    attempt(db, { source: 'codeburn', provider: 'codex', startedAt: isoMinus(NOW, 3700),
+      completedAt: isoMinus(NOW, 3600), status: 'success' });
+
+    const report = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    const text = formatOverheadReportText(report);
+    // The raw ESC byte must never reach stdout verbatim, regardless of
+    // whatever printable remainder sanitizeDisplayText leaves behind.
+    assert.doesNotMatch(text, /\x1b/);
+    assert.match(text, /completedAt=bad/);
+  } finally {
+    fixture.close();
+  }
+});

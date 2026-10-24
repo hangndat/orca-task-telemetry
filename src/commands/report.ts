@@ -131,6 +131,28 @@ export async function runReportTrace(
   } finally { ctx.close(); }
 }
 
+/**
+ * Best-effort scan for `--format json` on `report overhead` args, used only to
+ * pick the error-boundary output mode (cli.ts) before the real strict parse
+ * in parseOverheadArgs runs — so a parse failure itself still renders as JSON
+ * when the caller asked for JSON. Last occurrence wins, matching parseArgs.
+ */
+export function peekOverheadJsonFormat(rest: string[]): boolean {
+  let formatValue: string | undefined;
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    if (arg === '--format') {
+      formatValue = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg?.startsWith('--format=')) {
+      formatValue = arg.slice('--format='.length);
+    }
+  }
+  return formatValue === 'json';
+}
+
 function parseOverheadArgs(rest: string[]): { host: string; run: string; json: boolean } {
   let parsed: { values: Record<string, string | boolean | undefined> };
   try {

@@ -239,6 +239,7 @@ function rollupRole(rows: RoleRow[], role: OverheadRole): OverheadRoleUsage {
       parsed.reduce((total, t) => total + t[field], 0);
     const reasoningKnown =
       provider === 'codex' &&
+      parsed.length === providerRows.length &&
       parsed.length > 0 &&
       parsed.every((t) => t.provider === 'codex' && t.reasoning !== null);
     byProvider.push({
@@ -268,6 +269,9 @@ function rollupRole(rows: RoleRow[], role: OverheadRole): OverheadRoleUsage {
     if (row.cost_kind === 'unknown') {
       unknownCostSessionCount += 1;
     } else if (row.cost_kind === 'estimated_api_equivalent' && row.cost_amount_usd !== null) {
+      if (!Number.isFinite(row.cost_amount_usd) || row.cost_amount_usd < 0) {
+        throw dbSchemaError('Role-linked snapshot cost_amount_usd is not a finite, nonnegative number.');
+      }
       knownCostUsd += row.cost_amount_usd;
     } else {
       throw dbSchemaError('Invalid role-linked snapshot cost kind.');
@@ -392,7 +396,9 @@ export function buildOverheadReport(
 
 function formatSourceStatus(status: OverheadSourceStatus): string {
   const age = status.ageSeconds === null ? 'unknown' : `${Math.round(status.ageSeconds)}s`;
-  return `${status.status} (completedAt=${status.completedAt ?? 'null'}, age=${age}, error=${status.errorCode ?? 'none'})`;
+  const completedAt = status.completedAt === null ? 'null' : sanitizeDisplayText(status.completedAt);
+  const errorCode = status.errorCode === null ? 'none' : sanitizeDisplayText(status.errorCode);
+  return `${status.status} (completedAt=${completedAt}, age=${age}, error=${errorCode})`;
 }
 
 function formatProviderRows(byProvider: OverheadProviderUsage[]): string[] {

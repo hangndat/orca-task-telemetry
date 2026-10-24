@@ -6,6 +6,7 @@ import {
   writeJsonSuccess,
 } from './commands/output.js';
 import { finishRoute, routeCommand } from './commands/router.js';
+import { peekOverheadJsonFormat } from './commands/report.js';
 import { CliError, nodeVersionError, usageError } from './errors.js';
 import { checkNodeVersion } from './node-version.js';
 
@@ -87,15 +88,23 @@ export async function runCli(argv: string[]): Promise<number> {
     throw new Error('internal test unexpected error');
   }
 
+  // `report overhead --format json` must render JSON for its errors too, even
+  // without the global --json flag; detect that ahead of the strict argument
+  // parse so a usage error (e.g. a missing --host) still gets the JSON the
+  // caller asked for, not plain text.
+  const overheadJson =
+    command === 'report' && rest[0] === 'overhead' && peekOverheadJsonFormat(rest.slice(1));
+  const errorJson = json || overheadJson;
+
   try {
     const result = await routeCommand(command, rest, { json, wantsHelp });
     return finishRoute(result, json);
   } catch (err) {
     if (err instanceof CliError) {
-      emitCliError(err, json);
+      emitCliError(err, errorJson);
       return err.exitCode;
     }
-    return emitUnexpectedError(err, json);
+    return emitUnexpectedError(err, errorJson);
   }
 }
 
