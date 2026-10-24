@@ -24,6 +24,8 @@ import { emptyConfig, saveConfig } from '../dist/config.js';
 import { SUPPORTED_SCHEMA_VERSION } from '../dist/db/migrate.js';
 import { openTelemetryDatabase } from '../dist/db/index.js';
 import { upsertProfile } from '../dist/profiles.js';
+import { buildOverheadReport } from '../dist/reports/overhead.js';
+import { ctx, insertRunGraph } from './helpers/overhead-harness.mjs';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(dir, '../dist/cli.js');
@@ -243,19 +245,82 @@ describe.sequential('T33 collect integration', () => {
       const initial = openTelemetryDatabase({ dbPath: join(appHome, 'telemetry.sqlite') });
       initial.db.exec(`CREATE TRIGGER reject_claude_snapshot BEFORE INSERT ON usage_snapshots
         WHEN NEW.session_key LIKE 'claude:%'
-        BEGIN SELECT RAISE(ABORT, 'SECRET_STORAGE_ERROR'); END`);
+        BEGIN SELECT RAISE(ABORT, 'FAKE_SECRET_MARKER'); END`);
       initial.close();
       const result = runCliCollect(repo, stubEnv(appHome, repo), '--json');
       assert.equal(result.status, EXIT_PARTIAL);
       assert.equal(parseStdoutJson(result).data.sources.find((s) => s.source === 'codeburn').status, 'partial');
-      assert.ok(!result.stdout.includes('SECRET_STORAGE_ERROR'));
+      assert.ok(!(result.stdout + result.stderr).includes('FAKE_SECRET_MARKER'));
       assert.deepEqual(attemptRows(appHome).map((a) => [a.provider, a.status, a.error_code]), [
         ['claude', 'failed', 'storage_error'], ['codex', 'success', null],
       ]);
       const handle = openTelemetryDatabase({ dbPath: join(appHome, 'telemetry.sqlite') });
       assert.equal(handle.db.prepare("SELECT COUNT(*) AS n FROM usage_sessions WHERE provider = 'claude'").get().n, 0);
       assert.ok(handle.db.prepare("SELECT COUNT(*) AS n FROM usage_sessions WHERE provider = 'codex'").get().n > 0);
+      const logs = handle.db.prepare('SELECT source, status, message FROM collection_logs').all();
+      assert.ok(logs.some((row) => row.source === 'codeburn' && row.status === 'failed'
+        && row.message === 'CodeBurn import failed.'));
+      assert.ok(!JSON.stringify(logs).includes('FAKE_SECRET_MARKER'));
+      assert.ok(!JSON.stringify(attemptRows(appHome)).includes('FAKE_SECRET_MARKER'));
       handle.close();
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(appHome, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('blank CodeBurn stdout fails latest attempt without replacing old snapshots', () => {
+    const repo = initRepo();
+    const appHome = mkdtempSync(join(tmpdir(), 'orca-collect-home-'));
+    writeProfile(appHome);
+    try {
+      const baseline = runCliCollect(repo, stubEnv(appHome, repo), '--json');
+      assert.equal(baseline.status, EXIT_SUCCESS);
+      const dbPath = join(appHome, 'telemetry.sqlite');
+      const before = new DatabaseSync(dbPath);
+      const snapshots = before.prepare(`SELECT s.session_key, s.observed_at, s.tokens_json,
+        s.cost_amount_usd, s.cost_kind FROM usage_snapshots AS s
+        JOIN usage_sessions AS u ON u.session_key = s.session_key
+        WHERE u.provider = 'codex' ORDER BY s.session_key`).all();
+      assert.ok(snapshots.length > 0);
+      insertRunGraph(before, 'host-fixture', 'run-fixture', []);
+      before.close();
+
+      for (const blank of ['', ' \n\t ']) {
+        const failed = runCliCollect(repo, stubEnv(appHome, repo, {
+          CODEBURN_STUB_CODEX_STDOUT: blank,
+        }), '--json');
+        assert.equal(failed.status, EXIT_PARTIAL);
+        const codeburn = parseStdoutJson(failed).data.sources.find((s) => s.source === 'codeburn');
+        assert.equal(codeburn.status, 'partial');
+        assert.equal(codeburn.error.code, 'codeburn_schema_drift');
+        const attempts = attemptRows(appHome);
+        assert.deepEqual(attempts.slice(-2).map((a) => [a.provider, a.status, a.error_code]), [
+          ['claude', 'success', null], ['codex', 'failed', 'source_invalid_json'],
+        ]);
+        const reopened = new DatabaseSync(dbPath);
+        try {
+          const after = reopened.prepare(`SELECT s.session_key, s.observed_at, s.tokens_json,
+            s.cost_amount_usd, s.cost_kind FROM usage_snapshots AS s
+            JOIN usage_sessions AS u ON u.session_key = s.session_key
+            WHERE u.provider = 'codex' ORDER BY s.session_key`).all();
+          assert.deepEqual(after, snapshots);
+          const report = buildOverheadReport(ctx(reopened), 'host-fixture', 'run-fixture', new Date());
+          assert.equal(report.sourceStatus.codex.status, 'failed');
+          assert.equal(report.sourceStatus.codex.errorCode, 'source_invalid_json');
+          assert.equal(report.overheadShare.unknownReason, 'partial_source');
+        } finally {
+          reopened.close();
+        }
+      }
+
+      const emptyArray = runCliCollect(repo, stubEnv(appHome, repo, {
+        CODEBURN_STUB_CODEX_STDOUT: '[]\n',
+      }), '--json');
+      assert.equal(emptyArray.status, EXIT_SUCCESS);
+      assert.deepEqual(attemptRows(appHome).slice(-1).map((a) => [a.provider, a.status]), [
+        ['codex', 'success'],
+      ]);
     } finally {
       rmSync(repo, { recursive: true, force: true });
       rmSync(appHome, { recursive: true, force: true });

@@ -40,6 +40,8 @@ if (argv.length === 1 && argv[0] === '--version') {
   if (process.env[`CODEBURN_STUB_${provider.toUpperCase()}_INVALID_JSON`] === '1') {
     body = 'SECRET_INVALID_JSON\n';
   }
+  const stdoutOverride = process.env[`CODEBURN_STUB_${provider.toUpperCase()}_STDOUT`];
+  if (stdoutOverride !== undefined) body = stdoutOverride;
   const stderr = process.env.CODEBURN_STUB_STDERR ?? '';
   const code = Number.parseInt(
     process.env[`CODEBURN_STUB_${provider.toUpperCase()}_EXIT_CODE`]

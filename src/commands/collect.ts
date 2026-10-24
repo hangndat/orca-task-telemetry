@@ -3,6 +3,7 @@ import path from 'node:path';
 import { loadConfig } from '../config.js';
 import {
   parseSessionsJsonArray,
+  schemaDrift,
   readCodeburnVersion,
   invokeCodeburn,
   CODEBURN_VERIFIED_VERSION,
@@ -335,6 +336,9 @@ async function collectCodeburn(
           message: `CodeBurn sessions (${provider}) failed.`,
           exitCode: EXIT_SOURCE_UNAVAILABLE,
         });
+      }
+      if (result.stdout.trim().length === 0) {
+        throw schemaDrift('root', 'stdout is not valid JSON');
       }
       const array = parseSessionsJsonArray(result.stdout);
       const rows: CodeBurnImportRow[] = [];

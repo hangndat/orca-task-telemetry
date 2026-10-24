@@ -336,9 +336,9 @@ export function importCodeBurnUsage(
     } catch {
       // ignore
     }
-    const message =
-      err instanceof Error ? err.message : 'CodeBurn import failed.';
-    appendCollectionLog(db, 'codeburn', 'failed', message);
+    // Database errors may include source values or trigger text. Keep the
+    // legacy log entry, but never persist the arbitrary error message.
+    appendCollectionLog(db, 'codeburn', 'failed', 'CodeBurn import failed.');
     throw err;
   }
 }
