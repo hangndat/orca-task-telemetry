@@ -39,7 +39,8 @@ export const MIGRATION_V4_STATEMENTS: readonly string[] = [
   )`,
   `CREATE TABLE scoped_executions (
     execution_key TEXT PRIMARY KEY NOT NULL
-      CHECK (substr(execution_key, 1, 19) = 'orca:supervised:v2:'),
+      CHECK (execution_key = 'orca:supervised:v2:' || hex(host_id)
+        || ':' || hex(run_id) || ':' || hex(dispatch_id)),
     host_id TEXT NOT NULL,
     run_id TEXT NOT NULL,
     task_id TEXT NOT NULL,
@@ -59,13 +60,14 @@ export const MIGRATION_V4_STATEMENTS: readonly string[] = [
     run_id TEXT NOT NULL,
     dispatch_id TEXT,
     method TEXT NOT NULL CHECK (method = 'manual'),
-    evidence_kind TEXT NOT NULL
-      CHECK (length(evidence_kind) BETWEEN 1 AND 64),
-    verification TEXT NOT NULL
-      CHECK (length(verification) BETWEEN 1 AND 64),
+    evidence_kind TEXT NOT NULL CHECK (evidence_kind = 'bounded_manual'),
+    verification TEXT NOT NULL CHECK (verification = 'manual_limited'),
     linked_at TEXT NOT NULL,
-    linked_by TEXT NOT NULL CHECK (length(linked_by) BETWEEN 1 AND 128),
-    evidence_note TEXT CHECK (evidence_note IS NULL OR length(evidence_note) <= 512),
+    linked_by TEXT NOT NULL CHECK (length(linked_by) = 71
+      AND substr(linked_by, 1, 7) = 'sha256:'
+      AND substr(linked_by, 8) NOT GLOB '*[^0-9a-f]*'),
+    evidence_note TEXT CHECK (evidence_note IS NULL OR evidence_note IN
+      ('ids_visible_same_session', 'operator_observed_same_session')),
     CHECK (
       (role = 'coordinator' AND dispatch_id IS NULL)
       OR (role = 'worker' AND dispatch_id IS NOT NULL)
@@ -84,8 +86,10 @@ export const MIGRATION_V4_STATEMENTS: readonly string[] = [
     run_id TEXT NOT NULL,
     dispatch_id TEXT NOT NULL,
     rekeyed_at TEXT NOT NULL,
-    verified_by TEXT NOT NULL CHECK (length(verified_by) BETWEEN 1 AND 128),
-    evidence_kind TEXT NOT NULL CHECK (length(evidence_kind) BETWEEN 1 AND 64),
+    verified_by TEXT NOT NULL CHECK (length(verified_by) = 71
+      AND substr(verified_by, 1, 7) = 'sha256:'
+      AND substr(verified_by, 8) NOT GLOB '*[^0-9a-f]*'),
+    evidence_kind TEXT NOT NULL CHECK (evidence_kind = 'bounded_manual'),
     CHECK (legacy_execution_key <> scoped_execution_key),
     FOREIGN KEY (scoped_execution_key, host_id, run_id, dispatch_id)
       REFERENCES scoped_executions(execution_key, host_id, run_id, dispatch_id)
@@ -99,8 +103,12 @@ export const MIGRATION_V4_STATEMENTS: readonly string[] = [
     started_at TEXT NOT NULL,
     completed_at TEXT,
     status TEXT NOT NULL CHECK (status IN ('running', 'success', 'failed', 'partial')),
-    error_code TEXT CHECK (error_code IS NULL OR length(error_code) BETWEEN 1 AND 128),
-    counters_json TEXT CHECK (counters_json IS NULL OR json_valid(counters_json)),
+    error_code TEXT CHECK (error_code IS NULL OR error_code IN
+      ('source_unavailable', 'source_invalid_json', 'source_version_unsupported',
+       'source_error', 'collection_limit', 'storage_error')),
+    counters_json TEXT CHECK (counters_json IS NULL OR
+      (length(counters_json) <= 512 AND json_valid(counters_json)
+        AND json_type(counters_json) = 'object')),
     CHECK (
       (source = 'orca' AND host_id IS NOT NULL AND length(host_id) > 0
         AND run_id IS NOT NULL AND length(run_id) > 0 AND provider IS NULL)
@@ -116,6 +124,32 @@ export const MIGRATION_V4_STATEMENTS: readonly string[] = [
   `CREATE INDEX collection_attempts_codeburn_idx
     ON collection_attempts(provider, attempt_id DESC)
     WHERE source = 'codeburn'`,
+  `CREATE TRIGGER collection_attempts_counters_insert
+    BEFORE INSERT ON collection_attempts
+    WHEN NEW.counters_json IS NOT NULL AND CASE
+      WHEN json_valid(NEW.counters_json) THEN
+        json_type(NEW.counters_json) <> 'object'
+        OR (SELECT COUNT(*) FROM json_each(NEW.counters_json)) <>
+          (SELECT COUNT(DISTINCT key) FROM json_each(NEW.counters_json))
+        OR EXISTS (SELECT 1 FROM json_each(NEW.counters_json)
+          WHERE key NOT IN ('runs', 'tasks', 'dispatches', 'workers',
+            'pages', 'sessions', 'snapshots')
+            OR type <> 'integer' OR value < 0 OR value > 100000)
+      ELSE 1 END
+    BEGIN SELECT RAISE(ABORT, 'invalid collection counters'); END`,
+  `CREATE TRIGGER collection_attempts_counters_update
+    BEFORE UPDATE OF counters_json ON collection_attempts
+    WHEN NEW.counters_json IS NOT NULL AND CASE
+      WHEN json_valid(NEW.counters_json) THEN
+        json_type(NEW.counters_json) <> 'object'
+        OR (SELECT COUNT(*) FROM json_each(NEW.counters_json)) <>
+          (SELECT COUNT(DISTINCT key) FROM json_each(NEW.counters_json))
+        OR EXISTS (SELECT 1 FROM json_each(NEW.counters_json)
+          WHERE key NOT IN ('runs', 'tasks', 'dispatches', 'workers',
+            'pages', 'sessions', 'snapshots')
+            OR type <> 'integer' OR value < 0 OR value > 100000)
+      ELSE 1 END
+    BEGIN SELECT RAISE(ABORT, 'invalid collection counters'); END`,
   `CREATE VIEW execution_scopes AS
     SELECT execution_key, host_id, run_id, task_id, dispatch_id, raw_id,
       CASE WHEN dispatch_id IS NULL THEN 'manual' ELSE 'legacy_unscoped' END

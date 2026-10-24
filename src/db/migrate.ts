@@ -103,4 +103,26 @@ export function assertSchemaCurrent(db: DatabaseSync): void {
       `Database schema version ${current} is older than required ${SUPPORTED_SCHEMA_VERSION}.`,
     );
   }
+  // v4 was hardened before release without changing its version. Refuse a
+  // database created by the earlier draft schema rather than silently opening
+  // it with weaker identity or privacy constraints.
+  const requiredSql: readonly [string, string][] = [
+    ['scoped_executions', "hex(host_id)"],
+    ['session_role_links', "evidence_kind = 'bounded_manual'"],
+    ['session_role_links', 'evidence_note IN'],
+    ['legacy_execution_rekeys', "evidence_kind = 'bounded_manual'"],
+    ['collection_attempts', 'length(counters_json) <= 512'],
+    ['collection_attempts_counters_insert', 'json_each(NEW.counters_json)'],
+    ['collection_attempts_counters_update', 'json_each(NEW.counters_json)'],
+  ];
+  const schema = new Map(
+    (db.prepare(`SELECT name, sql FROM sqlite_master WHERE name IN
+      ('scoped_executions', 'session_role_links', 'legacy_execution_rekeys',
+       'collection_attempts', 'collection_attempts_counters_insert',
+       'collection_attempts_counters_update')`).all() as { name: string; sql: string }[])
+      .map((row) => [row.name, row.sql]),
+  );
+  if (requiredSql.some(([name, marker]) => !schema.get(name)?.includes(marker))) {
+    throw dbSchemaError('Database v4 provenance constraints are missing or outdated.');
+  }
 }

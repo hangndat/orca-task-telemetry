@@ -8,6 +8,10 @@ import { openTelemetryDatabase } from '../dist/db/index.js';
 import { MIGRATION_V1_STATEMENTS } from '../dist/db/migrations/v1.js';
 import { MIGRATION_V2_STATEMENTS } from '../dist/db/migrations/v2.js';
 import { MIGRATION_V3_STATEMENTS } from '../dist/db/migrations/v3.js';
+import {
+  scopedExecutionKey, insertScopedExecution, insertManualRoleLink,
+  insertCollectionAttempt, verifierIdentityHash,
+} from '../dist/db/run-provenance.js';
 
 function withPath(fn) {
   const dir = mkdtempSync(join(tmpdir(), 'orca-v14-db-'));
@@ -45,12 +49,10 @@ function insertSession(db, key) {
 }
 
 function insertRole(db, key, role, host, run, dispatch) {
-  db.prepare(`INSERT INTO session_role_links
-    (session_key, role, host_id, run_id, dispatch_id, method,
-      evidence_kind, verification, linked_at, linked_by)
-    VALUES (?, ?, ?, ?, ?, 'manual', 'bounded_manual', 'manual_limited',
-      '2026-10-24T00:00:00Z', 'operator')`)
-    .run(key, role, host, run, dispatch);
+  insertManualRoleLink(db, {
+    sessionKey: key, role, hostId: host, runId: run, dispatchId: dispatch,
+    linkedAt: '2026-10-24T00:00:00Z', verifier: 'operator',
+  });
 }
 
 test('V14 DB: fresh and v1/v2/v3 databases migrate to v4 and reopen idempotently', () => {
@@ -96,9 +98,9 @@ test('V14 DB: host + run + dispatch is the namespace; same raw dispatch can exis
     insertRunGraph(db, 'host-a', 'run-2', 'same-dispatch');
     insertRunGraph(db, 'host-b', 'run-1', 'same-dispatch');
     const tuples = [
-      ['host-a', 'run-1', 'orca:supervised:v2:host-a:run-1:same-dispatch'],
-      ['host-a', 'run-2', 'orca:supervised:v2:host-a:run-2:same-dispatch'],
-      ['host-b', 'run-1', 'orca:supervised:v2:host-b:run-1:same-dispatch'],
+      ['host-a', 'run-1', scopedExecutionKey('host-a', 'run-1', 'same-dispatch')],
+      ['host-a', 'run-2', scopedExecutionKey('host-a', 'run-2', 'same-dispatch')],
+      ['host-b', 'run-1', scopedExecutionKey('host-b', 'run-1', 'same-dispatch')],
     ];
     for (const [host, run, key] of tuples) {
       db.prepare(`INSERT INTO scoped_executions
@@ -106,9 +108,9 @@ test('V14 DB: host + run + dispatch is the namespace; same raw dispatch can exis
         VALUES (?, ?, ?, 'task-1', 'same-dispatch', 'same-dispatch')`).run(key, host, run);
     }
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM scoped_executions').get().n, 3);
-    assert.throws(() => db.prepare(`INSERT INTO scoped_executions
-      (execution_key, host_id, run_id, task_id, dispatch_id, raw_id)
-      VALUES ('orca:supervised:v2:duplicate', 'host-a', 'run-1', 'task-1', 'same-dispatch', 'same-dispatch')`).run());
+    assert.throws(() => insertScopedExecution(db, {
+      hostId: 'host-a', runId: 'run-1', taskId: 'task-1', dispatchId: 'same-dispatch',
+    }));
     handle.close();
   });
 });
@@ -126,9 +128,9 @@ test('V14 DB: composite foreign keys and role/null checks reject mismatched iden
     assert.throws(() => db.prepare(`INSERT INTO orca_dispatches
       (host_id, run_id, task_id, dispatch_id)
       VALUES ('host-a', 'run-1', 'missing-task', 'd')`).run());
-    assert.throws(() => db.prepare(`INSERT INTO scoped_executions
-      (execution_key, host_id, run_id, task_id, dispatch_id, raw_id)
-      VALUES ('orca:supervised:v2:wrong', 'host-a', 'run-1', 'task-1', 'dispatch-2', 'dispatch-2')`).run());
+    assert.throws(() => insertScopedExecution(db, {
+      hostId: 'host-a', runId: 'run-1', taskId: 'task-1', dispatchId: 'dispatch-2',
+    }));
     assert.throws(() => insertRole(db, 'codex:codeburn:s1', 'worker', 'host-a', 'run-1', null));
     assert.throws(() => insertRole(db, 'codex:codeburn:s1', 'coordinator', 'host-a', 'run-1', 'dispatch-1'));
     assert.throws(() => insertRole(db, 'codex:codeburn:s1', 'worker', 'host-a', 'run-1', 'dispatch-2'));
@@ -146,35 +148,36 @@ test('V14 DB: old and scoped execution keys/candidates cannot collide in either 
     const handle = openTelemetryDatabase({ dbPath: path });
     const db = handle.db;
     insertRunGraph(db);
-    db.prepare(`INSERT INTO executions VALUES
-      ('orca:supervised:v2:crafted', 'host-a', 'manual', NULL, NULL, NULL)`).run();
+    const key = scopedExecutionKey('host-a', 'run-1', 'dispatch-1');
+    db.prepare(`INSERT INTO executions VALUES (?, 'host-a', 'manual', NULL, NULL, NULL)`).run(key);
     assert.throws(() => db.prepare(`INSERT INTO scoped_executions
       (execution_key, host_id, run_id, task_id, dispatch_id, raw_id)
-      VALUES ('orca:supervised:v2:crafted', 'host-a', 'run-1', 'task-1', 'dispatch-1', 'dispatch-1')`).run());
+      VALUES (?, 'host-a', 'run-1', 'task-1', 'dispatch-1', 'dispatch-1')`).run(key));
+    db.prepare('DELETE FROM executions WHERE execution_key = ?').run(key);
     db.prepare(`INSERT INTO executions VALUES
       ('orca:host-a:dispatch-1', 'host-a', 'dispatch-1', 'run-1', 'task-1', 'dispatch-1')`).run();
-    assert.throws(() => db.prepare(`INSERT INTO scoped_executions
-      (execution_key, host_id, run_id, task_id, dispatch_id, raw_id)
-      VALUES ('orca:supervised:v2:valid', 'host-a', 'run-1', 'task-1', 'dispatch-1', 'dispatch-1')`).run());
+    assert.throws(() => insertScopedExecution(db, {
+      hostId: 'host-a', runId: 'run-1', taskId: 'task-1', dispatchId: 'dispatch-1',
+    }));
     db.prepare("DELETE FROM executions WHERE dispatch_id = 'dispatch-1'").run();
-    db.prepare(`INSERT INTO scoped_executions
-      (execution_key, host_id, run_id, task_id, dispatch_id, raw_id)
-      VALUES ('orca:supervised:v2:valid', 'host-a', 'run-1', 'task-1', 'dispatch-1', 'dispatch-1')`).run();
+    insertScopedExecution(db, {
+      hostId: 'host-a', runId: 'run-1', taskId: 'task-1', dispatchId: 'dispatch-1',
+    });
     assert.throws(() => db.prepare(`INSERT INTO executions VALUES
-      ('orca:supervised:v2:valid', 'host-z', 'manual', NULL, NULL, NULL)`).run());
+      (?, 'host-z', 'manual', NULL, NULL, NULL)`).run(key));
     assert.throws(() => db.prepare(`INSERT INTO executions VALUES
       ('orca:host-a:dispatch-1', 'host-a', 'dispatch-1', 'run-1', 'task-1', 'dispatch-1')`).run());
     db.prepare(`INSERT INTO executions VALUES
       ('orca:host-a:other', 'host-a', 'other', NULL, NULL, NULL)`).run();
     assert.throws(() => db.prepare(`UPDATE executions
-      SET execution_key = 'orca:supervised:v2:valid'
-      WHERE execution_key = 'orca:host-a:other'`).run());
+      SET execution_key = ?
+      WHERE execution_key = 'orca:host-a:other'`).run(key));
     assert.throws(() => db.prepare(`UPDATE executions
       SET dispatch_id = 'dispatch-1'
       WHERE execution_key = 'orca:host-a:other'`).run());
     assert.throws(() => db.prepare(`UPDATE scoped_executions
       SET execution_key = 'orca:supervised:v2:crafted'
-      WHERE execution_key = 'orca:supervised:v2:valid'`).run());
+      WHERE execution_key = ?`).run(key));
     handle.close();
   });
 });
@@ -200,17 +203,23 @@ test('V14 DB: attempt scopes and audit mapping reject invalid rows', () => {
     const handle = openTelemetryDatabase({ dbPath: path });
     const db = handle.db;
     insertRunGraph(db);
-    db.prepare(`INSERT INTO scoped_executions
-      (execution_key, host_id, run_id, task_id, dispatch_id, raw_id)
-      VALUES ('orca:supervised:v2:key', 'host-a', 'run-1', 'task-1', 'dispatch-1', 'dispatch-1')`).run();
+    const key = insertScopedExecution(db, {
+      hostId: 'host-a', runId: 'run-1', taskId: 'task-1', dispatchId: 'dispatch-1',
+    });
     db.prepare(`INSERT INTO legacy_execution_rekeys VALUES
-      ('orca:host-a:dispatch-1', 'orca:supervised:v2:key', 'host-a', 'run-1',
-        'dispatch-1', '2026-10-24T00:00:00Z', 'operator', 'bounded_manual')`).run();
+      ('orca:host-a:dispatch-1', ?, 'host-a', 'run-1',
+        'dispatch-1', '2026-10-24T00:00:00Z', ?, 'bounded_manual')`)
+      .run(key, verifierIdentityHash('operator'));
+    assert.throws(() => db.prepare(`UPDATE legacy_execution_rekeys
+      SET verified_by = 'terminal preview'`).run());
+    assert.throws(() => db.prepare(`UPDATE legacy_execution_rekeys
+      SET evidence_kind = 'cross_source_verified'`).run());
     assert.throws(() => db.prepare(`INSERT INTO executions VALUES
       ('orca:host-a:dispatch-1', 'host-z', 'manual', NULL, NULL, NULL)`).run());
     assert.throws(() => db.prepare(`INSERT INTO legacy_execution_rekeys VALUES
-      ('other', 'orca:supervised:v2:key', 'host-b', 'run-1',
-        'dispatch-1', '2026-10-24T00:00:00Z', 'operator', 'bounded_manual')`).run());
+      ('other', ?, 'host-b', 'run-1',
+        'dispatch-1', '2026-10-24T00:00:00Z', ?, 'bounded_manual')`)
+      .run(key, verifierIdentityHash('operator')));
     db.prepare(`INSERT INTO collection_attempts
       (source, host_id, run_id, started_at, status)
       VALUES ('orca', 'host-a', 'run-1', '2026-10-24T00:00:00Z', 'running')`).run();
@@ -221,5 +230,124 @@ test('V14 DB: attempt scopes and audit mapping reject invalid rows', () => {
       (source, provider, started_at, completed_at, status)
       VALUES ('codeburn', 'codex', '2026-10-24T00:00:00Z', NULL, 'success')`).run());
     handle.close();
+  });
+});
+
+test('V14 DB F01: canonical key is reversible and bound to the exact tuple after reopen', () => {
+  const tuple = ['host:%', 'run:a%b', 'dispatch:%:'];
+  const alternate = ['host', '%run:a%b', 'dispatch:%:'];
+  const key = scopedExecutionKey(...tuple);
+  assert.deepEqual(key.split(':').slice(3).map((part) => Buffer.from(part, 'hex').toString('utf8')), tuple);
+  assert.notEqual(key, scopedExecutionKey(...alternate));
+  assert.throws(() => scopedExecutionKey('', 'run', 'dispatch'));
+  assert.throws(() => scopedExecutionKey('host', 'run', ''));
+  assert.throws(() => scopedExecutionKey('host', 'run', '\ud800'));
+  withPath((path) => {
+    let handle = openTelemetryDatabase({ dbPath: path });
+    let db = handle.db;
+    insertRunGraph(db, ...tuple);
+    insertRunGraph(db, ...alternate);
+    assert.throws(() => db.prepare(`INSERT INTO scoped_executions
+      (execution_key, host_id, run_id, task_id, dispatch_id, raw_id)
+      VALUES (?, ?, ?, 'task-1', ?, ?)`).run('orca:supervised:v2:valid', ...tuple, tuple[2]));
+    assert.throws(() => db.prepare(`INSERT INTO scoped_executions
+      (execution_key, host_id, run_id, task_id, dispatch_id, raw_id)
+      VALUES (?, ?, ?, 'task-1', ?, ?)`).run(key, ...alternate, alternate[2]));
+    assert.equal(insertScopedExecution(db, {
+      hostId: tuple[0], runId: tuple[1], taskId: 'task-1', dispatchId: tuple[2],
+    }), key);
+    assert.throws(() => db.prepare(`UPDATE scoped_executions SET execution_key = ?
+      WHERE execution_key = ?`).run(scopedExecutionKey(...alternate), key));
+    assert.throws(() => db.prepare(`UPDATE scoped_executions SET run_id = ?
+      WHERE execution_key = ?`).run(alternate[1], key));
+    assert.throws(() => db.prepare(`INSERT INTO executions VALUES
+      (?, 'host-z', 'manual', NULL, NULL, NULL)`).run(key));
+    handle.close();
+    handle = openTelemetryDatabase({ dbPath: path });
+    db = handle.db;
+    assert.equal(db.prepare('SELECT execution_key FROM scoped_executions').get().execution_key, key);
+    assert.throws(() => insertScopedExecution(db, {
+      hostId: tuple[0], runId: tuple[1], taskId: 'task-1', dispatchId: tuple[2],
+    }));
+    handle.close();
+  });
+});
+
+test('V14 DB F02: manual evidence and journal reject sensitive and unbounded values', () => {
+  withPath((path) => {
+    let handle = openTelemetryDatabase({ dbPath: path });
+    let db = handle.db;
+    insertRunGraph(db);
+    insertSession(db, 'codex:codeburn:s1');
+    assert.throws(() => insertManualRoleLink(db, {
+      sessionKey: 'codex:codeburn:s1', role: 'coordinator', hostId: 'host-a', runId: 'run-1',
+      linkedAt: '2026-10-24T00:00:00Z', verifier: 'operator',
+      evidenceNote: 'prompt: secret token',
+    }));
+    assert.throws(() => db.prepare(`INSERT INTO session_role_links
+      (session_key, role, host_id, run_id, method, evidence_kind, verification,
+       linked_at, linked_by, evidence_note)
+      VALUES ('codex:codeburn:s1', 'coordinator', 'host-a', 'run-1', 'manual',
+       'transcript_verified', 'verified', '2026-10-24T00:00:00Z', ?, 'terminal preview')`)
+      .run(verifierIdentityHash('operator')));
+    insertRole(db, 'codex:codeburn:s1', 'coordinator', 'host-a', 'run-1', null);
+    const role = db.prepare('SELECT * FROM session_role_links').get();
+    assert.equal(role.evidence_kind, 'bounded_manual');
+    assert.equal(role.verification, 'manual_limited');
+    assert.equal(role.linked_by, verifierIdentityHash('operator'));
+    assert.equal(role.evidence_note, null);
+    assert.throws(() => db.prepare(`UPDATE session_role_links
+      SET evidence_note = ?`).run('x'.repeat(513)));
+    assert.throws(() => db.prepare(`UPDATE session_role_links
+      SET verification = 'verified'`).run());
+    assert.throws(() => db.prepare(`UPDATE session_role_links
+      SET linked_by = 'Authorization: Bearer secret'`).run());
+    assert.throws(() => insertCollectionAttempt(db, {
+      source: 'orca', hostId: 'host-a', runId: 'run-1',
+      startedAt: '2026-10-24T00:00:00Z', status: 'running',
+      errorCode: 'prompt: secret',
+    }));
+    for (const counters of [{ prompt: 'secret' }, { sessions: 100001 }, { sessions: -1 }]) {
+      assert.throws(() => insertCollectionAttempt(db, {
+        source: 'orca', hostId: 'host-a', runId: 'run-1',
+        startedAt: '2026-10-24T00:00:00Z', status: 'running', counters,
+      }));
+    }
+    const rawAttempt = db.prepare(`INSERT INTO collection_attempts
+      (source, host_id, run_id, started_at, status, error_code, counters_json)
+      VALUES ('orca', 'host-a', 'run-1', '2026-10-24T00:00:00Z', 'running', ?, ?)`);
+    for (const payload of ['{"prompt":"secret"}', '{"sessions":1,"sessions":2}',
+      '{"sessions":"1"}', '{"sessions":100001}', '{"sessions":1,"preview":0}',
+      JSON.stringify({ sessions: 1, transcript: 'x'.repeat(513) }),
+      `{${' '.repeat(513)}}`, '{invalid']) {
+      assert.throws(() => rawAttempt.run('source_error', payload));
+    }
+    assert.throws(() => rawAttempt.run('Authorization: Bearer secret', '{"sessions":1}'));
+    insertCollectionAttempt(db, {
+      source: 'orca', hostId: 'host-a', runId: 'run-1',
+      startedAt: '2026-10-24T00:00:00Z', status: 'running', counters: { sessions: 1 },
+    });
+    assert.throws(() => db.prepare(`UPDATE collection_attempts
+      SET counters_json = '{"credential":"secret"}'`).run());
+    handle.close();
+    handle = openTelemetryDatabase({ dbPath: path });
+    assert.deepEqual(handle.db.prepare('SELECT counters_json FROM collection_attempts').all()
+      .map((row) => row.counters_json), ['{"sessions":1}']);
+    assert.equal(handle.db.prepare('SELECT linked_by FROM session_role_links').get().linked_by,
+      verifierIdentityHash('operator'));
+    handle.close();
+  });
+});
+
+test('V14 DB: reopen refuses a draft v4 missing privacy constraints', () => {
+  withPath((path) => {
+    const handle = openTelemetryDatabase({ dbPath: path });
+    handle.db.exec('DROP TRIGGER collection_attempts_counters_update');
+    handle.close();
+    assert.throws(() => openTelemetryDatabase({ dbPath: path }),
+      /provenance constraints are missing or outdated/);
+    const raw = new DatabaseSync(path);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 4);
+    raw.close();
   });
 });
