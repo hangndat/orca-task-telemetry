@@ -13,6 +13,7 @@ import {
   formatUnmappedReportText,
 } from '../reports/unmapped.js';
 import type { RouteResult } from './router.js';
+import { buildTraceReport, formatTraceReportText, openTraceReportContext } from '../reports/trace.js';
 
 export type ReportSubcommand = 'tasks' | 'task' | 'project' | 'hierarchy' | 'unmapped';
 
@@ -107,4 +108,19 @@ export async function runReportTask(
   } finally {
     ctx.close();
   }
+}
+
+export async function runReportTrace(
+  issueArg: string,
+  rest: string[],
+  options: { json: boolean; cwd: string },
+): Promise<RouteResult> {
+  if (rest.length > 0) throw usageError(`Unexpected arguments: ${rest.join(' ')}`,
+    'Usage: orca-telemetry report trace <issue-id>');
+  const ctx = await openTraceReportContext(options.cwd);
+  try {
+    const data = buildTraceReport(ctx, issueArg);
+    if (options.json) return { kind: 'ok', data };
+    return { kind: 'text', write: () => process.stdout.write(formatTraceReportText(data)) };
+  } finally { ctx.close(); }
 }

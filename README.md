@@ -6,7 +6,7 @@
 GitHub Project → GitHub Issue → Orca (read-only) → CodeBurn sessions → SQLite → báo cáo CLI
 ```
 
-Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, `init`, `collect`, `link`, `report`). **V1.1 (#44)** thêm `Issue.parent` trong schema SQLite v2 và `report hierarchy` (direct/inclusive cost, parent ngoài Project là ranh giới). Chưa phát hành npm công khai; V1.1 chờ independent Codex review trên exact SHA.
+Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, `init`, `collect`, `link`, `report`). **V1.1 (#44)** thêm `Issue.parent` trong schema SQLite v2 và `report hierarchy`. **V1.3 (#46)** có liên kết trace thủ công, thu thập lại bằng chứng PR và báo cáo trace; acceptance tích hợp live và review độc lập vẫn riêng. Chưa phát hành npm công khai.
 
 ## Điều kiện tiên quyết (đã xác minh trên máy phát triển)
 
@@ -62,6 +62,10 @@ orca-telemetry report task OWNER/REPO#123 --json
 orca-telemetry report project --json
 orca-telemetry report hierarchy --json
 orca-telemetry report unmapped --json
+orca-telemetry trace link-pr --issue OWNER/REPO#123 --pr OWNER/REPO#7 --provider codex --session '<session-uuid>' --json
+orca-telemetry trace link-commit --pr OWNER/REPO#7 --sha '<full-40-hex-oid>' --provider codex --session '<session-uuid>' --json
+orca-telemetry trace collect --json
+orca-telemetry report trace OWNER/REPO#123 --json
 ```
 
 `report hierarchy` cần `collect` đã ghi `parent` cho mọi Issue trong Project; JSON/text chỉ đọc DB (không ghi GitHub). Parent ngoài Project hiện trong JSON qua `parentStatus: outside_project`, `parentIssueNodeId` và `outsideProjectParentIssueNodeId`; text dùng `owner/repo#number` cho mỗi Issue.
@@ -69,6 +73,14 @@ orca-telemetry report unmapped --json
 - **`init` / `collect` / `report`**: chỉ đọc GitHub/Orca/CodeBurn; không commit, không sửa `AGENTS.md`, `.cursor/`, lockfile hay Project fields.
 - **`link`**: ghi ánh xạ Issue ↔ session trong DB cục bộ; từ chối xung đột (`attribution_link_conflict`).
 - **`collect` lần 2**: upsert idempotent — tổng usage trong báo cáo không đổi (đã kiểm bằng fixture E2E).
+
+### PR và commit trace (V1.3)
+
+`trace link-pr` yêu cầu session đã được gắn thủ công vào Issue, và GitHub `closingIssuesReferences` chứa đúng Issue node ID sau khi đọc hết trang. `trace link-commit` yêu cầu link PR trước đó và full OID hiện trong `PullRequest.commits`. Link chỉ ghi vào SQLite cục bộ; không tự suy session từ branch, timestamp hay commit message. Một session có thể được gắn vào nhiều PR hoặc commit khi người dùng chủ động chọn từng đường.
+
+`trace collect` đọc tuần tự mỗi PR node ID đã lưu đúng một lần, cập nhật metadata và trạng thái quan hệ Issue/commit. Đọc đầy đủ có thể chuyển quan hệ thành `stale`; lỗi quyền, rate limit hoặc trang chưa hoàn chỉnh chuyển thành `unknown` và giữ `lastVerifiedAt` cùng link audit. Không gọi GitHub write API, không thay session link hoặc snapshot CodeBurn. JSON trả `pulls`, số PR đã xác minh/chưa rõ và `exitCode`; mã 4 khi mọi PR lỗi, 5 khi một phần lỗi, 0 khi thành công hoặc chưa lưu PR nào.
+
+`report trace <issue-url|issue-number|node-id> [--json]` chỉ đọc SQLite cục bộ. `issueSessions` và `issueUsage` gồm mọi session đã link với Issue; mỗi PR chỉ gồm session được link thủ công với PR đó, mỗi commit chỉ gồm link commit thủ công. Totals khử trùng theo session trong từng phạm vi; **không cộng các PR/commit để ra tổng Issue**. JSON giữ `cost.amountUsd: null`/`kind: unknown` khi thiếu snapshot hoặc CodeBurn chưa biết cost; `knownAmountUsd` chỉ là phần ước tính đã biết. Cost `estimated_api_equivalent` không phải billing thực tế. `orcaReference: unknown` khi chưa xác minh nối Orca↔CodeBurn. Trạng thái quan hệ phản ánh lần đọc hết trang, **không** chứng minh snapshot GitHub nguyên tử tại một thời điểm. Text in cảnh báo stale/unknown và giới hạn cộng tổng.
 
 ### Exit codes và JSON
 
@@ -102,7 +114,7 @@ Ví dụ đã kiểm chứng (live, local evidence): user gán session Claude `a
 | Lệnh | Phạm vi |
 | --- | --- |
 | `pnpm test` | Unit + integration fixture (Vitest), gồm `tests/e2e.test.mjs` (stub `gh`/`orca`/`codeburn`). |
-| `pnpm test:pack` | Archive, cài prefix tạm, `--help` / `doctor` — **gọi riêng**; không chạy trong `pnpm test`. |
+| `pnpm test:pack` | Archive, cài prefix tạm, `--help` / `doctor` — **gọi riêng**; smoke V1.3 installed CLI cần chạy thêm. |
 
 Bằng chứng fixture vs live: [docs/mvp-validation.md](docs/mvp-validation.md).
 
