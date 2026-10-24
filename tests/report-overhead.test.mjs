@@ -273,12 +273,14 @@ test('V14-05: attempt status/freshness precedence — partial_source before stal
   }
 });
 
-test('V14-06: no N+1 — a fixed small number of statements regardless of session count (1000 sessions, 50 Dispatches)', () => {
+test('V14-06: 1000 sessions across 101 Dispatches keep report SQL bounded and Run/host scopes separate', () => {
   const fixture = setupOverheadDb();
   try {
     const { db } = fixture;
-    const dispatchIds = Array.from({ length: 50 }, (_, i) => `dispatch-${i}`);
+    const dispatchIds = Array.from({ length: 101 }, (_, i) => `dispatch-${i}`);
     insertRunGraph(db, 'host-a', 'run-1', dispatchIds);
+    insertRunGraph(db, 'host-a', 'run-2', ['dispatch-0']);
+    insertRunGraph(db, 'host-b', 'run-1', ['dispatch-0']);
     insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
       snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
     linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
@@ -286,27 +288,47 @@ test('V14-06: no N+1 — a fixed small number of statements regardless of sessio
       const key = `claude:codeburn:w${i}`;
       insertSession(db, { key, provider: 'claude', rawId: `w${i}`,
         snapshot: { observedAt: isoMinus(NOW, 100), cost: 0.01 } });
-      linkRole(db, { key, role: 'worker', host: 'host-a', run: 'run-1', dispatch: dispatchIds[i % 50] });
+      linkRole(db, { key, role: 'worker', host: 'host-a', run: 'run-1', dispatch: dispatchIds[i % 101] });
+    }
+    for (const [host, run, key] of [
+      ['host-a', 'run-2', 'claude:codeburn:other-run'],
+      ['host-b', 'run-1', 'claude:codeburn:other-host'],
+    ]) {
+      insertSession(db, { key, provider: 'claude', rawId: key,
+        snapshot: { observedAt: isoMinus(NOW, 100), cost: 0.25 } });
+      linkRole(db, { key, role: 'worker', host, run, dispatch: 'dispatch-0' });
+      freshAttempts(db, host, run);
     }
     freshAttempts(db, 'host-a', 'run-1');
 
     const originalPrepare = db.prepare.bind(db);
-    let calls = 0;
-    db.prepare = (sql) => {
-      calls += 1;
-      return originalPrepare(sql);
-    };
-    let report;
-    try {
-      report = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
-    } finally {
-      db.prepare = originalPrepare;
+    function countedReport(host, run) {
+      let calls = 0;
+      db.prepare = (sql) => { calls += 1; return originalPrepare(sql); };
+      try {
+        return { report: buildOverheadReport(ctx(db), host, run, NOW), calls };
+      } finally {
+        db.prepare = originalPrepare;
+      }
     }
+    const large = countedReport('host-a', 'run-1');
+    const sameHost = countedReport('host-a', 'run-2');
+    const otherHost = countedReport('host-b', 'run-1');
 
-    assert.equal(report.classifiedSessionCount, 1000);
-    assert.equal(report.workers.sessionCount, 999);
-    assert.equal(report.workers.dispatchCount, 50);
-    assert.ok(calls <= 10, `expected a bounded statement count, got ${calls}`);
+    assert.equal(large.report.classifiedSessionCount, 1000);
+    assert.equal(large.report.workers.sessionCount, 999);
+    assert.equal(large.report.workers.dispatchCount, 101);
+    assert.equal(large.report.workers.byProvider[0].tokens.input, 999 * 8);
+    assert.ok(Math.abs(large.report.workers.knownCostUsd - 9.99) < 1e-9);
+    assert.equal(sameHost.report.classifiedSessionCount, 1);
+    assert.equal(otherHost.report.classifiedSessionCount, 1);
+    assert.equal(sameHost.report.workers.dispatchCount, 1);
+    assert.equal(otherHost.report.workers.dispatchCount, 1);
+    assert.equal(sameHost.report.workers.knownCostUsd, 0.25);
+    assert.equal(otherHost.report.workers.knownCostUsd, 0.25);
+    assert.equal(large.calls, sameHost.calls, 'report statements must not grow with row count');
+    assert.equal(large.calls, otherHost.calls, 'report statements must not grow across host scope');
+    assert.ok(large.calls <= 50, `expected <=50 report statements, got ${large.calls}`);
   } finally {
     fixture.close();
   }
