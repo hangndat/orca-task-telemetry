@@ -509,6 +509,28 @@ Chỉ các argv sau (cùng binary `orca`, tùy chọn `--json`, `--pairing-code`
 - `run-show` không có host. Host được chọn tường minh cho nguồn CLI local, rồi đối chiếu với `dispatch.host_scope.hostId` và `worker.projection.host.id`; Run rỗng không đủ chứng cứ host nên `partial`. `runtimeId` chỉ định danh runtime, không dùng làm host key. Chưa kiểm remote selector/host nhiều máy; adapter này không đưa remote vào DB và integration thuộc coordinator.
 - Chạy trực tiếp adapter đọc Run live trên host local: `complete=true`, 7 Task, 7 Dispatch, 7 worker, 1 trang, không có error code tại thời điểm kiểm. Đây chỉ là chứng cứ Orca metadata; không xác minh liên kết CodeBurn session, không có DB/CLI integration và không thay volume fixture.
 
+### V14-HOST-SPEC — khảo sát định danh host nguồn bền vững (Orca 1.4.237, 2026-10-24)
+
+- `orca host list --help`/`--json` — lệnh **chưa có trong bảng allowlist/gaps phía trên**, bổ sung tại đây. Live: cho `kind: "local"` JSON trả thêm `machineName` (tên máy hiển thị OS, đổi được) và `platform` (`"darwin"`); row `kind: "ssh"` đã kết nối thật (`conanphong`, `connected: true`) **không** có field `platform` trong JSON dù help ghi "SSH rows include the detected remote platform after that target has connected"; row `kind: "environment"` cũng không có `platform`. Không có lệnh Orca nào khác (`host show`/`host id`) đọc hardware ID; `status --json` chỉ trả `target.kind: "local"`, không hostname/UUID. Xác nhận lại đúng giới hạn mà `V14-COLLECT-2.md` đã ghi: Orca 1.4.237 không cấp machine ID bền vững qua CLI.
+- **macOS `IOPlatformUUID` (live, xác minh thật trên máy chạy task này — Darwin 27.0.0 / macOS 27.0 build 26A428):**
+  ```sh
+  ioreg -rd1 -c IOPlatformExpertDevice   # → thuộc tính IOPlatformUUID
+  system_profiler SPHardwareDataType     # → Hardware UUID
+  ```
+  Hai lệnh độc lập của Apple trả **cùng giá trị UUID** cho máy này trong cùng lần boot; giá trị thô **không ghi vào tài liệu này** theo quy tắc không lưu định danh phần cứng. `kIOPlatformUUIDKey` (chuỗi `"IOPlatformUUID"`) là hằng IOKit; không tìm được trang Apple Developer chính thức mô tả riêng key này trong lần tra cứu — bằng chứng chính là output `ioreg`/`system_profiler` thật, đối chiếu tên hằng trong header mã nguồn mở Apple ([`IOKitKeys.h`](https://newosxbook.com/code/xnu-3247.1.106/iokit/IOKit/IOKitKeys.h.auto.html)). Không có Node.js stdlib API đọc trực tiếp; phải shell-out `ioreg`/`system_profiler` (đọc output text đã biết format) — không cần native binding/dependency mới.
+- **Linux `/etc/machine-id`:** máy chạy task này là Darwin, không có host Linux thật; khảo sát dừng ở tài liệu chính thức + kiểm live bằng container Docker (đã thực hiện trước khi nhận chỉ đạo coordinator dừng mở thêm container trong task này; không chạy thêm sau đó):
+  - [`machine-id(5)` — man7](https://man7.org/linux/man-pages/man5/machine-id.5.html): file 32 ký tự hex thường, không toàn số 0; "phải được coi là confidential"; khuyến nghị dùng `sd_id128_get_machine_app_specific()` để lấy ID **theo ứng dụng** thay vì dùng trực tiếp machine ID thô. Cùng man page: image OS dựng một lần dùng nhiều máy (container, cloud image) "nên" để `/etc/machine-id` **thiếu hoặc rỗng** trong generic image để tránh trùng ID, vì systemd sẽ tự sinh ID mới khi boot thật.
+  - [`sd_id128_get_machine_app_specific(3)` — man7](https://man7.org/linux/man-pages/man3/sd_id128_get_machine_app_specific.3.html): HMAC với machine ID làm khóa và app ID làm dữ liệu, kết quả định dạng UUID v4-compatible, deterministic trên cùng máy + cùng app ID — đúng mẫu one-way/app-scoped derivation.
+  - **Kiểm live bằng container (Docker Desktop, không phải bare-metal Linux — ghi rõ giới hạn phạm vi):**
+    ```sh
+    docker run --rm alpine:3 sh -c 'cat /etc/machine-id'        # → No such file or directory (Alpine dùng OpenRC, không có file)
+    docker run --rm debian:12-slim sh -c 'cat /etc/machine-id'  # → No such file or directory
+    docker run --rm ubuntu:24.04 sh -c 'ls -la /etc/machine-id; wc -c /etc/machine-id'
+      # → file tồn tại, kích thước 0 byte (rỗng) — đúng khuyến nghị man page cho generic image
+    ```
+    Xác nhận thật (không chỉ trích tài liệu): ba ảnh container phổ biến đi kèm `/etc/machine-id` **thiếu hoặc rỗng**, không phải giá trị 32-hex đã khởi tạo — tình huống "missing" trong thiết kế refusal là trường hợp phổ biến thật, không phải hiếm. **Gap còn lại:** chưa xác minh live trường hợp dương tính — một host/VM Linux thật đã boot qua systemd và có `/etc/machine-id` 32-hex đã khởi tạo (ví dụ Orca server chạy trên Linux VM); môi trường task này không có sẵn và theo chỉ đạo coordinator không mở thêm container để đóng gap này — ghi là chưa chạy, không giả định.
+- **Kết luận khảo sát:** cả hai nguồn OS-level đọc được bằng lệnh có sẵn/`node:crypto` stdlib, không cần dependency mới, nhưng chưa phải "fact đã xác minh end-to-end": macOS có bằng chứng dương tính live (một máy, một lần đọc, chưa qua reboot); Linux có bằng chứng âm tính live (container thiếu/rỗng) và tài liệu man page cho đường dẫn đề xuất, nhưng không có bằng chứng dương tính live trên host Linux thật đã boot. Thiết kế chi tiết và ma trận nghiệm thu ở `docs/V1-COORDINATOR-OVERHEAD-SPEC.md` § "Định danh host nguồn cho `target.kind=local`".
+
 ## Contracts & boundaries
 
 Module: `src/contracts.ts` (T05). Unknown trong contract luôn là `null` (không dùng `0` hay `""` thay unknown). Trường optional/thiếu ở nguồn → `T | null` và phải có key (collector gán `null`).
