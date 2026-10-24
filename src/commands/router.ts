@@ -14,6 +14,7 @@ import { runLinkRole } from './link-role.js';
 import { runUnlinkRole } from './unlink-role.js';
 import { runReport, runReportOverhead, runReportTask, runReportTrace } from './report.js';
 import { runTrace } from './trace.js';
+import { runPreviewOverhead } from './preview-overhead.js';
 
 const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'trace', 'project', 'hierarchy', 'unmapped', 'overhead']);
 
@@ -85,6 +86,17 @@ export async function routeCommand(
       json,
       cwd: options.cwd ?? process.cwd(),
     });
+  }
+
+  if (command === 'preview') {
+    const [sub, ...subRest] = restPositionals;
+    if (sub !== 'overhead') {
+      throw usageError(
+        sub === undefined ? 'Missing preview subcommand.' : 'Unknown preview subcommand.',
+        'Usage: orca-telemetry preview overhead --run <run-id> --roles <roles.json> [--json]',
+      );
+    }
+    return runPreviewOverhead(subRest, { json });
   }
 
   if (command === 'projects') {

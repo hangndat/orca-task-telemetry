@@ -10,6 +10,7 @@ const IMPLEMENTED = new Set([
   'unlink-role',
   'report',
   'trace',
+  'preview',
 ]);
 
 const TOP_LEVEL = [
@@ -22,6 +23,7 @@ const TOP_LEVEL = [
   { name: 'unlink-role', summary: 'Remove an explicit session role link (durable audit)' },
   { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
   { name: 'trace', summary: 'Link and refresh verified PR or commit evidence' },
+  { name: 'preview', summary: 'Read-only in-memory UAT previews (nothing persisted)' },
 ];
 
 const REPORT_SUBCOMMANDS = [
@@ -97,6 +99,21 @@ export function commandHelpText(command: string): string {
       'Selectors must match the existing link exactly. Writes a durable audit of the',
       'removed link and both verifiers (no raw evidence/prompt); delete+audit is atomic.',
       'Unrelated Issue links are unaffected.',
+    ].join('\n') + '\n';
+  }
+  if (command === 'preview') {
+    return [
+      'orca-task-telemetry preview — read-only, in-memory UAT previews',
+      '',
+      'Usage:',
+      '  orca-telemetry preview overhead --run <run-id> --roles <roles.json> [--json]',
+      '',
+      'Reads the Orca Run and CodeBurn sessions (read-only) and sums only the sessions',
+      'listed in the roles file: {"schemaVersion":1,"entries":[{"role":"coordinator|worker",',
+      '"provider":"claude|codex","sessionId":"<raw-id>","dispatchId":"<worker only>"}]}.',
+      'Mappings are operator-confirmed, exact-match only, never inferred. Writes nothing',
+      '(no telemetry DB). Coverage is unknown; Run-wide ratios are always null.',
+      'See docs/UAT-PREVIEW.md.',
     ].join('\n') + '\n';
   }
   if (command === 'trace') {
