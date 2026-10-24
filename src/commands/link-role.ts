@@ -11,8 +11,8 @@ import type { RouteResult } from './router.js';
 const EVIDENCE_NOTES = ['ids_visible_same_session', 'operator_observed_same_session'] as const;
 
 type LinkRoleArgs = {
-  host: string;
-  run: string;
+  host?: string;
+  run?: string;
   role: RoleLinkRole;
   provider: UsageProvider;
   session: string;
@@ -54,10 +54,17 @@ function parseLinkRoleArgs(rest: string[]): LinkRoleArgs {
   const evidenceNote = v['evidence-note'] as string | undefined;
   const confirmSameSession = v['confirm-same-session'];
 
-  if (!host) throw usageError('Missing --host.', 'Pass the Orca host id this Run was collected from.');
-  if (!run) throw usageError('Missing --run.', 'Pass the Orca Run id.');
+  if (host !== undefined && host.length === 0) {
+    throw usageError('Empty --host.', 'Pass an exact host ID or omit --host to let it resolve uniquely.');
+  }
+  if (run !== undefined && run.length === 0) {
+    throw usageError('Empty --run.', 'Pass an exact Run ID or omit --run to let it resolve uniquely.');
+  }
   if (role !== 'coordinator' && role !== 'worker') {
     throw usageError('Missing or invalid --role.', 'Use --role coordinator or worker.');
+  }
+  if (role === 'coordinator' && !run) {
+    throw usageError('Missing --run.', 'Coordinator role links require --run.');
   }
   if (!provider || !(USAGE_PROVIDERS as readonly string[]).includes(provider)) {
     throw usageError('Missing or invalid --provider.', 'Use --provider claude or codex.');

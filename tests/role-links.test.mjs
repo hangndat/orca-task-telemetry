@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -548,4 +548,194 @@ test('role-links: linking a role never writes to Issue session_links or issues t
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM issues').get().n, beforeIssues);
 
   cleanup(ctx);
+});
+
+test('V1.4: coordinator --host inference resolves only an exact unique Run; 0/2 hosts fail with safe candidates, no mutation', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  const hostileHost = 'host-b\u001b[31m\nnext\u0085';
+  const safeHost = JSON.stringify(hostileHost).replace('\u0085', '\\u0085');
+  seedSession(db, 's-coord-infer-1');
+  seedSession(db, 's-coord-infer-2');
+  ctx.handle.close();
+
+  const zero = runCli(ctx.repo, ctx.env,
+    'link-role', '--run', 'missing-run', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-coord-infer-1', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(zero.status, 2);
+  assert.equal(JSON.parse(zero.stdout).error.code, 'role_link_run_not_found');
+  assert.match(JSON.parse(zero.stdout).error.message, /candidate host IDs: \[\]/);
+
+  const checkAfterZero = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  assert.equal(checkAfterZero.db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 0);
+  insertRunGraph(checkAfterZero.db, 'host-a', 'run-infer', null);
+  checkAfterZero.close();
+
+  const one = runCli(ctx.repo, ctx.env,
+    'link-role', '--run', 'run-infer', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-coord-infer-1', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(one.status, 0, one.stderr);
+  const oneBody = JSON.parse(one.stdout.trim());
+  assert.equal(oneBody.data.outcome, 'created');
+  assert.equal(oneBody.data.link.hostId, 'host-a');
+
+  const addSecondHost = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  insertRunGraph(addSecondHost.db, hostileHost, 'run-infer', null);
+  addSecondHost.close();
+
+  const before = readFileSync(ctx.dbPath);
+  const two = runCli(ctx.repo, ctx.env,
+    'link-role', '--run', 'run-infer', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-coord-infer-2', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(two.status, 2);
+  const twoError = JSON.parse(two.stdout).error;
+  assert.equal(twoError.code, 'role_link_run_ambiguous');
+  assert.ok(twoError.message.includes(`["host-a",${safeHost}]`));
+  assert.doesNotMatch(two.stdout, /[\u001b\u0085]|\nnext/);
+  assert.deepEqual(readFileSync(ctx.dbPath), before);
+
+  const explicit = runCli(ctx.repo, ctx.env,
+    'link-role', '--run', 'run-infer', '--host', 'host-a', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-coord-infer-2', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(explicit.status, 0, explicit.stderr);
+  assert.equal(JSON.parse(explicit.stdout).data.link.hostId, 'host-a');
+
+  cleanup(ctx);
+});
+
+test('V1.4: worker --host/--run inference over orca_dispatches requires exactly one tuple; explicit selectors never fall back', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  insertRunGraph(db, 'host-a', 'run-1', 'dup-dispatch');
+  insertRunGraph(db, 'host-a', 'run-2', 'dup-dispatch');
+  insertRunGraph(db, 'host-b', 'run-1', 'dup-dispatch');
+  insertRunGraph(db, 'host-a', 'run-1', 'unique-dispatch');
+  seedSession(db, 's-worker-infer-1');
+  seedSession(db, 's-worker-infer-2');
+  seedSession(db, 's-worker-infer-3');
+  seedSession(db, 's-worker-infer-4');
+  ctx.handle.close();
+
+  // Dispatch alone with no selectors matches three tuples: ambiguous, no mutation.
+  const ambiguousAll = runCli(ctx.repo, ctx.env,
+    'link-role', '--role', 'worker', '--dispatch', 'dup-dispatch',
+    '--provider', 'codex', '--session', 's-worker-infer-1', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(ambiguousAll.status, 2);
+  assert.equal(JSON.parse(ambiguousAll.stdout).error.code, 'role_link_dispatch_ambiguous');
+
+  // Narrowing with --host alone still leaves two Runs under host-a: ambiguous.
+  const ambiguousHost = runCli(ctx.repo, ctx.env,
+    'link-role', '--role', 'worker', '--dispatch', 'dup-dispatch', '--host', 'host-a',
+    '--provider', 'codex', '--session', 's-worker-infer-1', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(ambiguousHost.status, 2);
+  assert.equal(JSON.parse(ambiguousHost.stdout).error.code, 'role_link_dispatch_ambiguous');
+
+  // Narrowing with --run alone resolves uniquely to host-a/run-2.
+  const uniqueByRun = runCli(ctx.repo, ctx.env,
+    'link-role', '--role', 'worker', '--dispatch', 'dup-dispatch', '--run', 'run-2',
+    '--provider', 'codex', '--session', 's-worker-infer-1', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(uniqueByRun.status, 0, uniqueByRun.stderr);
+  const uniqueByRunBody = JSON.parse(uniqueByRun.stdout.trim());
+  assert.equal(uniqueByRunBody.data.link.hostId, 'host-a');
+  assert.equal(uniqueByRunBody.data.link.runId, 'run-2');
+
+  // A dispatch that is unique by itself resolves with no host/run given.
+  const uniqueByDispatch = runCli(ctx.repo, ctx.env,
+    'link-role', '--role', 'worker', '--dispatch', 'unique-dispatch',
+    '--provider', 'codex', '--session', 's-worker-infer-2', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(uniqueByDispatch.status, 0, uniqueByDispatch.stderr);
+  assert.equal(JSON.parse(uniqueByDispatch.stdout).data.link.hostId, 'host-a');
+  assert.equal(JSON.parse(uniqueByDispatch.stdout).data.link.runId, 'run-1');
+
+  // Unknown dispatch with no selectors: 0 candidates, not ambiguous, not a default pick.
+  const zero = runCli(ctx.repo, ctx.env,
+    'link-role', '--role', 'worker', '--dispatch', 'missing-dispatch',
+    '--provider', 'codex', '--session', 's-worker-infer-3', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(zero.status, 2);
+  assert.equal(JSON.parse(zero.stdout).error.code, 'role_link_dispatch_not_found');
+  assert.match(JSON.parse(zero.stdout).error.message, /candidate tuples: \[\]/);
+
+  // Explicit --host/--run name a real Run that does not contain the given
+  // dispatch; this must fail outright, never silently resolving to a
+  // different real tuple that *does* contain it.
+  const wrongExplicit = runCli(ctx.repo, ctx.env,
+    'link-role', '--role', 'worker', '--dispatch', 'unique-dispatch',
+    '--host', 'host-b', '--run', 'run-1',
+    '--provider', 'codex', '--session', 's-worker-infer-4', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(wrongExplicit.status, 2);
+  assert.equal(JSON.parse(wrongExplicit.stdout).error.code, 'role_link_dispatch_unknown');
+
+  const finalDb = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  assert.equal(finalDb.db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 2);
+  finalDb.close();
+
+  cleanup(ctx);
+});
+
+test('V1.4: selection and the role-link write run under one BEGIN IMMEDIATE, so a concurrent writer cannot change candidate cardinality mid-resolve', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  insertRunGraph(db, 'host-a', 'run-1', 'race-dispatch');
+  seedSession(db, 's-race-infer-1');
+  ctx.handle.close();
+
+  const connA = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  const connB = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+
+  // Writer A holds the write lock while a second Run with the same raw
+  // dispatch ID would make resolution ambiguous. Writer B's attempt to
+  // resolve+link by --dispatch alone must not interleave with A's write; it
+  // either sees the pre-A state (one tuple) or is rejected as busy/locked —
+  // never a result computed from a stale, partially-written candidate set.
+  connA.db.exec('BEGIN IMMEDIATE');
+  try {
+    assert.throws(() => {
+      linkSessionToRole(connB.db, {
+        provider: 'codex', rawSessionId: 's-race-infer-1', role: 'worker',
+        dispatchId: 'race-dispatch', verifier: 'operatorB', linkedAt: '2026-10-24T00:00:00Z',
+      });
+    }, /locked|busy/i);
+    connA.db.prepare('INSERT OR IGNORE INTO orca_runs VALUES (?, ?, ?, ?)')
+      .run('host-a', 'run-2', '2026-10-24T00:00:00Z', '1.4.237');
+    connA.db.prepare(`INSERT INTO orca_tasks (host_id, run_id, task_id) VALUES (?, ?, ?)`)
+      .run('host-a', 'run-2', 'task-1');
+    connA.db.prepare(`INSERT INTO orca_dispatches
+      (host_id, run_id, task_id, dispatch_id) VALUES (?, ?, ?, ?)`)
+      .run('host-a', 'run-2', 'task-1', 'race-dispatch');
+    connA.db.exec('COMMIT');
+  } catch (err) {
+    connA.db.exec('ROLLBACK');
+    throw err;
+  }
+
+  // Now that A committed a second tuple, resolution by --dispatch alone is
+  // genuinely ambiguous: B's retry must fail, not silently pick one.
+  throwsCode(() => linkSessionToRole(connB.db, {
+    provider: 'codex', rawSessionId: 's-race-infer-1', role: 'worker',
+    dispatchId: 'race-dispatch', verifier: 'operatorB', linkedAt: '2026-10-24T00:01:00Z',
+  }), 'role_link_dispatch_ambiguous');
+
+  assert.equal(connB.db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 0);
+
+  connA.close();
+  connB.close();
+  cleanup(ctx);
+});
+
+test('V1.4: link-role help documents optional selector inference for coordinator and worker', async () => {
+  const { commandHelpText } = await import('../dist/commands/help.js');
+  const text = commandHelpText('link-role');
+  assert.match(text, /--run <run-id> \[--host <host-id>\] --role coordinator/);
+  assert.match(text, /--dispatch <dispatch-id> \[--host <host-id>\] \[--run <run-id>\]/);
+  assert.match(text, /exact filter, never a hint/);
 });
