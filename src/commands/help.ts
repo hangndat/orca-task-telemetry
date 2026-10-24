@@ -8,6 +8,7 @@ const IMPLEMENTED = new Set([
   'link',
   'report',
   'writeback',
+  'trace',
 ]);
 
 const TOP_LEVEL = [
@@ -18,11 +19,13 @@ const TOP_LEVEL = [
   { name: 'link', summary: 'Link a CodeBurn session to a GitHub issue' },
   { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
   { name: 'writeback', summary: 'Preview or explicitly apply GitHub Project NUMBER field writeback' },
+  { name: 'trace', summary: 'Link and refresh verified PR or commit evidence' },
 ];
 
 const REPORT_SUBCOMMANDS = [
   { name: 'tasks', summary: 'Report across issues in the selected project' },
   { name: 'task <issue-id>', summary: 'Report for one issue (node id, URL, or owner/repo#n)' },
+  { name: 'trace <issue-id>', summary: 'Issue→session→PR→commit evidence and usage' },
   { name: 'project', summary: 'Project-level totals with deduped linked sessions' },
   { name: 'hierarchy', summary: 'Direct and inclusive cost through native Issue parents' },
   { name: 'unmapped', summary: 'Sessions without an Issue link and link suggestions' },
@@ -52,6 +55,21 @@ export function rootHelpText(): string {
 }
 
 export function commandHelpText(command: string): string {
+  if (command === 'trace') {
+    return [
+      'orca-task-telemetry trace — manual GitHub PR/commit links and explicit refresh',
+      '',
+      'Usage:',
+      '  orca-telemetry trace link-pr --issue <issue-url|owner/repo#n> --pr <pr-url|owner/repo#n> --provider claude|codex --session <id> [--json]',
+      '  orca-telemetry trace link-commit --pr <pr-url|owner/repo#n> --sha <full-oid> --provider claude|codex --session <id> [--json]',
+      '  orca-telemetry trace collect [--json]',
+      '',
+      'Requires a prior manual session→Issue link; commit links also require a manual session→PR link.',
+      'GitHub closing Issue and PR commit lists must be fully paged before linking.',
+      'collect reads stored PR node IDs sequentially; partial reads retain audit links and lastVerifiedAt.',
+      'Pagination is not an atomic GitHub snapshot.',
+    ].join('\n') + '\n';
+  }
   if (command === 'report') {
     const lines = [
       `orca-task-telemetry report — usage reports (read-only local DB)`,
@@ -64,6 +82,7 @@ export function commandHelpText(command: string): string {
     for (const sub of REPORT_SUBCOMMANDS) {
       lines.push(`  ${sub.name.padEnd(22)} ${sub.summary}`);
     }
+    lines.push('', 'trace reads only the local database; cost is estimated API equivalent or unknown.');
     return `${lines.join('\n')}\n`;
   }
   if (command === 'projects') {

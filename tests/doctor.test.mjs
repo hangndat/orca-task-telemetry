@@ -167,15 +167,24 @@ test('T32-SEC-F02: doctor CLI does not create WAL/SHM in telemetry home', () => 
   rmSync(appHome, { recursive: true, force: true });
 });
 
+/** Cold CI runners download node@24.0.0 via npx; bound above Vitest default 5s. */
+const NODE24_READONLY_VITEST_TIMEOUT_MS = 120_000;
+const NODE24_READONLY_CHILD_TIMEOUT_MS = 115_000;
+
 function runNodeReadonlySmoke(nodeSpecifier) {
   const script = resolve(distDir, 'helpers/node24-readonly-smoke.mjs');
   return execFileSync('npx', ['--yes', nodeSpecifier, script], {
     encoding: 'utf8',
     cwd: resolve(distDir, '..'),
+    timeout: NODE24_READONLY_CHILD_TIMEOUT_MS,
   }).trim();
 }
 
-test('read-only native helper on Node 24.0.0', () => {
-  const out = runNodeReadonlySmoke('node@24.0.0');
-  assert.equal(out.split('\n').pop(), 'ok');
-});
+test(
+  'read-only native helper on Node 24.0.0',
+  { timeout: NODE24_READONLY_VITEST_TIMEOUT_MS },
+  () => {
+    const out = runNodeReadonlySmoke('node@24.0.0');
+    assert.equal(out.split('\n').pop(), 'ok');
+  },
+);

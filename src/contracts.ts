@@ -89,6 +89,49 @@ export type GitHubIssue = {
   state: string;
 };
 
+/** Canonical PR identity and metadata returned by the read-only GitHub adapter. */
+export type GitHubPullRequest = {
+  pullNodeId: string;
+  repository: { nameWithOwner: string };
+  number: number;
+  url: string;
+  state: 'OPEN' | 'CLOSED' | 'MERGED';
+  isDraft: boolean;
+  mergedAt: string | null;
+  headRefOid: string;
+};
+
+export type TraceRelation = {
+  /** A completed paginated read, not an atomic point-in-time GitHub snapshot. */
+  status: 'verified_current' | 'stale' | 'unknown';
+  source: 'closingIssuesReferences' | 'pullRequest.commits';
+  /** Retained on an unknown refresh after any earlier successful verification. */
+  lastVerifiedAt: string | null;
+};
+
+export type PullCommit = {
+  pullNodeId: string;
+  oid: string;
+  url: string;
+  relation: TraceRelation;
+};
+
+export type SessionPullLink = {
+  sessionKey: string;
+  issueNodeId: string;
+  pullNodeId: string;
+  method: SessionLinkMethod;
+  linkedAt: string;
+};
+
+export type SessionCommitLink = {
+  sessionKey: string;
+  pullNodeId: string;
+  oid: string;
+  method: SessionLinkMethod;
+  linkedAt: string;
+};
+
 export type ProjectItem = {
   projectId: string;
   itemId: string;

@@ -10,10 +10,11 @@ import { runInit } from './init.js';
 import { runProjects } from './projects.js';
 import { runCollect } from './collect.js';
 import { runLink } from './link.js';
-import { runReport, runReportTask } from './report.js';
+import { runReport, runReportTask, runReportTrace } from './report.js';
 import { runWriteback } from './writeback.js';
+import { runTrace } from './trace.js';
 
-const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'project', 'hierarchy', 'unmapped']);
+const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'trace', 'project', 'hierarchy', 'unmapped']);
 
 export type RouteResult =
   | { kind: 'ok'; data?: unknown; exitCode?: number }
@@ -64,6 +65,13 @@ export async function routeCommand(
     });
   }
 
+  if (command === 'trace') {
+    return runTrace(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
+  }
+
   if (command === 'projects') {
     return runProjects(restPositionals, {
       json,
@@ -90,13 +98,13 @@ export async function routeCommand(
     if (sub === undefined) {
       throw usageError('Missing report subcommand.', 'Run orca-telemetry report --help.');
     }
-    if (sub === 'task' && subRest.length === 0) {
-      throw usageError('Missing issue id for report task.', 'Usage: orca-telemetry report task <issue-id>');
+    if ((sub === 'task' || sub === 'trace') && subRest.length === 0) {
+      throw usageError(`Missing issue id for report ${sub}.`, `Usage: orca-telemetry report ${sub} <issue-id>`);
     }
     if (!REPORT_SUBCOMMANDS.has(sub)) {
       throw usageError(`Unknown report subcommand: ${sub}.`, 'Run orca-telemetry report --help.');
     }
-    if (subRest.length > 0 && sub !== 'task') {
+    if (subRest.length > 0 && sub !== 'task' && sub !== 'trace') {
       throw usageError(
         `Unexpected arguments: ${subRest.join(' ')}`,
         `Usage: orca-telemetry report ${sub}`,
@@ -112,6 +120,9 @@ export async function routeCommand(
         );
       }
       return runReportTask(issueArg, subRest.slice(1), { json, cwd });
+    }
+    if (sub === 'trace') {
+      return runReportTrace(subRest[0]!, subRest.slice(1), { json, cwd });
     }
     return runReport(sub as 'tasks' | 'project' | 'hierarchy' | 'unmapped', subRest, {
       json,
