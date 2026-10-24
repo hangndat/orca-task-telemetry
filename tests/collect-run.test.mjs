@@ -72,6 +72,11 @@ test('explicit Run reads bounded metadata but records no unverified local host p
     writeFileSync(stub, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === '--version') { console.log('1.4.237'); process.exit(0); }
+if (args[0] === 'status' && process.env.ORCA_STUB_MALFORMED_STATUS === '1') {
+  console.log('SECRET_STATUS_STDOUT_FROM_CLI');
+  console.error('SECRET_STATUS_STDERR_FROM_CLI');
+  process.exit(0);
+}
 const command = args[1];
 let result;
 if (args[0] === 'status') result = { target: { kind: 'local' }, runtime: { reachable: true } };
@@ -89,6 +94,7 @@ console.log(JSON.stringify({ ok: true, result }));
       GH_STUB_PAGE1_PATH: resolve(here, 'fixtures/github/project-items-page1.json'),
       GH_STUB_PAGE2_PATH: resolve(here, 'fixtures/github/project-items-page2.json'),
       ORCA_TELEMETRY_ORCA: stub,
+      ORCA_STUB_MALFORMED_STATUS: '0',
       ORCA_TELEMETRY_CODEBURN: resolve(here, 'helpers/integration-stubs/codeburn-router.mjs'),
       CODEBURN_STUB_CLAUDE_PATH: resolve(here, 'fixtures/codeburn/claude/session-sonnet-aggregated.json'),
       CODEBURN_STUB_CODEX_PATH: resolve(here, 'fixtures/codeburn/codex/session-gpt-small-aggregated.json'),
@@ -104,6 +110,23 @@ console.log(JSON.stringify({ ok: true, result }));
       assert.deepEqual(orca.counts, { runs: 1, tasks: 1, dispatches: 1, workers: 1, pages: 1 });
       assert.equal(result.sources.find((source) => source.source === 'codeburn').status, 'ok');
       assert.ok(!JSON.stringify(result).includes('SECRET'));
+      process.env.ORCA_STUB_MALFORMED_STATUS = '1';
+      const jsonOutput = await runCollect(['--run', 'run_A'], { json: true, cwd: repo });
+      assert.equal(jsonOutput.exitCode, 5);
+      const malformedOrca = jsonOutput.data.sources.find((source) => source.source === 'orca');
+      assert.equal(malformedOrca.status, 'partial');
+      assert.deepEqual(malformedOrca.error, {
+        code: 'collect_source_error', message: 'Orca status returned invalid JSON.',
+      });
+      assert.ok(!JSON.stringify(jsonOutput).includes('SECRET_STATUS_'));
+      const textOutput = await runCollect(['--run', 'run_A'], { json: false, cwd: repo });
+      assert.equal(textOutput.exitCode, 5);
+      let rendered = '';
+      const originalWrite = process.stdout.write;
+      process.stdout.write = (chunk) => { rendered += chunk; return true; };
+      try { textOutput.write(); } finally { process.stdout.write = originalWrite; }
+      assert.match(rendered, /orca: partial collect_source_error — Orca status returned invalid JSON\./);
+      assert.ok(!rendered.includes('SECRET_STATUS_'));
       const db = openTelemetryDatabase({ dbPath: join(home, 'telemetry.sqlite') });
       for (const table of ['orca_runs', 'orca_tasks', 'orca_dispatches', 'scoped_executions', 'collection_attempts']) {
         assert.equal(db.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0);

@@ -223,7 +223,12 @@ async function collectOrcaRun(
     const version = await readOrcaVersion();
     const statusResult = await invokeOrcaReadOnly(['status', '--json']);
     if (statusResult.exitCode !== 0) throw new Error('Orca status failed.');
-    const statusJson = JSON.parse(statusResult.stdout) as unknown;
+    let statusJson: unknown;
+    try {
+      statusJson = JSON.parse(statusResult.stdout) as unknown;
+    } catch {
+      throw new Error('Orca status returned invalid JSON.');
+    }
     assertRuntimeReachable(statusJson);
     const root = statusJson as Record<string, unknown>;
     const source = root['result'] as Record<string, unknown>;
