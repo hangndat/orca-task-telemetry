@@ -588,6 +588,108 @@ test('V14-01 golden: CLI JSON and text for one coordinator and two workers acros
   }
 });
 
+test('V14-04: retry chain and overlapping CodeBurn sessions count only distinct explicit role links', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db, dbPath } = fixture;
+    const appHome = dirname(dbPath);
+    const observedAt = new Date().toISOString();
+    insertRunGraph(db, 'host-a', 'run-retry', ['dispatch-1', 'dispatch-2', 'dispatch-3']);
+    // The same raw Run ID on another host makes --run alone ambiguous.
+    insertRunGraph(db, 'host-b', 'run-retry', ['dispatch-1']);
+    db.prepare(`UPDATE orca_dispatches SET retry_of_dispatch_id = ?
+      WHERE host_id = ? AND run_id = ? AND dispatch_id = ?`)
+      .run('dispatch-1', 'host-a', 'run-retry', 'dispatch-2');
+    db.prepare(`UPDATE orca_dispatches SET retry_of_dispatch_id = ?
+      WHERE host_id = ? AND run_id = ? AND dispatch_id = ?`)
+      .run('dispatch-2', 'host-a', 'run-retry', 'dispatch-3');
+    assert.deepEqual(db.prepare(`SELECT dispatch_id, retry_of_dispatch_id FROM orca_dispatches
+      WHERE host_id = ? AND run_id = ? ORDER BY dispatch_id`).all('host-a', 'run-retry').map((row) => ({ ...row })), [
+      { dispatch_id: 'dispatch-1', retry_of_dispatch_id: null },
+      { dispatch_id: 'dispatch-2', retry_of_dispatch_id: 'dispatch-1' },
+      { dispatch_id: 'dispatch-3', retry_of_dispatch_id: 'dispatch-2' },
+    ]);
+
+    // CodeBurn's verified aggregated JSON exposes startedAt/endedAt. These
+    // synthetic windows all overlap at 10:30, but session time is not a role link.
+    const sessions = [
+      { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord', cost: 2,
+        role: 'coordinator', startedAt: '2026-10-24T10:00:00Z', endedAt: '2026-10-24T10:45:00Z' },
+      { key: 'claude:codeburn:worker-1', provider: 'claude', rawId: 'worker-1', cost: 1,
+        role: 'worker', dispatch: 'dispatch-1', startedAt: '2026-10-24T10:05:00Z', endedAt: '2026-10-24T10:50:00Z' },
+      { key: 'codex:codeburn:worker-2a', provider: 'codex', rawId: 'worker-2a', cost: 0.5,
+        role: 'worker', dispatch: 'dispatch-2', startedAt: '2026-10-24T10:10:00Z', endedAt: '2026-10-24T10:55:00Z' },
+      { key: 'claude:codeburn:worker-2b', provider: 'claude', rawId: 'worker-2b', cost: 0.5,
+        role: 'worker', dispatch: 'dispatch-2', startedAt: '2026-10-24T10:15:00Z', endedAt: '2026-10-24T11:00:00Z' },
+      { key: 'codex:codeburn:worker-3', provider: 'codex', rawId: 'worker-3', cost: 1,
+        role: 'worker', dispatch: 'dispatch-3', startedAt: '2026-10-24T10:20:00Z', endedAt: '2026-10-24T11:05:00Z' },
+      { key: 'codex:codeburn:unlinked', provider: 'codex', rawId: 'unlinked', cost: 50,
+        startedAt: '2026-10-24T10:25:00Z', endedAt: '2026-10-24T11:10:00Z' },
+    ];
+    const overlapAt = Date.parse('2026-10-24T10:30:00Z');
+    for (const session of sessions) {
+      assert.ok(Date.parse(session.startedAt) <= overlapAt && overlapAt < Date.parse(session.endedAt));
+      insertSession(db, { key: session.key, provider: session.provider, rawId: session.rawId,
+        snapshot: { observedAt, cost: session.cost } });
+      if (session.role) {
+        linkRole(db, { key: session.key, role: session.role, host: 'host-a', run: 'run-retry',
+          dispatch: session.dispatch });
+      }
+    }
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM session_role_links').get().count, 5);
+    for (const source of ['orca', 'claude', 'codex']) {
+      attempt(db, { source: source === 'orca' ? 'orca' : 'codeburn',
+        ...(source === 'orca' ? { hostId: 'host-a', runId: 'run-retry' } : { provider: source }),
+        startedAt: isoMinus(new Date(observedAt), 60), completedAt: observedAt, status: 'success' });
+    }
+
+    const missingHost = runCli(appHome, 'report', 'overhead', '--run', 'run-retry', '--format', 'json');
+    assert.equal(missingHost.status, 2);
+    assert.equal(JSON.parse(missingHost.stdout).error.code, 'usage_error');
+    assert.match(JSON.parse(missingHost.stdout).error.message, /Missing --host/);
+
+    const jsonResult = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-retry', '--format', 'json');
+    assert.equal(jsonResult.status, 0, jsonResult.stderr);
+    const { ok, data } = JSON.parse(jsonResult.stdout);
+    assert.equal(ok, true);
+    assert.equal(data.classifiedSessionCount, 5);
+    assert.equal(data.coverage, 'unknown');
+    assert.equal(data.unclassifiedSessionCount, null);
+    assert.deepEqual(data.coordinator, {
+      sessionCount: 1, dispatchCount: null,
+      byProvider: [{ provider: 'claude', sessionCount: 1, missingSnapshotCount: 0,
+        tokens: { input: 8, output: 4, cacheRead: 2, cacheWrite: 1, reasoning: null } }],
+      missingSnapshotCount: 0, knownCostUsd: 2, unknownCostSessionCount: 0, costUsd: 2,
+    });
+    assert.deepEqual(data.workers, {
+      sessionCount: 4, dispatchCount: 3,
+      byProvider: [
+        { provider: 'claude', sessionCount: 2, missingSnapshotCount: 0,
+          tokens: { input: 16, output: 8, cacheRead: 4, cacheWrite: 2, reasoning: null } },
+        { provider: 'codex', sessionCount: 2, missingSnapshotCount: 0,
+          tokens: { input: 20, output: 10, cacheRead: 2, cacheWrite: 0, reasoning: null } },
+      ],
+      missingSnapshotCount: 0, knownCostUsd: 3, unknownCostSessionCount: 0, costUsd: 3,
+    });
+    assert.deepEqual(data.overheadShare, { value: 0.4, unknownReason: null }); // 2 / (2 + 3)
+    assert.deepEqual(data.overheadPerWorkerCost, { value: 2 / 3, unknownReason: null });
+    assert.equal(Object.keys(data).some((key) => /waste|retry.*cost/i.test(key)), false);
+
+    const textResult = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-retry');
+    assert.equal(textResult.status, 0, textResult.stderr);
+    assert.match(textResult.stdout, /Coverage: unknown; classifiedSessionCount=5; unclassifiedSessionCount=null/);
+    assert.match(textResult.stdout, /Coordinator: sessions=1 cost=\$2\.00 \(known=\$2\.00, unknownCostSessions=0\)/);
+    assert.match(textResult.stdout, /Workers: sessions=4 dispatches=3 cost=\$3\.00 \(known=\$3\.00, unknownCostSessions=0\)/);
+    assert.match(textResult.stdout, /claude: sessions=2 missingSnapshots=0 in=16 out=8 cacheR=4 cacheW=2 reasoning=unknown/);
+    assert.match(textResult.stdout, /codex: sessions=2 missingSnapshots=0 in=20 out=10 cacheR=2 cacheW=0 reasoning=unknown/);
+    assert.match(textResult.stdout, /overheadShare: 0\.4000/);
+    assert.match(textResult.stdout, /overheadPerWorkerCost: 0\.6667/);
+    assert.doesNotMatch(textResult.stdout, /waste/i);
+  } finally {
+    fixture.close();
+  }
+});
+
 test('RPT-F01: a codex provider/role reasoning total stays null when any session in that group has no snapshot, never a partial sum', () => {
   const fixture = setupOverheadDb();
   try {
