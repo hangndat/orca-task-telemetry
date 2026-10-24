@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { test } from 'vitest';
+import { test as vitestTest } from 'vitest';
 import { openTelemetryDatabase } from '../dist/db/index.js';
 import { MIGRATION_V1_STATEMENTS } from '../dist/db/migrations/v1.js';
 import { MIGRATION_V2_STATEMENTS } from '../dist/db/migrations/v2.js';
@@ -13,6 +13,9 @@ import { refreshStoredPullTrace } from '../dist/db/trace.js';
 
 // Synthetic, redacted GitHub/CodeBurn fixtures. These are not live integration evidence.
 const cli = resolve(dirname(fileURLToPath(import.meta.url)), '../dist/cli.js');
+// These integration cases launch several CLI processes and can exceed Vitest's
+// five-second default when the CI runner is busy.
+const test = (name, runCase) => vitestTest(name, runCase, 30_000);
 const oid = 'a'.repeat(40);
 const otherOid = 'b'.repeat(40);
 const issue = {

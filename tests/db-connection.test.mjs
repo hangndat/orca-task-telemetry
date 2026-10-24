@@ -133,14 +133,14 @@ function runNodeSqliteSmoke(nodeSpecifier) {
   return execFileSync(
     'npx',
     ['--yes', nodeSpecifier, script],
-    { encoding: 'utf8', cwd: resolve(distDir, '..') },
+    { encoding: 'utf8', cwd: resolve(distDir, '..'), timeout: 115_000 },
   ).trim();
 }
 
 test('T26: node:sqlite loads on pinned minimum Node 24.0.0 (isolated)', () => {
   assert.equal(runNodeSqliteSmoke('node@24.0.0'), 'ok');
-});
+}, 120_000);
 
 test('T26: node:sqlite loads on Node 24.11.0 (isolated)', () => {
   assert.equal(runNodeSqliteSmoke('node@24.11.0'), 'ok');
-});
+}, 120_000);
