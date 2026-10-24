@@ -235,13 +235,28 @@ function rollupRole(rows: RoleRow[], role: OverheadRole): OverheadRoleUsage {
       }
       return tokens;
     });
-    const sum = (field: 'input' | 'output' | 'cacheRead' | 'cacheWrite') =>
-      parsed.reduce((total, t) => total + t[field], 0);
+    const sum = (field: 'input' | 'output' | 'cacheRead' | 'cacheWrite') => {
+      const total = parsed.reduce((acc, t) => acc + t[field], 0);
+      if (!Number.isSafeInteger(total)) {
+        throw dbSchemaError(`Role-linked token aggregate overflowed for ${field}.`);
+      }
+      return total;
+    };
     const reasoningKnown =
       provider === 'codex' &&
       parsed.length === providerRows.length &&
       parsed.length > 0 &&
       parsed.every((t) => t.provider === 'codex' && t.reasoning !== null);
+    let reasoningTotal: number | null = null;
+    if (reasoningKnown) {
+      reasoningTotal = parsed.reduce(
+        (total, t) => total + (t.provider === 'codex' ? t.reasoning ?? 0 : 0),
+        0,
+      );
+      if (!Number.isSafeInteger(reasoningTotal)) {
+        throw dbSchemaError('Role-linked token aggregate overflowed for reasoning.');
+      }
+    }
     byProvider.push({
       provider,
       sessionCount: providerRows.length,
@@ -251,12 +266,7 @@ function rollupRole(rows: RoleRow[], role: OverheadRole): OverheadRoleUsage {
         output: sum('output'),
         cacheRead: sum('cacheRead'),
         cacheWrite: sum('cacheWrite'),
-        reasoning: reasoningKnown
-          ? parsed.reduce(
-              (total, t) => total + (t.provider === 'codex' ? t.reasoning ?? 0 : 0),
-              0,
-            )
-          : null,
+        reasoning: reasoningTotal,
       },
     });
   }
@@ -267,12 +277,18 @@ function rollupRole(rows: RoleRow[], role: OverheadRole): OverheadRoleUsage {
       continue;
     }
     if (row.cost_kind === 'unknown') {
+      if (row.cost_amount_usd !== null) {
+        throw dbSchemaError('Unknown role-linked snapshot cost has a non-null amount.');
+      }
       unknownCostSessionCount += 1;
     } else if (row.cost_kind === 'estimated_api_equivalent' && row.cost_amount_usd !== null) {
       if (!Number.isFinite(row.cost_amount_usd) || row.cost_amount_usd < 0) {
         throw dbSchemaError('Role-linked snapshot cost_amount_usd is not a finite, nonnegative number.');
       }
       knownCostUsd += row.cost_amount_usd;
+      if (!Number.isFinite(knownCostUsd)) {
+        throw dbSchemaError('Role-linked known cost aggregate overflowed.');
+      }
     } else {
       throw dbSchemaError('Invalid role-linked snapshot cost kind.');
     }
@@ -317,11 +333,19 @@ function overheadShareRatio(
   if (reason !== null) {
     return { value: null, unknownReason: reason };
   }
-  const denom = coordinator.costUsd! + workers.costUsd!;
+  const numerator = coordinator.costUsd!;
+  const denom = numerator + workers.costUsd!;
+  if (!Number.isFinite(numerator) || !Number.isFinite(denom)) {
+    throw dbSchemaError('overheadShare numerator or denominator overflowed.');
+  }
   if (denom === 0) {
     return { value: null, unknownReason: 'zero_denominator' };
   }
-  return { value: coordinator.costUsd! / denom, unknownReason: null };
+  const value = numerator / denom;
+  if (!Number.isFinite(value)) {
+    throw dbSchemaError('overheadShare result is not finite.');
+  }
+  return { value, unknownReason: null };
 }
 
 function overheadPerWorkerCostRatio(
@@ -332,10 +356,19 @@ function overheadPerWorkerCostRatio(
   if (reason !== null) {
     return { value: null, unknownReason: reason };
   }
-  if (workers.costUsd === 0) {
+  const numerator = coordinator.costUsd!;
+  const denom = workers.costUsd!;
+  if (!Number.isFinite(numerator) || !Number.isFinite(denom)) {
+    throw dbSchemaError('overheadPerWorkerCost numerator or denominator overflowed.');
+  }
+  if (denom === 0) {
     return { value: null, unknownReason: 'zero_denominator' };
   }
-  return { value: coordinator.costUsd! / workers.costUsd!, unknownReason: null };
+  const value = numerator / denom;
+  if (!Number.isFinite(value)) {
+    throw dbSchemaError('overheadPerWorkerCost result is not finite.');
+  }
+  return { value, unknownReason: null };
 }
 
 export function buildOverheadReport(

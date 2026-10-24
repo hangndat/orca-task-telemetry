@@ -14,8 +14,8 @@ export function serializeTokens(tokens: TokenUsage): string {
 
 const TOKEN_NUMERIC_FIELDS = ['input', 'output', 'cacheRead', 'cacheWrite'] as const;
 
-function isFiniteNonNegative(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+function isSafeIntegerNonNegative(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 export function parseTokensJson(json: string): TokenUsage {
@@ -33,11 +33,15 @@ export function parseTokensJson(json: string): TokenUsage {
     throw dbSchemaError('Invalid tokens_json.provider in usage_snapshots.');
   }
   for (const field of TOKEN_NUMERIC_FIELDS) {
-    if (!isFiniteNonNegative(obj[field])) {
+    if (!isSafeIntegerNonNegative(obj[field])) {
       throw dbSchemaError(`Invalid tokens_json.${field} in usage_snapshots.`);
     }
   }
-  if (obj.provider === 'codex' && obj.reasoning !== null && !isFiniteNonNegative(obj.reasoning)) {
+  if (
+    obj.provider === 'codex' &&
+    obj.reasoning !== null &&
+    !isSafeIntegerNonNegative(obj.reasoning)
+  ) {
     throw dbSchemaError('Invalid tokens_json.reasoning in usage_snapshots.');
   }
   return parsed as TokenUsage;

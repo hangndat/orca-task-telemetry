@@ -454,6 +454,164 @@ test('RPT-F02: an Infinity cost_amount_usd is a structured DB schema error, neve
   }
 });
 
+test('RPT-F02: two individually finite cost rows that overflow the role cost aggregate are a structured DB schema error', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord1', provider: 'claude', rawId: 'coord1',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1e308 } });
+    insertSession(db, { key: 'claude:codeburn:coord2', provider: 'claude', rawId: 'coord2',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1e308 } });
+    linkRole(db, { key: 'claude:codeburn:coord1', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    linkRole(db, { key: 'claude:codeburn:coord2', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    assert.throws(
+      () => buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW),
+      (err) => err.code === 'db_schema_drift',
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test.each([1.5, Number.MAX_SAFE_INTEGER + 1])(
+  'RPT-F02: token bucket %s outside the safe nonnegative integer range is a structured DB schema error',
+  (input) => {
+    const fixture = setupOverheadDb();
+    try {
+      const { db } = fixture;
+      insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+      insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+        snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0, tokensOverride: { input } } });
+      linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+      freshAttempts(db, 'host-a', 'run-1');
+
+      assert.throws(
+        () => buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW),
+        (err) => err.code === 'db_schema_drift',
+      );
+    } finally {
+      fixture.close();
+    }
+  },
+);
+
+test('RPT-F02: unknown cost with a persisted numeric amount fails closed', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 'unknown' } });
+    db.prepare('UPDATE usage_snapshots SET cost_amount_usd = ? WHERE session_key = ?')
+      .run(Infinity, 'claude:codeburn:coord');
+    linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+    assert.throws(
+      () => buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW),
+      (err) => err.code === 'db_schema_drift',
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test('RPT-F02: a token bucket aggregate that overflows Number.isSafeInteger is a structured DB schema error', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord1', provider: 'claude', rawId: 'coord1',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0,
+        tokensOverride: { input: Number.MAX_SAFE_INTEGER } } });
+    insertSession(db, { key: 'claude:codeburn:coord2', provider: 'claude', rawId: 'coord2',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0,
+        tokensOverride: { input: Number.MAX_SAFE_INTEGER } } });
+    linkRole(db, { key: 'claude:codeburn:coord1', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    linkRole(db, { key: 'claude:codeburn:coord2', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    assert.throws(
+      () => buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW),
+      (err) => err.code === 'db_schema_drift',
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test('RPT-F02: a Codex reasoning aggregate above the safe integer limit is a structured DB schema error', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    for (const rawId of ['coord1', 'coord2']) {
+      const key = `codex:codeburn:${rawId}`;
+      insertSession(db, { key, provider: 'codex', rawId,
+        snapshot: { observedAt: isoMinus(NOW, 100), cost: 1,
+          tokensOverride: { reasoning: Number.MAX_SAFE_INTEGER } } });
+      linkRole(db, { key, role: 'coordinator', host: 'host-a', run: 'run-1' });
+    }
+    freshAttempts(db, 'host-a', 'run-1');
+    assert.throws(
+      () => buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW),
+      (err) => err.code === 'db_schema_drift',
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test('RPT-F02: a finite-per-role cost pair that overflows the overheadShare denominator is a structured DB schema error', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1e308 } });
+    insertSession(db, { key: 'claude:codeburn:w1', provider: 'claude', rawId: 'w1',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1e308 } });
+    linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    linkRole(db, { key: 'claude:codeburn:w1', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    assert.throws(
+      () => buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW),
+      (err) => err.code === 'db_schema_drift',
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test('RPT-F03: --format --format=json still selects the JSON error envelope for a usage error', () => {
+  const appHome = mkdtempSync(join(tmpdir(), 'orca-overhead-cli-format-dup-'));
+  try {
+    const result = runCli(appHome, 'report', 'overhead', '--format', '--format=json');
+    assert.equal(result.status, 2);
+    const body = JSON.parse(result.stdout.trim());
+    assert.equal(body.ok, false);
+    assert.equal(body.error.code, 'usage_error');
+  } finally {
+    rmSync(appHome, { recursive: true, force: true });
+  }
+});
+
+test('RPT-F03: --format json --format malformed duplicate preserves the JSON error envelope', () => {
+  const appHome = mkdtempSync(join(tmpdir(), 'orca-overhead-cli-format-dup2-'));
+  try {
+    const result = runCli(appHome, 'report', 'overhead', '--format', 'json', '--format', 'malformed');
+    assert.equal(result.status, 2);
+    const body = JSON.parse(result.stdout.trim());
+    assert.equal(body.ok, false);
+    assert.equal(body.error.code, 'usage_error');
+  } finally {
+    rmSync(appHome, { recursive: true, force: true });
+  }
+});
+
 test('RPT-F03: --format json renders JSON for usage errors, a missing DB, an unknown Run, and a schema error, with exit codes preserved', () => {
   const appHome = mkdtempSync(join(tmpdir(), 'orca-overhead-cli-json-'));
   try {
