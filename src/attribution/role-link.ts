@@ -25,12 +25,17 @@ function roleLinkError(code: string, message: string, hint?: string): CliError {
 }
 
 // JSON.stringify already escapes \u0000-\u001F, '"', and '\\'; it does not
-// escape the C1 control range (\u007F-\u009F), so that range is escaped here
-// too. Selector IDs come straight from stored/raw DB values and must never
-// reach error text/JSON with raw control characters.
+// escape the C1 control range (\u007F-\u009F) or Unicode bidirectional/format
+// controls (e.g. RLO U+202E, which can reorder the *rendered* text after it
+// to spoof a different candidate ID on a terminal), so both are escaped here.
+// Selector IDs come straight from stored/raw DB values and must never reach
+// error text/JSON with a raw control or format character.
+const UNSAFE_RENDER_CHARS =
+  /[\u007F-\u009F؜​-‏‪-‮⁠-⁩﻿]/g;
+
 function renderSelectorId(value: string): string {
   return JSON.stringify(value).replace(
-    /[\u007F-\u009F]/g,
+    UNSAFE_RENDER_CHARS,
     (control) => `\\u${control.charCodeAt(0).toString(16).padStart(4, '0')}`,
   );
 }

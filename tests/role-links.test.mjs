@@ -607,6 +607,44 @@ test('V1.4: coordinator --host inference resolves only an exact unique Run; 0/2 
   cleanup(ctx);
 });
 
+test('V1.4: bidi/format control characters in selector IDs never reach error text/JSON raw; escaped form is exact and the raw ID still works as an explicit selector', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  // U+202E (RLO) is the exact repro from the review finding: unescaped, a
+  // terminal/text renderer reverses everything after it, so an operator
+  // reading the candidate list could be shown a different-looking ID.
+  const hostileHost = 'host‮--run safe';
+  const safeHostile = JSON.stringify(hostileHost).replace(/‮/g, '\\u202e');
+  insertRunGraph(db, 'host-a', 'run-bidi', null);
+  insertRunGraph(db, hostileHost, 'run-bidi', null);
+  seedSession(db, 's-bidi-1');
+  seedSession(db, 's-bidi-2');
+  ctx.handle.close();
+
+  const before = readFileSync(ctx.dbPath);
+  const ambiguous = runCli(ctx.repo, ctx.env,
+    'link-role', '--run', 'run-bidi', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-bidi-1', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(ambiguous.status, 2);
+  const ambiguousBody = JSON.parse(ambiguous.stdout);
+  assert.equal(ambiguousBody.error.code, 'role_link_run_ambiguous');
+  assert.ok(ambiguousBody.error.message.includes(`["host-a",${safeHostile}]`));
+  assert.doesNotMatch(ambiguous.stdout, /‮/);
+  assert.deepEqual(readFileSync(ctx.dbPath), before);
+
+  // Escaping is diagnostic-only: the raw hostile ID is still the exact
+  // stored value, so passing it back as an explicit --host still resolves.
+  const explicit = runCli(ctx.repo, ctx.env,
+    'link-role', '--run', 'run-bidi', '--host', hostileHost, '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-bidi-2', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(explicit.status, 0, explicit.stderr);
+  assert.equal(JSON.parse(explicit.stdout).data.link.hostId, hostileHost);
+
+  cleanup(ctx);
+});
+
 test('V1.4: worker --host/--run inference over orca_dispatches requires exactly one tuple; explicit selectors never fall back', () => {
   const ctx = setupRepoAndHome();
   const db = ctx.handle.db;
