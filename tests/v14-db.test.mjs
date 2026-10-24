@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'vitest';
-import { openTelemetryDatabase } from '../dist/db/index.js';
+import { openTelemetryDatabase, openReadOnlyTelemetryDb } from '../dist/db/index.js';
 import { MIGRATION_V1_STATEMENTS } from '../dist/db/migrations/v1.js';
 import { MIGRATION_V2_STATEMENTS } from '../dist/db/migrations/v2.js';
 import { MIGRATION_V3_STATEMENTS } from '../dist/db/migrations/v3.js';
@@ -393,6 +393,85 @@ test('V14 DB F03: reopen refuses a v5 audit table missing its role/dispatch cons
     assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 5);
     raw.close();
   });
+});
+
+test('V14 DB F03: writable and read-only reopen refuse a v5 audit table with both sha256-prefix and hex-suffix CHECKs removed', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'orca-v14-db-'));
+  const path = join(dir, 'telemetry.sqlite');
+  try {
+    const handle = openTelemetryDatabase({ dbPath: path });
+    handle.db.exec('DROP TABLE session_role_link_audit');
+    handle.db.exec(`CREATE TABLE session_role_link_audit (
+      audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_key TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('coordinator', 'worker')),
+      host_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      dispatch_id TEXT,
+      linked_at TEXT NOT NULL,
+      linked_by TEXT NOT NULL CHECK (length(linked_by) = 71),
+      unlinked_at TEXT NOT NULL,
+      unlinked_by TEXT NOT NULL CHECK (length(unlinked_by) = 71),
+      CHECK (
+        (role = 'coordinator' AND dispatch_id IS NULL)
+        OR (role = 'worker' AND dispatch_id IS NOT NULL)
+      )
+    )`);
+    handle.close();
+    assert.throws(() => openTelemetryDatabase({ dbPath: path }),
+      (err) => err.code === 'db_schema_drift'
+        && /session_role_link_audit schema is missing or outdated/.test(err.message));
+    await assert.rejects(
+      () => openReadOnlyTelemetryDb(path),
+      (err) => err.code === 'db_schema_drift',
+    );
+    const raw = new DatabaseSync(path);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 5);
+    raw.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('V14 DB F03: writable and read-only reopen refuse a v5 audit table missing only the hex-suffix CHECK on linked_by', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'orca-v14-db-'));
+  const path = join(dir, 'telemetry.sqlite');
+  try {
+    const handle = openTelemetryDatabase({ dbPath: path });
+    handle.db.exec('DROP TABLE session_role_link_audit');
+    handle.db.exec(`CREATE TABLE session_role_link_audit (
+      audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_key TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('coordinator', 'worker')),
+      host_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      dispatch_id TEXT,
+      linked_at TEXT NOT NULL,
+      linked_by TEXT NOT NULL CHECK (length(linked_by) = 71
+        AND substr(linked_by, 1, 7) = 'sha256:'),
+      unlinked_at TEXT NOT NULL,
+      unlinked_by TEXT NOT NULL CHECK (length(unlinked_by) = 71
+        AND substr(unlinked_by, 1, 7) = 'sha256:'
+        AND substr(unlinked_by, 8) NOT GLOB '*[^0-9a-f]*'),
+      CHECK (
+        (role = 'coordinator' AND dispatch_id IS NULL)
+        OR (role = 'worker' AND dispatch_id IS NOT NULL)
+      )
+    )`);
+    handle.close();
+    assert.throws(() => openTelemetryDatabase({ dbPath: path }),
+      (err) => err.code === 'db_schema_drift'
+        && /session_role_link_audit schema is missing or outdated/.test(err.message));
+    await assert.rejects(
+      () => openReadOnlyTelemetryDb(path),
+      (err) => err.code === 'db_schema_drift',
+    );
+    const raw = new DatabaseSync(path);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 5);
+    raw.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('V14 DB: migrating a draft v4 (missing privacy constraints) to v5 rolls back without bumping the version', () => {

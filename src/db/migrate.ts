@@ -142,7 +142,11 @@ function assertV5AuditHardened(db: DatabaseSync): void {
   const requiredMarkers = [
     "role IN ('coordinator', 'worker')",
     'length(linked_by) = 71',
+    "substr(linked_by, 1, 7) = 'sha256:'",
+    "substr(linked_by, 8) NOT GLOB '*[^0-9a-f]*'",
     'length(unlinked_by) = 71',
+    "substr(unlinked_by, 1, 7) = 'sha256:'",
+    "substr(unlinked_by, 8) NOT GLOB '*[^0-9a-f]*'",
     "role = 'coordinator' AND dispatch_id IS NULL",
     "role = 'worker' AND dispatch_id IS NOT NULL",
   ];
