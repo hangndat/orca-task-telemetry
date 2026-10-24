@@ -1,0 +1,360 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { test } from 'vitest';
+import { buildOverheadReport, formatOverheadReportText } from '../dist/reports/overhead.js';
+import { openTelemetryDatabase } from '../dist/db/index.js';
+import {
+  attempt,
+  ctx,
+  insertRunGraph,
+  insertSession,
+  isoMinus,
+  linkRole,
+  setupOverheadDb,
+} from './helpers/overhead-harness.mjs';
+
+const testDir = dirname(fileURLToPath(import.meta.url));
+const cli = resolve(testDir, '../dist/cli.js');
+
+const NOW = new Date('2026-10-24T12:00:00.000Z');
+
+function freshAttempts(db, host, run) {
+  attempt(db, { source: 'orca', hostId: host, runId: run, startedAt: isoMinus(NOW, 3700),
+    completedAt: isoMinus(NOW, 3600), status: 'success' });
+  attempt(db, { source: 'codeburn', provider: 'claude', startedAt: isoMinus(NOW, 3700),
+    completedAt: isoMinus(NOW, 3600), status: 'success' });
+  attempt(db, { source: 'codeburn', provider: 'codex', startedAt: isoMinus(NOW, 3700),
+    completedAt: isoMinus(NOW, 3600), status: 'success' });
+}
+
+test('V14-01: one coordinator, two workers across two Dispatches, multi-provider — provider buckets, dispatch count, and overheadShare/overheadPerWorkerCost', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1', 'dispatch-2']);
+    insertSession(db, { key: 'claude:codeburn:coord-c', provider: 'claude', rawId: 'coord-c',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 2.0 } });
+    insertSession(db, { key: 'codex:codeburn:coord-x', provider: 'codex', rawId: 'coord-x',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.5, tokensOverride: { reasoning: 3 } } });
+    insertSession(db, { key: 'claude:codeburn:w1', provider: 'claude', rawId: 'w1',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+    insertSession(db, { key: 'codex:codeburn:w2', provider: 'codex', rawId: 'w2',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 0.5, tokensOverride: { reasoning: 2 } } });
+    linkRole(db, { key: 'claude:codeburn:coord-c', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    linkRole(db, { key: 'codex:codeburn:coord-x', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    linkRole(db, { key: 'claude:codeburn:w1', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
+    linkRole(db, { key: 'codex:codeburn:w2', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-2' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    const report = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+
+    assert.equal(report.hostId, 'host-a');
+    assert.equal(report.runId, 'run-1');
+    assert.equal(report.coverage, 'unknown');
+    assert.equal(report.classifiedSessionCount, 4);
+    assert.equal(report.unclassifiedSessionCount, null);
+
+    assert.equal(report.coordinator.sessionCount, 2);
+    assert.equal(report.coordinator.dispatchCount, null);
+    assert.equal(report.coordinator.knownCostUsd, 3.5);
+    assert.equal(report.coordinator.costUsd, 3.5);
+    assert.equal(report.coordinator.unknownCostSessionCount, 0);
+    const coordClaude = report.coordinator.byProvider.find((p) => p.provider === 'claude');
+    const coordCodex = report.coordinator.byProvider.find((p) => p.provider === 'codex');
+    assert.deepEqual(coordClaude.tokens, { input: 8, output: 4, cacheRead: 2, cacheWrite: 1, reasoning: null });
+    assert.deepEqual(coordCodex.tokens, { input: 10, output: 5, cacheRead: 1, cacheWrite: 0, reasoning: 3 });
+
+    assert.equal(report.workers.sessionCount, 2);
+    assert.equal(report.workers.dispatchCount, 2);
+    assert.equal(report.workers.knownCostUsd, 1.5);
+    assert.equal(report.workers.costUsd, 1.5);
+
+    assert.equal(report.overheadShare.unknownReason, null);
+    assert.ok(Math.abs(report.overheadShare.value - 0.7) < 1e-9);
+    assert.equal(report.overheadPerWorkerCost.unknownReason, null);
+    assert.ok(Math.abs(report.overheadPerWorkerCost.value - 3.5 / 1.5) < 1e-9);
+
+    assert.equal(report.sourceStatus.orca.status, 'success');
+    assert.ok(report.sourceStatus.orca.ageSeconds >= 3600 - 1 && report.sourceStatus.orca.ageSeconds <= 3600 + 1);
+
+    const text = formatOverheadReportText(report);
+    assert.match(text, /Overhead report — host host-a \/ run run-1/);
+    assert.match(text, /overheadShare: 0\.7000/);
+    assert.match(text, /dispatches=2/);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('V14-02: cross-host raw Dispatch ID collision stays scoped per host/run, not merged', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertRunGraph(db, 'host-b', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:wa', provider: 'claude', rawId: 'wa',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+    insertSession(db, { key: 'claude:codeburn:wb', provider: 'claude', rawId: 'wb',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 9.0 } });
+    linkRole(db, { key: 'claude:codeburn:wa', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
+    linkRole(db, { key: 'claude:codeburn:wb', role: 'worker', host: 'host-b', run: 'run-1', dispatch: 'dispatch-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+    freshAttempts(db, 'host-b', 'run-1');
+
+    const reportA = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    const reportB = buildOverheadReport(ctx(db), 'host-b', 'run-1', NOW);
+
+    assert.equal(reportA.workers.sessionCount, 1);
+    assert.equal(reportA.workers.knownCostUsd, 1.0);
+    assert.equal(reportB.workers.sessionCount, 1);
+    assert.equal(reportB.workers.knownCostUsd, 9.0);
+    assert.equal(reportA.classifiedSessionCount, 1);
+    assert.equal(reportB.classifiedSessionCount, 1);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('Run selector is explicit: an unknown (host, run) is a safe setup error, never a default/zero-filled report', () => {
+  const fixture = setupOverheadDb();
+  try {
+    assert.throws(
+      () => buildOverheadReport(ctx(fixture.db), 'host-missing', 'run-missing', NOW),
+      (err) => err.code === 'report_setup' && err.exitCode === 3,
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test('V14-05: missing snapshot, unknown cost, and known-zero cost are three distinct states, with reason precedence', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+
+    // Coordinator session has no snapshot row at all.
+    insertSession(db, { key: 'claude:codeburn:coord-missing', provider: 'claude', rawId: 'coord-missing' });
+    linkRole(db, { key: 'claude:codeburn:coord-missing', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    insertSession(db, { key: 'claude:codeburn:w1', provider: 'claude', rawId: 'w1',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+    linkRole(db, { key: 'claude:codeburn:w1', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    const missingReport = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    assert.equal(missingReport.coordinator.missingSnapshotCount, 1);
+    assert.equal(missingReport.coordinator.costUsd, null);
+    assert.equal(missingReport.coordinator.unknownCostSessionCount, 1);
+    assert.equal(missingReport.overheadShare.unknownReason, 'missing_snapshot');
+  } finally {
+    fixture.close();
+  }
+});
+
+test('unknown cost without a missing snapshot is reported distinctly from a known $0.00 cost', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord-unknown', provider: 'claude', rawId: 'coord-unknown',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 'unknown' } });
+    linkRole(db, { key: 'claude:codeburn:coord-unknown', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    insertSession(db, { key: 'claude:codeburn:w-zero', provider: 'claude', rawId: 'w-zero',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 0 } });
+    linkRole(db, { key: 'claude:codeburn:w-zero', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    const report = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    assert.equal(report.coordinator.missingSnapshotCount, 0);
+    assert.equal(report.coordinator.costUsd, null);
+    assert.equal(report.coordinator.unknownCostSessionCount, 1);
+    // Worker cost is known $0.00 — distinct from unknown.
+    assert.equal(report.workers.costUsd, 0);
+    assert.equal(report.workers.unknownCostSessionCount, 0);
+    assert.equal(report.overheadShare.unknownReason, 'unknown_cost');
+  } finally {
+    fixture.close();
+  }
+});
+
+test('both roles at known $0.00 cost trip zero_denominator, not unknown_cost', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord-zero', provider: 'claude', rawId: 'coord-zero',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 0 } });
+    linkRole(db, { key: 'claude:codeburn:coord-zero', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    insertSession(db, { key: 'claude:codeburn:w-zero', provider: 'claude', rawId: 'w-zero',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 0 } });
+    linkRole(db, { key: 'claude:codeburn:w-zero', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
+    freshAttempts(db, 'host-a', 'run-1');
+
+    const report = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    assert.equal(report.coordinator.costUsd, 0);
+    assert.equal(report.workers.costUsd, 0);
+    assert.equal(report.overheadShare.unknownReason, 'zero_denominator');
+    assert.equal(report.overheadPerWorkerCost.unknownReason, 'zero_denominator');
+  } finally {
+    fixture.close();
+  }
+});
+
+test('V14-05: attempt status/freshness precedence — partial_source before stale_source, exact 24h boundary included, future completedAt is stale', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+    linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    insertSession(db, { key: 'claude:codeburn:w1', provider: 'claude', rawId: 'w1',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+    linkRole(db, { key: 'claude:codeburn:w1', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
+
+    // No attempts recorded at all yet: orca/claude/codex all "missing".
+    assert.equal(
+      buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW).overheadShare.unknownReason,
+      'partial_source',
+    );
+
+    // codex still missing even once orca+claude succeed fresh.
+    attempt(db, { source: 'orca', hostId: 'host-a', runId: 'run-1', startedAt: isoMinus(NOW, 200),
+      completedAt: isoMinus(NOW, 100), status: 'success' });
+    attempt(db, { source: 'codeburn', provider: 'claude', startedAt: isoMinus(NOW, 200),
+      completedAt: isoMinus(NOW, 100), status: 'success' });
+    assert.equal(
+      buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW).overheadShare.unknownReason,
+      'partial_source',
+    );
+
+    // codex attempt exists but failed: still partial_source.
+    attempt(db, { source: 'codeburn', provider: 'codex', startedAt: isoMinus(NOW, 200),
+      completedAt: isoMinus(NOW, 100), status: 'failed', errorCode: 'source_unavailable' });
+    const failedReport = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    assert.equal(failedReport.overheadShare.unknownReason, 'partial_source');
+    assert.equal(failedReport.sourceStatus.codex.status, 'failed');
+    assert.equal(failedReport.sourceStatus.codex.errorCode, 'source_unavailable');
+
+    // codex running (crash left it running): still partial_source, not success.
+    attempt(db, { source: 'codeburn', provider: 'codex', startedAt: isoMinus(NOW, 50), status: 'running' });
+    assert.equal(
+      buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW).overheadShare.unknownReason,
+      'partial_source',
+    );
+
+    // codex succeeds exactly at the 24h boundary (inclusive) -> all fresh, ratio computed.
+    attempt(db, { source: 'codeburn', provider: 'codex', startedAt: isoMinus(NOW, 24 * 3600 + 100),
+      completedAt: isoMinus(NOW, 24 * 3600), status: 'success' });
+    const boundaryReport = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    assert.equal(boundaryReport.overheadShare.unknownReason, null);
+    assert.equal(boundaryReport.overheadShare.value, 0.5);
+
+    // One second past the boundary -> stale_source.
+    attempt(db, { source: 'codeburn', provider: 'codex', startedAt: isoMinus(NOW, 24 * 3600 + 101),
+      completedAt: isoMinus(NOW, 24 * 3600 + 1), status: 'success' });
+    assert.equal(
+      buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW).overheadShare.unknownReason,
+      'stale_source',
+    );
+
+    // Future completedAt (clock skew) -> stale_source, not success-fresh.
+    attempt(db, { source: 'codeburn', provider: 'codex', startedAt: isoMinus(NOW, -500),
+      completedAt: isoMinus(NOW, -500), status: 'success' });
+    const futureReport = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    assert.equal(futureReport.overheadShare.unknownReason, 'stale_source');
+    assert.ok(futureReport.sourceStatus.codex.ageSeconds < 0);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('V14-06: no N+1 — a fixed small number of statements regardless of session count (1000 sessions, 50 Dispatches)', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db } = fixture;
+    const dispatchIds = Array.from({ length: 50 }, (_, i) => `dispatch-${i}`);
+    insertRunGraph(db, 'host-a', 'run-1', dispatchIds);
+    insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+    linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    for (let i = 0; i < 999; i += 1) {
+      const key = `claude:codeburn:w${i}`;
+      insertSession(db, { key, provider: 'claude', rawId: `w${i}`,
+        snapshot: { observedAt: isoMinus(NOW, 100), cost: 0.01 } });
+      linkRole(db, { key, role: 'worker', host: 'host-a', run: 'run-1', dispatch: dispatchIds[i % 50] });
+    }
+    freshAttempts(db, 'host-a', 'run-1');
+
+    const originalPrepare = db.prepare.bind(db);
+    let calls = 0;
+    db.prepare = (sql) => {
+      calls += 1;
+      return originalPrepare(sql);
+    };
+    let report;
+    try {
+      report = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    } finally {
+      db.prepare = originalPrepare;
+    }
+
+    assert.equal(report.classifiedSessionCount, 1000);
+    assert.equal(report.workers.sessionCount, 999);
+    assert.equal(report.workers.dispatchCount, 50);
+    assert.ok(calls <= 10, `expected a bounded statement count, got ${calls}`);
+  } finally {
+    fixture.close();
+  }
+});
+
+function runCli(appHome, ...args) {
+  return spawnSync(process.execPath, [cli, ...args], {
+    encoding: 'utf8',
+    env: { ...process.env, ORCA_TELEMETRY_HOME: appHome },
+  });
+}
+
+test('CLI: report overhead requires explicit --host/--run, reports a safe error for an unknown Run, and renders JSON/text', () => {
+  const appHome = mkdtempSync(join(tmpdir(), 'orca-overhead-cli-'));
+  try {
+    const dbPath = join(appHome, 'telemetry.sqlite');
+    const handle = openTelemetryDatabase({ dbPath });
+    insertRunGraph(handle.db, 'host-a', 'run-1', ['dispatch-1']);
+    insertSession(handle.db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
+      snapshot: { observedAt: new Date().toISOString(), cost: 1.0 } });
+    linkRole(handle.db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
+    handle.close();
+
+    const missingHost = runCli(appHome, 'report', 'overhead', '--run', 'run-1');
+    assert.equal(missingHost.status, 2);
+    assert.match(missingHost.stderr, /Missing --host/);
+
+    const notFound = runCli(appHome, 'report', 'overhead', '--host', 'host-x', '--run', 'run-x', '--json');
+    assert.equal(notFound.status, 3);
+    const notFoundBody = JSON.parse(notFound.stdout.trim());
+    assert.equal(notFoundBody.ok, false);
+    assert.equal(notFoundBody.error.code, 'report_setup');
+
+    const jsonResult = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-1', '--format', 'json');
+    assert.equal(jsonResult.status, 0);
+    const body = JSON.parse(jsonResult.stdout.trim());
+    assert.equal(body.ok, true);
+    assert.equal(body.data.hostId, 'host-a');
+    assert.equal(body.data.runId, 'run-1');
+    assert.equal(body.data.coverage, 'unknown');
+    assert.equal(body.data.unclassifiedSessionCount, null);
+
+    const textResult = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-1');
+    assert.equal(textResult.status, 0);
+    assert.match(textResult.stdout, /Overhead report — host host-a \/ run run-1/);
+    assert.match(textResult.stdout, /overheadShare:/);
+    assert.match(textResult.stdout, /Warnings:/);
+  } finally {
+    rmSync(appHome, { recursive: true, force: true });
+  }
+});
