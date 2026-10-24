@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -16,6 +17,14 @@ import {
   linkRole,
   setupOverheadDb,
 } from './helpers/overhead-harness.mjs';
+import {
+  appHomeInventory,
+  initBareRepo,
+  installDatasetInHome,
+  linkAlphaSessions,
+  runCliReport,
+  writeReportsProfile,
+} from './helpers/reports-harness.mjs';
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(testDir, '../dist/cli.js');
@@ -340,6 +349,116 @@ function runCli(appHome, ...args) {
     env: { ...process.env, ORCA_TELEMETRY_HOME: appHome },
   });
 }
+
+test('V14-07: Run roles never assign an Issue or change task/project totals; all reports leave the DB untouched', () => {
+  // Synthetic Issue and CodeBurn sessions. The Run/Dispatch are scoped fixture rows,
+  // not evidence that a live Orca session was matched to CodeBurn.
+  const repo = initBareRepo();
+  const appHome = mkdtempSync(join(tmpdir(), 'orca-issue-role-home-'));
+  const dbPath = join(appHome, 'telemetry.sqlite');
+  const ghStub = resolve(testDir, 'helpers/gh-repo-stub.mjs');
+  const env = {
+    ORCA_TELEMETRY_HOME: appHome,
+    ORCA_TELEMETRY_GH: ghStub,
+    GH_STUB_REPO_VIEW_JSON: JSON.stringify({
+      id: 'R_reports', nameWithOwner: 'org-a/repo', url: 'https://github.com/org-a/repo',
+    }),
+  };
+  const cliJson = (...args) => {
+    const result = runCliReport(args, { cwd: repo, env });
+    assert.equal(result.status, 0, `${args.join(' ')}: ${result.stderr || result.stdout}`);
+    const body = JSON.parse(result.stdout.trim());
+    assert.equal(body.ok, true);
+    return body.data;
+  };
+  const dbState = () => {
+    const handle = openTelemetryDatabase({ dbPath, gitRoot: repo });
+    try {
+      const db = handle.db;
+      const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'
+        AND name NOT LIKE 'sqlite_%' ORDER BY name`).all().map((row) => row.name);
+      return {
+        counts: Object.fromEntries(tables.map((table) => [table,
+          db.prepare(`SELECT COUNT(*) AS n FROM "${table}"`).get().n])),
+        issueLinks: db.prepare(`SELECT session_key, issue_node_id FROM session_links
+          ORDER BY session_key`).all(),
+      };
+    } finally {
+      handle.close();
+    }
+  };
+  const reports = () => {
+    const beforeDb = dbState();
+    const beforeFiles = appHomeInventory(appHome);
+    const beforeRepo = execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' });
+    const task = cliJson('report', 'task', '1', '--json');
+    const project = cliJson('report', 'project', '--json');
+    const overhead = cliJson('report', 'overhead', '--host', 'host-fixture', '--run', 'run-fixture', '--format', 'json');
+    assert.deepEqual(dbState(), beforeDb, 'report commands must not change any table row count or Issue link');
+    assert.deepEqual(appHomeInventory(appHome), beforeFiles, 'report commands must not change app home files');
+    assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }), beforeRepo,
+      'report commands must not edit the target repository');
+    return { task, project, overhead, issueLinks: beforeDb.issueLinks };
+  };
+  const roleArgs = (role, provider, session, dispatch) => [
+    '--host', 'host-fixture', '--run', 'run-fixture', '--role', role,
+    ...(dispatch ? ['--dispatch', dispatch] : []),
+    '--provider', provider, '--session', session, '--verifier', 'fixture_operator',
+  ];
+
+  try {
+    writeReportsProfile(appHome);
+    installDatasetInHome(appHome, linkAlphaSessions);
+    const handle = openTelemetryDatabase({ dbPath, gitRoot: repo });
+    insertRunGraph(handle.db, 'host-fixture', 'run-fixture', ['dispatch-fixture']);
+    handle.close();
+
+    const baseline = reports();
+    assert.equal(baseline.task.issue.sessionCount, 3);
+    assert.equal(baseline.task.issue.cost.knownAmountUsd, 1.75);
+    assert.equal(baseline.project.linkedSessionCount, 3);
+    assert.equal(baseline.project.cost.knownAmountUsd, 1.75);
+    assert.equal(baseline.project.unmappedNotInProjectTotals.sessionCount, 1);
+    assert.equal(baseline.overhead.classifiedSessionCount, 0);
+    assert.equal(baseline.issueLinks.length, 3);
+
+    // This Claude session has no Issue link. Its Run role must not infer one.
+    const unlinkedClaude = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    assert.equal(cliJson('link-role', ...roleArgs('coordinator', 'claude', unlinkedClaude),
+      '--confirm-same-session', '--json').outcome, 'created');
+    const coordinatorOnly = reports();
+    assert.deepEqual(coordinatorOnly.issueLinks, baseline.issueLinks);
+    assert.deepEqual(coordinatorOnly.task, baseline.task);
+    assert.deepEqual(coordinatorOnly.project, baseline.project);
+    assert.equal(coordinatorOnly.overhead.coordinator.sessionCount, 1);
+    assert.equal(coordinatorOnly.overhead.workers.sessionCount, 0);
+
+    // This Codex session already belongs to the Issue. A worker role must not
+    // add a second Issue/Project contribution for the same sessionKey.
+    assert.equal(cliJson('link-role', ...roleArgs('worker', 'codex', unlinkedClaude, 'dispatch-fixture'),
+      '--confirm-same-session', '--json').outcome, 'created');
+    const bothRoles = reports();
+    assert.deepEqual(bothRoles.issueLinks, baseline.issueLinks);
+    assert.deepEqual(bothRoles.task, baseline.task);
+    assert.deepEqual(bothRoles.project, baseline.project);
+    assert.equal(bothRoles.overhead.classifiedSessionCount, 2);
+    assert.equal(bothRoles.overhead.workers.sessionCount, 1);
+    assert.equal(bothRoles.overhead.workers.dispatchCount, 1);
+
+    assert.equal(cliJson('unlink-role', ...roleArgs('coordinator', 'claude', unlinkedClaude),
+      '--json').outcome, 'deleted');
+    assert.equal(cliJson('unlink-role', ...roleArgs('worker', 'codex', unlinkedClaude, 'dispatch-fixture'),
+      '--json').outcome, 'deleted');
+    const afterUnlink = reports();
+    assert.deepEqual(afterUnlink.issueLinks, baseline.issueLinks);
+    assert.deepEqual(afterUnlink.task, baseline.task);
+    assert.deepEqual(afterUnlink.project, baseline.project);
+    assert.equal(afterUnlink.overhead.classifiedSessionCount, 0);
+  } finally {
+    rmSync(appHome, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+  }
+}, 60_000);
 
 test('CLI: report overhead requires explicit --host/--run, reports a safe error for an unknown Run, and renders JSON/text', () => {
   const appHome = mkdtempSync(join(tmpdir(), 'orca-overhead-cli-'));
