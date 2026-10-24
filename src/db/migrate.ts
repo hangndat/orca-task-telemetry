@@ -128,6 +128,29 @@ function assertV4ProvenanceHardened(db: DatabaseSync): void {
   }
 }
 
+/**
+ * v5 adds the durable unlink audit trail. Refuse a database whose
+ * `session_role_link_audit` table is missing or missing its identity/role/
+ * verifier-hash constraints, rather than let `unlink-role` silently audit
+ * into an under-constrained table.
+ */
+function assertV5AuditHardened(db: DatabaseSync): void {
+  const row = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'session_role_link_audit'`)
+    .get() as { sql: string } | undefined;
+  const sql = row?.sql ?? '';
+  const requiredMarkers = [
+    "role IN ('coordinator', 'worker')",
+    'length(linked_by) = 71',
+    'length(unlinked_by) = 71',
+    "role = 'coordinator' AND dispatch_id IS NULL",
+    "role = 'worker' AND dispatch_id IS NOT NULL",
+  ];
+  if (!row || requiredMarkers.some((marker) => !sql.includes(marker))) {
+    throw dbSchemaError('Database v5 session_role_link_audit schema is missing or outdated.');
+  }
+}
+
 export function assertSchemaCurrent(db: DatabaseSync): void {
   const current = readUserVersion(db);
   if (current > SUPPORTED_SCHEMA_VERSION) {
@@ -141,4 +164,5 @@ export function assertSchemaCurrent(db: DatabaseSync): void {
     );
   }
   assertV4ProvenanceHardened(db);
+  assertV5AuditHardened(db);
 }

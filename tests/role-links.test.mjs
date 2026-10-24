@@ -187,6 +187,46 @@ test('role-links: CLI validation rejects missing --confirm-same-session, missing
   cleanup(ctx);
 });
 
+test('role-links: link-role and unlink-role reject an invalid --verifier as a usage error, with no mutation', () => {
+  const ctx = setupRepoAndHome();
+  insertRunGraph(ctx.handle.db, 'host-a', 'run-1', 'dispatch-1');
+  seedSession(ctx.handle.db, 's-verifier-1');
+  ctx.handle.close();
+
+  const badLink = runCli(ctx.repo, ctx.env,
+    'link-role', '--host', 'host-a', '--run', 'run-1', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-verifier-1', '--verifier', 'bad verifier',
+    '--confirm-same-session');
+  assert.equal(badLink.status, 2);
+  assert.match(badLink.stderr, /verifier/i);
+
+  const checkDb1 = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  assert.equal(checkDb1.db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 0);
+  checkDb1.close();
+
+  // Seed a real link out-of-band so unlink-role's bad-verifier rejection can
+  // be checked without first needing a successful link-role call.
+  const seeded = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  linkSessionToRole(seeded.db, {
+    provider: 'codex', rawSessionId: 's-verifier-1', role: 'coordinator',
+    hostId: 'host-a', runId: 'run-1', verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  });
+  seeded.close();
+
+  const badUnlink = runCli(ctx.repo, ctx.env,
+    'unlink-role', '--host', 'host-a', '--run', 'run-1', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-verifier-1', '--verifier', '!!not-allowed!!');
+  assert.equal(badUnlink.status, 2);
+  assert.match(badUnlink.stderr, /verifier/i);
+
+  const checkDb2 = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  assert.equal(checkDb2.db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 1);
+  assert.equal(checkDb2.db.prepare('SELECT COUNT(*) AS n FROM session_role_link_audit').get().n, 0);
+  checkDb2.close();
+
+  cleanup(ctx);
+});
+
 test('role-links: missing session, Run, and Dispatch are rejected without writing a link', () => {
   const ctx = setupRepoAndHome();
   insertRunGraph(ctx.handle.db, 'host-a', 'run-1', 'dispatch-1');
@@ -389,6 +429,103 @@ test('role-links: a failing audit write rolls back and leaves the live link unto
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_role_link_audit').get().n, 0);
+
+  cleanup(ctx);
+});
+
+test('role-links: unlink holds its write lock across the read-check-delete span, closing the F01 relink race', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  insertRunGraph(db, 'host-a', 'run-1', 'dispatch-old');
+  insertRunGraph(db, 'host-a', 'run-1', 'dispatch-new');
+  seedSession(db, 's-race-1');
+  linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-race-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-old',
+    verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  });
+  ctx.handle.close();
+
+  const connA = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  const connB = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+
+  // Simulate writer A holding the write lock for the whole read-check-delete
+  // span (the F01 fix). Before the fix, A's read of the existing link ran in
+  // autocommit mode *before* any lock was taken, leaving a window for writer
+  // B to relink the session; A would then delete B's new row while auditing
+  // the stale row it had read earlier. With the fix, that whole span is one
+  // write transaction, so B's write cannot land until A's attempt finishes.
+  connA.db.exec('BEGIN IMMEDIATE');
+  try {
+    assert.throws(() => {
+      unlinkSessionRole(connB.db, {
+        provider: 'codex', rawSessionId: 's-race-1', role: 'worker',
+        hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-old',
+        verifier: 'operatorB', unlinkedAt: '2026-10-24T00:30:00Z',
+      });
+    }, /locked|busy/i);
+  } finally {
+    connA.db.exec('ROLLBACK');
+  }
+
+  // With A's attempt abandoned, writer B unlinks and relinks to a new target.
+  const bUnlink = unlinkSessionRole(connB.db, {
+    provider: 'codex', rawSessionId: 's-race-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-old',
+    verifier: 'operatorB', unlinkedAt: '2026-10-24T00:30:00Z',
+  });
+  assert.equal(bUnlink.outcome, 'deleted');
+  linkSessionToRole(connB.db, {
+    provider: 'codex', rawSessionId: 's-race-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-new',
+    verifier: 'operatorB', linkedAt: '2026-10-24T00:31:00Z',
+  });
+
+  // Writer A's original request, targeting the now-stale dispatch-old
+  // selector, must reject against the *current* row instead of deleting the
+  // dispatch-new link or auditing a row that no longer exists.
+  throwsCode(() => unlinkSessionRole(connA.db, {
+    provider: 'codex', rawSessionId: 's-race-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-old',
+    verifier: 'operatorA', unlinkedAt: '2026-10-24T00:32:00Z',
+  }), 'role_link_selector_mismatch');
+
+  const live = connA.db.prepare('SELECT dispatch_id FROM session_role_links WHERE session_key = ?')
+    .get('codex:codeburn:s-race-1');
+  assert.equal(live.dispatch_id, 'dispatch-new');
+
+  const audit = connA.db.prepare('SELECT dispatch_id FROM session_role_link_audit WHERE session_key = ?')
+    .get('codex:codeburn:s-race-1');
+  assert.equal(audit.dispatch_id, 'dispatch-old');
+
+  connA.close();
+  connB.close();
+  cleanup(ctx);
+});
+
+test('role-links: unlink only deletes and audits the exact row matching all selectors, never a differently-scoped row', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  insertRunGraph(db, 'host-a', 'run-1', 'dispatch-1');
+  seedSession(db, 's-exact-1');
+  linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-exact-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-1',
+    verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  });
+
+  const result = unlinkSessionRole(db, {
+    provider: 'codex', rawSessionId: 's-exact-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-1',
+    verifier: 'operator2', unlinkedAt: '2026-10-24T01:00:00Z',
+  });
+  assert.equal(result.outcome, 'deleted');
+  assert.equal(result.link.dispatchId, 'dispatch-1');
+
+  const audit = db.prepare(`SELECT session_key, role, host_id, run_id, dispatch_id
+    FROM session_role_link_audit WHERE session_key = ?`).get('codex:codeburn:s-exact-1');
+  assert.equal(audit.dispatch_id, 'dispatch-1');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 0);
 
   cleanup(ctx);
 });

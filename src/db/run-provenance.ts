@@ -30,8 +30,10 @@ export function insertScopedExecution(db: DatabaseSync, identity: {
   return key;
 }
 
+export const VERIFIER_PATTERN = /^[A-Za-z][A-Za-z0-9_.@-]{0,127}$/;
+
 function verifierHash(verifier: string): string {
-  if (!/^[A-Za-z][A-Za-z0-9_.@-]{0,127}$/.test(verifier)) {
+  if (!VERIFIER_PATTERN.test(verifier)) {
     throw new TypeError('Verifier must be a short operator identifier.');
   }
   return `sha256:${createHash('sha256').update(verifier).digest('hex')}`;

@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { linkSessionToRole, type RoleLinkRole } from '../attribution/role-link.js';
 import { USAGE_PROVIDERS, type UsageProvider } from '../contracts.js';
-import type { ManualEvidenceNote } from '../db/run-provenance.js';
+import { VERIFIER_PATTERN, type ManualEvidenceNote } from '../db/run-provenance.js';
 import { openTelemetryDatabase } from '../db/index.js';
 import { usageError } from '../errors.js';
 import { createDefaultPathEnv, resolveAppPaths } from '../paths.js';
@@ -73,6 +73,12 @@ function parseLinkRoleArgs(rest: string[]): LinkRoleArgs {
   }
   if (!verifier) {
     throw usageError('Missing --verifier.', 'Pass a short operator identifier (never raw evidence).');
+  }
+  if (!VERIFIER_PATTERN.test(verifier)) {
+    throw usageError(
+      'Invalid --verifier.',
+      'Use a short operator identifier: starts with a letter, up to 128 chars of letters, digits, _.@- (never raw evidence).',
+    );
   }
   if (evidenceNote !== undefined && !(EVIDENCE_NOTES as readonly string[]).includes(evidenceNote)) {
     throw usageError(

@@ -182,25 +182,27 @@ export type UnlinkRoleResult = { outcome: 'deleted'; link: StoredRoleLink };
  */
 export function unlinkSessionRole(db: DatabaseSync, input: UnlinkRoleInput): UnlinkRoleResult {
   const key = sessionKey(input.provider, 'codeburn', input.rawSessionId);
-  const existing = loadStoredRoleLink(db, key);
-  if (!existing) {
-    throw roleLinkError('role_link_not_found', `No role link exists for session ${key}.`);
-  }
-  const matchesSelectors =
-    existing.role === input.role &&
-    existing.hostId === input.hostId &&
-    existing.runId === input.runId &&
-    (existing.dispatchId ?? null) === (input.dispatchId ?? null);
-  if (!matchesSelectors) {
-    throw roleLinkError(
-      'role_link_selector_mismatch',
-      `Role link for session ${key} does not match the given selectors.`,
-      'Pass the exact --role, --host, --run, and --dispatch of the existing link.',
-    );
-  }
 
   db.exec('BEGIN IMMEDIATE');
+  let existing: StoredRoleLink | null;
   try {
+    existing = loadStoredRoleLink(db, key);
+    if (!existing) {
+      throw roleLinkError('role_link_not_found', `No role link exists for session ${key}.`);
+    }
+    const matchesSelectors =
+      existing.role === input.role &&
+      existing.hostId === input.hostId &&
+      existing.runId === input.runId &&
+      (existing.dispatchId ?? null) === (input.dispatchId ?? null);
+    if (!matchesSelectors) {
+      throw roleLinkError(
+        'role_link_selector_mismatch',
+        `Role link for session ${key} does not match the given selectors.`,
+        'Pass the exact --role, --host, --run, and --dispatch of the existing link.',
+      );
+    }
+
     insertRoleLinkAudit(db, {
       sessionKey: existing.sessionKey,
       role: existing.role,
@@ -212,7 +214,20 @@ export function unlinkSessionRole(db: DatabaseSync, input: UnlinkRoleInput): Unl
       unlinkedAt: input.unlinkedAt,
       verifier: input.verifier,
     });
-    db.prepare('DELETE FROM session_role_links WHERE session_key = ?').run(key);
+    const deleted = db
+      .prepare(
+        `DELETE FROM session_role_links
+         WHERE session_key = ? AND role = ? AND host_id = ? AND run_id = ?
+           AND dispatch_id IS ?`,
+      )
+      .run(key, existing.role, existing.hostId, existing.runId, existing.dispatchId);
+    if (deleted.changes !== 1) {
+      throw roleLinkError(
+        'role_link_selector_mismatch',
+        `Role link for session ${key} does not match the given selectors.`,
+        'Pass the exact --role, --host, --run, and --dispatch of the existing link.',
+      );
+    }
     db.exec('COMMIT');
   } catch (err) {
     try {
@@ -223,5 +238,5 @@ export function unlinkSessionRole(db: DatabaseSync, input: UnlinkRoleInput): Unl
     throw err;
   }
 
-  return { outcome: 'deleted', link: existing };
+  return { outcome: 'deleted', link: existing as StoredRoleLink };
 }

@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import { unlinkSessionRole, type RoleLinkRole } from '../attribution/role-link.js';
 import { USAGE_PROVIDERS, type UsageProvider } from '../contracts.js';
 import { openTelemetryDatabase } from '../db/index.js';
+import { VERIFIER_PATTERN } from '../db/run-provenance.js';
 import { usageError } from '../errors.js';
 import { createDefaultPathEnv, resolveAppPaths } from '../paths.js';
 import { resolveRepository } from '../repo.js';
@@ -65,6 +66,12 @@ function parseUnlinkRoleArgs(rest: string[]): UnlinkRoleArgs {
   }
   if (!verifier) {
     throw usageError('Missing --verifier.', 'Pass a short operator identifier (never raw evidence).');
+  }
+  if (!VERIFIER_PATTERN.test(verifier)) {
+    throw usageError(
+      'Invalid --verifier.',
+      'Use a short operator identifier: starts with a letter, up to 128 chars of letters, digits, _.@- (never raw evidence).',
+    );
   }
 
   return { host, run, role, provider: provider as UsageProvider, session, dispatch, verifier };

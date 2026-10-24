@@ -353,6 +353,48 @@ test('V14 DB: reopen refuses a draft v4 missing privacy constraints', () => {
   });
 });
 
+test('V14 DB F03: reopen refuses a v5 database missing the audit table', () => {
+  withPath((path) => {
+    const handle = openTelemetryDatabase({ dbPath: path });
+    handle.db.exec('DROP TABLE session_role_link_audit');
+    handle.close();
+    assert.throws(() => openTelemetryDatabase({ dbPath: path }),
+      /session_role_link_audit schema is missing or outdated/);
+    const raw = new DatabaseSync(path);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 5);
+    raw.close();
+  });
+});
+
+test('V14 DB F03: reopen refuses a v5 audit table missing its role/dispatch constraint', () => {
+  withPath((path) => {
+    const handle = openTelemetryDatabase({ dbPath: path });
+    handle.db.exec('DROP TABLE session_role_link_audit');
+    handle.db.exec(`CREATE TABLE session_role_link_audit (
+      audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_key TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('coordinator', 'worker')),
+      host_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      dispatch_id TEXT,
+      linked_at TEXT NOT NULL,
+      linked_by TEXT NOT NULL CHECK (length(linked_by) = 71
+        AND substr(linked_by, 1, 7) = 'sha256:'
+        AND substr(linked_by, 8) NOT GLOB '*[^0-9a-f]*'),
+      unlinked_at TEXT NOT NULL,
+      unlinked_by TEXT NOT NULL CHECK (length(unlinked_by) = 71
+        AND substr(unlinked_by, 1, 7) = 'sha256:'
+        AND substr(unlinked_by, 8) NOT GLOB '*[^0-9a-f]*')
+    )`);
+    handle.close();
+    assert.throws(() => openTelemetryDatabase({ dbPath: path }),
+      /session_role_link_audit schema is missing or outdated/);
+    const raw = new DatabaseSync(path);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 5);
+    raw.close();
+  });
+});
+
 test('V14 DB: migrating a draft v4 (missing privacy constraints) to v5 rolls back without bumping the version', () => {
   withPath((path) => {
     const draft = new DatabaseSync(path);
