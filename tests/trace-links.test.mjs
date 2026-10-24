@@ -280,7 +280,7 @@ test('schema v3 migrates from v1 and v2 without losing existing links or snapsho
     db.close();
     const migrated = openTelemetryDatabase({ dbPath });
     try {
-      assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version, 3);
+      assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version, 4);
       assert.equal(migrated.db.prepare('SELECT COUNT(*) AS n FROM session_links').get().n, 1);
       assert.equal(migrated.db.prepare('PRAGMA foreign_key_check').all().length, 0);
     } finally { migrated.close(); rmSync(root, { recursive: true, force: true }); }

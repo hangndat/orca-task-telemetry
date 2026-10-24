@@ -9,8 +9,9 @@ import {
   SCHEMA_VERSION_V2,
 } from './migrations/v2.js';
 import { MIGRATION_V3_STATEMENTS, SCHEMA_VERSION_V3 } from './migrations/v3.js';
+import { MIGRATION_V4_STATEMENTS, SCHEMA_VERSION_V4 } from './migrations/v4.js';
 
-export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V3;
+export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V4;
 
 function readUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as
@@ -36,10 +37,19 @@ export function migrateDatabase(db: DatabaseSync): void {
   if (current === SUPPORTED_SCHEMA_VERSION) {
     return;
   }
-  if (current !== 0 && current !== SCHEMA_VERSION_V1 && current !== SCHEMA_VERSION_V2) {
+  if (current !== 0 && current !== SCHEMA_VERSION_V1 && current !== SCHEMA_VERSION_V2 && current !== SCHEMA_VERSION_V3) {
     throw dbSchemaError(
-      `Unsupported intermediate schema version ${current}; expected 0, ${SCHEMA_VERSION_V1}, ${SCHEMA_VERSION_V2} or ${SUPPORTED_SCHEMA_VERSION}.`,
+      `Unsupported intermediate schema version ${current}; expected 0, ${SCHEMA_VERSION_V1}, ${SCHEMA_VERSION_V2}, ${SCHEMA_VERSION_V3} or ${SUPPORTED_SCHEMA_VERSION}.`,
     );
+  }
+
+  // SQLite cannot enable foreign keys inside the migration transaction.
+  db.exec('PRAGMA foreign_keys = ON');
+  const foreignKeys = db.prepare('PRAGMA foreign_keys').get() as
+    | { foreign_keys: number }
+    | undefined;
+  if (foreignKeys?.foreign_keys !== 1) {
+    throw dbSchemaError('Foreign keys must be enabled before migration.');
   }
 
   db.exec('BEGIN IMMEDIATE');
@@ -56,10 +66,20 @@ export function migrateDatabase(db: DatabaseSync): void {
       }
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V2}`);
     }
-    for (const sql of MIGRATION_V3_STATEMENTS) {
+    if (current < SCHEMA_VERSION_V3) {
+      for (const sql of MIGRATION_V3_STATEMENTS) {
+        db.exec(sql);
+      }
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V3}`);
+    }
+    for (const sql of MIGRATION_V4_STATEMENTS) {
       db.exec(sql);
     }
-    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V3}`);
+    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V4}`);
+    const invalid = db.prepare('PRAGMA foreign_key_check').get();
+    if (invalid) {
+      throw dbSchemaError('Existing database contains invalid foreign key references.');
+    }
     db.exec('COMMIT');
   } catch (err) {
     try {
