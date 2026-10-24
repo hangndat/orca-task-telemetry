@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -460,7 +460,7 @@ test('V14-07: Run roles never assign an Issue or change task/project totals; all
   }
 }, 60_000);
 
-test('CLI: report overhead requires explicit --host/--run, reports a safe error for an unknown Run, and renders JSON/text', () => {
+test('CLI: report overhead requires --run, resolves a unique host, rejects an unknown explicit tuple, and renders JSON/text', () => {
   const appHome = mkdtempSync(join(tmpdir(), 'orca-overhead-cli-'));
   try {
     const dbPath = join(appHome, 'telemetry.sqlite');
@@ -471,15 +471,21 @@ test('CLI: report overhead requires explicit --host/--run, reports a safe error 
     linkRole(handle.db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
     handle.close();
 
-    const missingHost = runCli(appHome, 'report', 'overhead', '--run', 'run-1');
-    assert.equal(missingHost.status, 2);
-    assert.match(missingHost.stderr, /Missing --host/);
+    const missingRun = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--format', 'json');
+    assert.equal(missingRun.status, 2);
+    assert.equal(JSON.parse(missingRun.stdout).error.code, 'usage_error');
+    assert.match(JSON.parse(missingRun.stdout).error.message, /Missing --run/);
+
+    const uniqueHost = runCli(appHome, 'report', 'overhead', '--run', 'run-1', '--format', 'json');
+    assert.equal(uniqueHost.status, 0, uniqueHost.stderr);
+    assert.equal(JSON.parse(uniqueHost.stdout).data.hostId, 'host-a');
 
     const notFound = runCli(appHome, 'report', 'overhead', '--host', 'host-x', '--run', 'run-x', '--json');
     assert.equal(notFound.status, 3);
     const notFoundBody = JSON.parse(notFound.stdout.trim());
     assert.equal(notFoundBody.ok, false);
     assert.equal(notFoundBody.error.code, 'report_setup');
+    assert.match(notFoundBody.error.message, /host-x/);
 
     const jsonResult = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-1', '--format', 'json');
     assert.equal(jsonResult.status, 0);
@@ -497,6 +503,73 @@ test('CLI: report overhead requires explicit --host/--run, reports a safe error 
     assert.match(textResult.stdout, /Warnings:/);
   } finally {
     rmSync(appHome, { recursive: true, force: true });
+  }
+});
+
+test('CLI: omitted host resolves only one exact Run; zero/two hosts list safe candidates and never mutate the DB', () => {
+  const fixture = setupOverheadDb();
+  try {
+    const { db, dbPath } = fixture;
+    const appHome = dirname(dbPath);
+    const runId = 'run-selector';
+    const hostileHost = 'host-b\u001b[31m\nnext\u0085';
+    const safeHost = JSON.stringify(hostileHost).replace('\u0085', '\\u0085');
+    insertRunGraph(db, 'host-a', runId, []);
+    insertRunGraph(db, 'host-c', 'other-run', []);
+    const before = readFileSync(dbPath);
+
+    const zero = runCli(appHome, 'report', 'overhead', '--run', 'missing-run', '--format=json');
+    assert.equal(zero.status, 3);
+    assert.deepEqual(JSON.parse(zero.stdout).error, {
+      code: 'report_run_not_found',
+      message: 'Run "missing-run" is not in the local database; candidate host IDs: [].',
+      hint: 'Collect this Orca Run before reporting overhead, or pass the exact --host/--run.',
+    });
+    assert.deepEqual(readFileSync(dbPath), before);
+
+    const one = runCli(appHome, 'report', 'overhead', '--run', runId, '--json');
+    assert.equal(one.status, 0, one.stderr);
+    assert.deepEqual([JSON.parse(one.stdout).data.hostId, JSON.parse(one.stdout).data.runId], ['host-a', runId]);
+    assert.deepEqual(readFileSync(dbPath), before);
+
+    insertRunGraph(db, hostileHost, runId, []);
+    const twoBefore = readFileSync(dbPath);
+    const two = runCli(appHome, 'report', 'overhead', '--run', runId, '--format', 'json');
+    assert.equal(two.status, 3);
+    const twoError = JSON.parse(two.stdout).error;
+    assert.equal(twoError.code, 'report_run_ambiguous');
+    assert.match(twoError.message, /candidate host IDs/);
+    assert.ok(twoError.message.includes(`["host-a",${safeHost}]`));
+    assert.deepEqual(readFileSync(dbPath), twoBefore);
+
+    const text = runCli(appHome, 'report', 'overhead', '--run', runId);
+    assert.equal(text.status, 3);
+    assert.ok(text.stderr.includes(safeHost));
+    assert.doesNotMatch(text.stderr, /[\u001b\u0085]|\nnext/);
+    assert.deepEqual(readFileSync(dbPath), twoBefore);
+
+    const explicitWrong = runCli(appHome, 'report', 'overhead', '--host', 'host-x', '--run', runId, '--json');
+    assert.equal(explicitWrong.status, 3);
+    assert.equal(JSON.parse(explicitWrong.stdout).error.code, 'report_setup');
+    assert.deepEqual(readFileSync(dbPath), twoBefore);
+
+    const unsafeWrong = runCli(appHome, 'report', 'overhead', '--host', 'host-x\u001b\u0085', '--run', runId);
+    assert.equal(unsafeWrong.status, 3);
+    assert.doesNotMatch(unsafeWrong.stderr, /[\u001b\u0085]/);
+    assert.ok(unsafeWrong.stderr.includes('host-x\\u001b\\u0085'));
+
+    const explicitA = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', runId, '--json');
+    assert.equal(explicitA.status, 0, explicitA.stderr);
+    assert.equal(JSON.parse(explicitA.stdout).data.hostId, 'host-a');
+    assert.deepEqual(readFileSync(dbPath), twoBefore);
+
+    const malformed = runCli(appHome, 'report', 'overhead', '--run', runId,
+      '--format', 'json', '--unknown-option');
+    assert.equal(malformed.status, 2);
+    assert.equal(JSON.parse(malformed.stdout).error.code, 'usage_error');
+    assert.deepEqual(readFileSync(dbPath), twoBefore);
+  } finally {
+    fixture.close();
   }
 });
 
@@ -644,9 +717,9 @@ test('V14-04: retry chain and overlapping CodeBurn sessions count only distinct 
     }
 
     const missingHost = runCli(appHome, 'report', 'overhead', '--run', 'run-retry', '--format', 'json');
-    assert.equal(missingHost.status, 2);
-    assert.equal(JSON.parse(missingHost.stdout).error.code, 'usage_error');
-    assert.match(JSON.parse(missingHost.stdout).error.message, /Missing --host/);
+    assert.equal(missingHost.status, 3);
+    assert.equal(JSON.parse(missingHost.stdout).error.code, 'report_run_ambiguous');
+    assert.match(JSON.parse(missingHost.stdout).error.message, /\["host-a","host-b"\]/);
 
     const jsonResult = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-retry', '--format', 'json');
     assert.equal(jsonResult.status, 0, jsonResult.stderr);
@@ -915,8 +988,8 @@ test('RPT-F03: --format json --format malformed duplicate preserves the JSON err
 test('RPT-F03: --format json renders JSON for usage errors, a missing DB, an unknown Run, and a schema error, with exit codes preserved', () => {
   const appHome = mkdtempSync(join(tmpdir(), 'orca-overhead-cli-json-'));
   try {
-    // Missing --host entirely, no DB set up yet: usage error before DB is touched.
-    const missingFlag = runCli(appHome, 'report', 'overhead', '--run', 'run-1', '--format', 'json');
+    // Missing --run, no DB set up yet: usage error before DB is touched.
+    const missingFlag = runCli(appHome, 'report', 'overhead', '--format', 'json');
     assert.equal(missingFlag.status, 2);
     assert.equal(missingFlag.stdout.trim().length > 0, true, 'stdout must carry the JSON error body');
     const missingFlagBody = JSON.parse(missingFlag.stdout.trim());
@@ -956,10 +1029,11 @@ test('RPT-F03: --format json renders JSON for usage errors, a missing DB, an unk
     assert.equal(schemaErrBody.error.code, 'db_schema_drift');
 
     // Global --json behavior is unchanged when --format json is absent.
-    const globalJsonOnly = runCli(appHome, 'report', 'overhead', '--run', 'run-1', '--json');
+    const globalJsonOnly = runCli(appHome, 'report', 'overhead', '--json');
     assert.equal(globalJsonOnly.status, 2);
     const globalJsonOnlyBody = JSON.parse(globalJsonOnly.stdout.trim());
     assert.equal(globalJsonOnlyBody.ok, false);
+    assert.equal(globalJsonOnlyBody.error.code, 'usage_error');
   } finally {
     rmSync(appHome, { recursive: true, force: true });
   }

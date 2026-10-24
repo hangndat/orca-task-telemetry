@@ -1,6 +1,6 @@
 /**
  * V1.4 slice 3 — `report overhead`: coordinator vs worker usage for one
- * explicitly selected Orca Run (`--host`, `--run`). Read-only; never writes,
+ * selected Orca Run (`--run`, optionally `--host`). Read-only; never writes,
  * never infers role/Issue from time/path/title, never claims full Run
  * coverage. See docs/V1-COORDINATOR-OVERHEAD-SPEC.md AC1-AC3.
  */
@@ -91,8 +91,13 @@ function reportSetupError(message: string, hint?: string): CliError {
   return new CliError({ code: 'report_setup', message, hint, exitCode: EXIT_ENVIRONMENT });
 }
 
+function renderSelectorId(value: string): string {
+  return JSON.stringify(value).replace(/[\u007F-\u009F]/g,
+    (control) => `\\u${control.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
 /**
- * Overhead report is scoped by explicit `--host`/`--run`, not by a GitHub
+ * Overhead report is scoped by `--run` and the resolved host, not by a GitHub
  * Project profile; it only needs the shared local telemetry database.
  */
 export async function openOverheadReportContext(): Promise<OverheadReportContext> {
@@ -105,6 +110,30 @@ export async function openOverheadReportContext(): Promise<OverheadReportContext
   }
   const handle = await openReadOnlyTelemetryDb(paths.dbPath);
   return { db: handle.db, close: () => handle.release() };
+}
+
+/** Resolve an omitted host only when the persisted Run has exactly one host. */
+export function resolveOverheadHost(ctx: OverheadReportContext, runId: string): string {
+  const rows = ctx.db
+    .prepare('SELECT host_id FROM orca_runs WHERE run_id = ? ORDER BY host_id')
+    .all(runId) as { host_id: string }[];
+  if (rows.length === 1) return rows[0]!.host_id;
+
+  const candidates = `[${rows.map((row) => renderSelectorId(row.host_id)).join(',')}]`;
+  if (rows.length === 0) {
+    throw new CliError({
+      code: 'report_run_not_found',
+      message: `Run ${renderSelectorId(runId)} is not in the local database; candidate host IDs: ${candidates}.`,
+      hint: 'Collect this Orca Run before reporting overhead, or pass the exact --host/--run.',
+      exitCode: EXIT_ENVIRONMENT,
+    });
+  }
+  throw new CliError({
+    code: 'report_run_ambiguous',
+    message: `Run ${renderSelectorId(runId)} matches multiple hosts; candidate host IDs: ${candidates}.`,
+    hint: 'Pass --host with the exact host ID for this Run.',
+    exitCode: EXIT_ENVIRONMENT,
+  });
 }
 
 type AttemptRow = {
@@ -382,7 +411,7 @@ export function buildOverheadReport(
     .get(hostId, runId);
   if (!runRow) {
     throw reportSetupError(
-      `Run ${hostId}/${runId} is not in the local database.`,
+      `Run ${renderSelectorId(runId)} on host ${renderSelectorId(hostId)} is not in the local database.`,
       'Collect this Orca Run before reporting overhead, and pass the exact --host/--run.',
     );
   }

@@ -31,7 +31,7 @@ const REPORT_SUBCOMMANDS = [
   { name: 'project', summary: 'Project-level totals with deduped linked sessions' },
   { name: 'hierarchy', summary: 'Direct and inclusive cost through native Issue parents' },
   { name: 'unmapped', summary: 'Sessions without an Issue link and link suggestions' },
-  { name: 'overhead --host <id> --run <id>', summary: 'Coordinator vs worker usage for one explicit Orca Run' },
+  { name: 'overhead --run <id> [--host <id>]', summary: 'Coordinator vs worker usage for one Orca Run' },
 ];
 
 export function rootHelpText(): string {
@@ -122,7 +122,8 @@ export function commandHelpText(command: string): string {
     }
     lines.push('', 'trace reads only the local database; cost is estimated API equivalent or unknown.');
     lines.push(
-      'overhead requires explicit --host/--run (never inferred); coverage is always unknown and',
+      'overhead requires --run; omit --host only when exactly one stored host matches that Run.',
+      'Coverage is always unknown and',
       'overheadShare/overheadPerWorkerCost are null with a reason unless every classified session',
       'has a snapshot and known cost and all three sources are success within 24h.',
     );
