@@ -121,6 +121,22 @@ function cleanup(ctx) {
   rmSync(ctx.appHome, { recursive: true, force: true });
 }
 
+// Independent check of the exact escape text for a Unicode code point: a
+// JSON string can only contain a UTF-16 code unit as `\uXXXX`, so a
+// supplementary-plane code point (one that needs a surrogate pair) must
+// become two `\uXXXX` escapes, not one `\u{XXXXX}` codepoint escape. This is
+// computed from `String.fromCodePoint`/`charCodeAt`, not by re-running the
+// production regex, so it verifies the escaper's *output*, not its
+// classification logic.
+function surrogateEscape(codePoint) {
+  const char = String.fromCodePoint(codePoint);
+  let escaped = '';
+  for (let i = 0; i < char.length; i += 1) {
+    escaped += `\\u${char.charCodeAt(i).toString(16).padStart(4, '0')}`;
+  }
+  return escaped;
+}
+
 test('role-links: coordinator link via CLI is idempotent, then rejects a conflicting re-link', () => {
   const ctx = setupRepoAndHome();
   insertRunGraph(ctx.handle.db, 'host-a', 'run-1', 'dispatch-x');
@@ -607,40 +623,145 @@ test('V1.4: coordinator --host inference resolves only an exact unique Run; 0/2 
   cleanup(ctx);
 });
 
-test('V1.4: bidi/format control characters in selector IDs never reach error text/JSON raw; escaped form is exact and the raw ID still works as an explicit selector', () => {
+// Unicode `Cf` (Format) code points named in the F01 recheck, covering: the
+// original repro (RLO), a deprecated bidi control the first fix missed,
+// SOFT HYPHEN, an interlinear-annotation control, and a supplementary-plane
+// tag character (needs a surrogate pair in UTF-16).
+const HOSTILE_CODE_POINTS = [
+  { name: 'U+202E (RLO)', codePoint: 0x202e },
+  { name: 'U+206A (deprecated bidi INHIBIT SYMMETRIC SWAPPING)', codePoint: 0x206a },
+  { name: 'U+00AD (SOFT HYPHEN)', codePoint: 0x00ad },
+  { name: 'U+FFF9 (INTERLINEAR ANNOTATION ANCHOR)', codePoint: 0xfff9 },
+  { name: 'U+E0001 (LANGUAGE TAG, supplementary plane)', codePoint: 0xe0001 },
+];
+
+for (const { name, codePoint } of HOSTILE_CODE_POINTS) {
+  const char = String.fromCodePoint(codePoint);
+  const escape = surrogateEscape(codePoint);
+  const suffix = codePoint.toString(16);
+
+  test(`V1.4: ${name} in a coordinator --host candidate never reaches error text/JSON raw; escaped form is exact and the raw ID still works as an explicit selector`, () => {
+    const ctx = setupRepoAndHome();
+    const db = ctx.handle.db;
+    const hostileHost = `host${char}--run safe`;
+    const safeHostile = JSON.stringify(hostileHost).replace(char, escape);
+    insertRunGraph(db, 'host-a', `run-bidi-${suffix}`, null);
+    insertRunGraph(db, hostileHost, `run-bidi-${suffix}`, null);
+    seedSession(db, `s-bidi-1-${suffix}`);
+    seedSession(db, `s-bidi-2-${suffix}`);
+    ctx.handle.close();
+
+    const before = readFileSync(ctx.dbPath);
+    const ambiguous = runCli(ctx.repo, ctx.env,
+      'link-role', '--run', `run-bidi-${suffix}`, '--role', 'coordinator',
+      '--provider', 'codex', '--session', `s-bidi-1-${suffix}`, '--verifier', 'operator1',
+      '--confirm-same-session', '--json');
+    assert.equal(ambiguous.status, 2);
+    const ambiguousBody = JSON.parse(ambiguous.stdout);
+    assert.equal(ambiguousBody.error.code, 'role_link_run_ambiguous');
+    assert.ok(ambiguousBody.error.message.includes(`["host-a",${safeHostile}]`));
+    assert.ok(!ambiguous.stdout.includes(char), 'raw hostile code point must not reach stdout');
+    assert.deepEqual(readFileSync(ctx.dbPath), before);
+
+    // Escaping is diagnostic-only: the raw hostile ID is still the exact
+    // stored value, so passing it back as an explicit --host still resolves.
+    const explicit = runCli(ctx.repo, ctx.env,
+      'link-role', '--run', `run-bidi-${suffix}`, '--host', hostileHost, '--role', 'coordinator',
+      '--provider', 'codex', '--session', `s-bidi-2-${suffix}`, '--verifier', 'operator1',
+      '--confirm-same-session', '--json');
+    assert.equal(explicit.status, 0, explicit.stderr);
+    assert.equal(JSON.parse(explicit.stdout).data.link.hostId, hostileHost);
+
+    cleanup(ctx);
+  });
+
+  test(`V1.4: ${name} in a raw --run (input, not just candidates) never reaches the role_link_run_not_found text/JSON error raw`, () => {
+    const ctx = setupRepoAndHome();
+    const db = ctx.handle.db;
+    const hostileRun = `run-missing${char}`;
+    const safeHostileRun = JSON.stringify(hostileRun).replace(char, escape);
+    seedSession(db, `s-bidi-missing-${suffix}`);
+    ctx.handle.close();
+
+    const textMode = runCli(ctx.repo, ctx.env,
+      'link-role', '--run', hostileRun, '--role', 'coordinator',
+      '--provider', 'codex', '--session', `s-bidi-missing-${suffix}`, '--verifier', 'operator1',
+      '--confirm-same-session');
+    assert.equal(textMode.status, 2);
+    assert.ok(!textMode.stderr.includes(char), 'raw hostile code point must not reach stderr text output');
+    assert.ok(textMode.stderr.includes(safeHostileRun), 'escaped run ID must appear in the text error');
+
+    const jsonMode = runCli(ctx.repo, ctx.env,
+      'link-role', '--run', hostileRun, '--role', 'coordinator',
+      '--provider', 'codex', '--session', `s-bidi-missing-${suffix}`, '--verifier', 'operator1',
+      '--confirm-same-session', '--json');
+    assert.equal(jsonMode.status, 2);
+    const parsed = JSON.parse(jsonMode.stdout);
+    assert.equal(parsed.error.code, 'role_link_run_not_found');
+    assert.ok(parsed.error.message.includes(safeHostileRun));
+    assert.ok(!parsed.error.message.includes(char), 'parsed JSON error.message must not contain the raw code point');
+
+    cleanup(ctx);
+  });
+}
+
+test('V1.4: U+206A in a worker --dispatch candidate tuple never reaches role_link_dispatch_ambiguous text/JSON raw; explicit selectors unaffected', () => {
   const ctx = setupRepoAndHome();
   const db = ctx.handle.db;
-  // U+202E (RLO) is the exact repro from the review finding: unescaped, a
-  // terminal/text renderer reverses everything after it, so an operator
-  // reading the candidate list could be shown a different-looking ID.
-  const hostileHost = 'host‮--run safe';
-  const safeHostile = JSON.stringify(hostileHost).replace(/‮/g, '\\u202e');
-  insertRunGraph(db, 'host-a', 'run-bidi', null);
-  insertRunGraph(db, hostileHost, 'run-bidi', null);
-  seedSession(db, 's-bidi-1');
-  seedSession(db, 's-bidi-2');
+  const char = String.fromCodePoint(0x206a);
+  const escape = surrogateEscape(0x206a);
+  const hostileHost = `host${char}spoof`;
+  insertRunGraph(db, 'host-a', 'run-worker-bidi', 'dispatch-bidi');
+  insertRunGraph(db, hostileHost, 'run-worker-bidi', 'dispatch-bidi');
+  seedSession(db, 's-worker-bidi-1');
+  seedSession(db, 's-worker-bidi-2');
   ctx.handle.close();
 
   const before = readFileSync(ctx.dbPath);
   const ambiguous = runCli(ctx.repo, ctx.env,
-    'link-role', '--run', 'run-bidi', '--role', 'coordinator',
-    '--provider', 'codex', '--session', 's-bidi-1', '--verifier', 'operator1',
+    'link-role', '--role', 'worker', '--dispatch', 'dispatch-bidi',
+    '--provider', 'codex', '--session', 's-worker-bidi-1', '--verifier', 'operator1',
     '--confirm-same-session', '--json');
   assert.equal(ambiguous.status, 2);
   const ambiguousBody = JSON.parse(ambiguous.stdout);
-  assert.equal(ambiguousBody.error.code, 'role_link_run_ambiguous');
-  assert.ok(ambiguousBody.error.message.includes(`["host-a",${safeHostile}]`));
-  assert.doesNotMatch(ambiguous.stdout, /‮/);
+  assert.equal(ambiguousBody.error.code, 'role_link_dispatch_ambiguous');
+  const safeHostile = JSON.stringify(hostileHost).replace(char, escape);
+  assert.ok(ambiguousBody.error.message.includes(safeHostile));
+  assert.ok(!ambiguous.stdout.includes(char), 'raw hostile code point must not reach stdout');
   assert.deepEqual(readFileSync(ctx.dbPath), before);
 
-  // Escaping is diagnostic-only: the raw hostile ID is still the exact
-  // stored value, so passing it back as an explicit --host still resolves.
+  // Explicit --host with the raw hostile value is still an exact filter and resolves.
   const explicit = runCli(ctx.repo, ctx.env,
-    'link-role', '--run', 'run-bidi', '--host', hostileHost, '--role', 'coordinator',
-    '--provider', 'codex', '--session', 's-bidi-2', '--verifier', 'operator1',
+    'link-role', '--role', 'worker', '--dispatch', 'dispatch-bidi', '--host', hostileHost,
+    '--provider', 'codex', '--session', 's-worker-bidi-2', '--verifier', 'operator1',
     '--confirm-same-session', '--json');
   assert.equal(explicit.status, 0, explicit.stderr);
   assert.equal(JSON.parse(explicit.stdout).data.link.hostId, hostileHost);
+
+  cleanup(ctx);
+});
+
+test('V1.4: U+00AD in a raw --dispatch (input) never reaches role_link_dispatch_not_found text/JSON raw, no mutation', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  const char = String.fromCodePoint(0x00ad);
+  const escape = surrogateEscape(0x00ad);
+  const hostileDispatch = `dispatch-missing${char}`;
+  seedSession(db, 's-worker-notfound-ad');
+  ctx.handle.close();
+
+  const before = readFileSync(ctx.dbPath);
+  const notFound = runCli(ctx.repo, ctx.env,
+    'link-role', '--role', 'worker', '--dispatch', hostileDispatch,
+    '--provider', 'codex', '--session', 's-worker-notfound-ad', '--verifier', 'operator1',
+    '--confirm-same-session', '--json');
+  assert.equal(notFound.status, 2);
+  const parsed = JSON.parse(notFound.stdout);
+  assert.equal(parsed.error.code, 'role_link_dispatch_not_found');
+  const safeHostile = JSON.stringify(hostileDispatch).replace(char, escape);
+  assert.ok(parsed.error.message.includes(safeHostile));
+  assert.ok(!parsed.error.message.includes(char), 'parsed JSON error.message must not contain the raw code point');
+  assert.deepEqual(readFileSync(ctx.dbPath), before);
 
   cleanup(ctx);
 });

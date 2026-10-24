@@ -25,19 +25,26 @@ function roleLinkError(code: string, message: string, hint?: string): CliError {
 }
 
 // JSON.stringify already escapes \u0000-\u001F, '"', and '\\'; it does not
-// escape the C1 control range (\u007F-\u009F) or Unicode bidirectional/format
-// controls (e.g. RLO U+202E, which can reorder the *rendered* text after it
-// to spoof a different candidate ID on a terminal), so both are escaped here.
-// Selector IDs come straight from stored/raw DB values and must never reach
-// error text/JSON with a raw control or format character.
-const UNSAFE_RENDER_CHARS =
-  /[\u007F-\u009F؜​-‏‪-‮⁠-⁩﻿]/g;
+// escape the C1 control range (\u007F-\u009F) or the Unicode `Cf` (Format)
+// general category (e.g. RLO U+202E, which can reorder the *rendered* text
+// after it to spoof a different candidate ID on a terminal), so both are
+// escaped here. `\p{Cf}` is matched via the Unicode property escape (not an
+// enumerated/hand-picked list) so the full, auditable category is covered,
+// including deprecated bidi controls (U+206A-U+206F), SOFT HYPHEN (U+00AD),
+// interlinear annotation controls (U+FFF9-U+FFFB), and supplementary-plane
+// tag characters (U+E0000-U+E007F). Selector IDs come straight from
+// stored/raw DB values and must never reach error text/JSON with a raw
+// control or format character.
+const UNSAFE_RENDER_CHARS = /[\u007F-\u009F\p{Cf}]/gu;
 
 function renderSelectorId(value: string): string {
-  return JSON.stringify(value).replace(
-    UNSAFE_RENDER_CHARS,
-    (control) => `\\u${control.charCodeAt(0).toString(16).padStart(4, '0')}`,
-  );
+  return JSON.stringify(value).replace(UNSAFE_RENDER_CHARS, (match) => {
+    let escaped = '';
+    for (let i = 0; i < match.length; i += 1) {
+      escaped += `\\u${match.charCodeAt(i).toString(16).padStart(4, '0')}`;
+    }
+    return escaped;
+  });
 }
 
 /** Resolve an omitted coordinator --host only when the Run has exactly one stored host. */
