@@ -105,7 +105,12 @@ export async function collectOrcaRunProvenance(
   };
   const call = async (source: OrcaRunProvenance['errors'][number]['source'], argv: string[]) => {
     try {
-      const result = receipt((await invoke(argv)).stdout);
+      const invocation = await invoke(argv);
+      if (invocation.exitCode !== 0) {
+        fail(source, 'source_failure');
+        return null;
+      }
+      const result = receipt(invocation.stdout);
       if (!result) fail(source, 'invalid_receipt');
       return result;
     } catch {

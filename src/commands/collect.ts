@@ -15,6 +15,7 @@ import {
   EXIT_PARTIAL,
   EXIT_SOURCE_UNAVAILABLE,
   EXIT_SUCCESS,
+  usageError,
 } from '../errors.js';
 import { normalizeProjectMemberships } from '../github/memberships.js';
 import { readProjectItems } from '../github/items.js';
@@ -34,6 +35,7 @@ import {
 } from '../orca/adapter.js';
 import { normalizeSupervisedRecords } from '../orca/normalize.js';
 import { parseWorkerListJson } from '../orca/workers.js';
+import { collectOrcaRunProvenance } from '../orca/run-provenance.js';
 import { getProfile } from '../profiles.js';
 import { createDefaultPathEnv, resolveAppPaths } from '../paths.js';
 import { resolveRepository } from '../repo.js';
@@ -43,7 +45,7 @@ export type CollectSourceName = 'github' | 'orca' | 'codeburn';
 
 export type CollectSourceResult = {
   source: CollectSourceName;
-  status: 'ok' | 'error';
+  status: 'ok' | 'error' | 'partial';
   counts?: Record<string, number>;
   error?: { code: string; message: string };
 };
@@ -210,6 +212,46 @@ async function collectOrca(
   }
 }
 
+async function collectOrcaRun(
+  runId: string,
+): Promise<CollectSourceResult> {
+  // Bounded read only: 1.4.237 has no verified durable source-machine identity.
+  // 'local' can match two different endpoints and cannot namespace persisted Runs.
+  const sourceHostId = 'local';
+  let counters = { runs: 0, tasks: 0, dispatches: 0, workers: 0, pages: 0 };
+  try {
+    const version = await readOrcaVersion();
+    const statusResult = await invokeOrcaReadOnly(['status', '--json']);
+    if (statusResult.exitCode !== 0) throw new Error('Orca status failed.');
+    const statusJson = JSON.parse(statusResult.stdout) as unknown;
+    assertRuntimeReachable(statusJson);
+    const root = statusJson as Record<string, unknown>;
+    const source = root['result'] as Record<string, unknown>;
+    const target = source['target'] as Record<string, unknown> | null;
+    if (target?.['kind'] !== 'local') {
+      throw new Error('Orca source host is not verified as local.');
+    }
+    const provenance = await collectOrcaRunProvenance(runId, {
+      sourceHostId, readVersion: async () => version,
+    });
+    counters = { runs: provenance.complete ? 1 : 0,
+      tasks: provenance.tasks.length, dispatches: provenance.dispatches.length,
+      workers: provenance.workers.length, pages: provenance.pagesRead };
+    if (!provenance.complete) {
+      const errorCode = provenance.errors.some((e) => e.code.endsWith('_limit') ||
+        e.code === 'unprovable_completeness' || e.code === 'cursor_loop')
+        ? 'collection_limit' : 'source_error';
+      return { source: 'orca', status: 'partial', counts: counters,
+        error: { code: errorCode, message: 'Orca Run provenance is incomplete.' } };
+    }
+    return { source: 'orca', status: 'partial', counts: counters,
+      error: { code: 'orca_source_host_unverified',
+        message: 'Orca local host has no verified durable source identity.' } };
+  } catch (err) {
+    return { source: 'orca', status: 'partial', error: mapSourceError(err), counts: counters };
+  }
+}
+
 async function collectCodeburn(
   db: import('node:sqlite').DatabaseSync,
   observedAt: string,
@@ -283,6 +325,7 @@ async function collectCodeburn(
 }
 
 function computeExitCode(sources: CollectSourceResult[]): number {
+  if (sources.some((source) => source.status === 'partial')) return EXIT_PARTIAL;
   const errors = sources.filter((s) => s.status === 'error').length;
   if (errors === 0) {
     return EXIT_SUCCESS;
@@ -296,6 +339,7 @@ function computeExitCode(sources: CollectSourceResult[]): number {
 export type RunCollectOptions = {
   cwd: string;
   now?: () => string;
+  runId?: string;
 };
 
 export async function runCollectCommand(
@@ -317,7 +361,9 @@ export async function runCollectCommand(
 
   const sources: CollectSourceResult[] = [];
   sources.push(await collectGithub(profile.project.id, handle.db));
-  sources.push(await collectOrca(handle.db));
+  sources.push(options.runId === undefined
+    ? await collectOrca(handle.db)
+    : await collectOrcaRun(options.runId));
   sources.push(await collectCodeburn(handle.db, observedAt));
 
   const exitCode = computeExitCode(sources);
@@ -333,10 +379,17 @@ export async function runCollectCommand(
 }
 
 export async function runCollect(
-  _rest: string[],
+  rest: string[],
   options: { json: boolean; cwd: string },
 ): Promise<RouteResult> {
-  const payload = await runCollectCommand({ cwd: options.cwd });
+  let runId: string | undefined;
+  if (rest.length > 0) {
+    if (rest.length !== 2 || rest[0] !== '--run' || !rest[1] || rest[1].startsWith('-')) {
+      throw usageError('Expected --run <run-id>.', 'Usage: orca-telemetry collect [--run <run-id>] [--json]');
+    }
+    runId = rest[1];
+  }
+  const payload = await runCollectCommand({ cwd: options.cwd, runId });
   const data = {
     sources: payload.sources,
     database: payload.counts,
@@ -352,9 +405,7 @@ export async function runCollect(
         `${source.source}: ok${source.counts ? ` (${JSON.stringify(source.counts)})` : ''}`,
       );
     } else {
-      lines.push(
-        `${source.source}: error ${source.error?.code ?? ''} — ${source.error?.message ?? ''}`,
-      );
+      lines.push(`${source.source}: ${source.status} ${source.error?.code ?? ''} — ${source.error?.message ?? ''}`);
     }
   }
   lines.push(`exit: ${payload.exitCode}`);
