@@ -8,6 +8,7 @@ import { openTelemetryDatabase } from '../dist/db/index.js';
 import { MIGRATION_V1_STATEMENTS } from '../dist/db/migrations/v1.js';
 import { MIGRATION_V2_STATEMENTS } from '../dist/db/migrations/v2.js';
 import { MIGRATION_V3_STATEMENTS } from '../dist/db/migrations/v3.js';
+import { MIGRATION_V4_STATEMENTS } from '../dist/db/migrations/v4.js';
 import {
   scopedExecutionKey, insertScopedExecution, insertManualRoleLink,
   insertCollectionAttempt, verifierIdentityHash,
@@ -55,7 +56,7 @@ function insertRole(db, key, role, host, run, dispatch) {
   });
 }
 
-test('V14 DB: fresh and v1/v2/v3 databases migrate to v4 and reopen idempotently', () => {
+test('V14 DB: fresh and v1/v2/v3 databases migrate to v5 and reopen idempotently', () => {
   for (const startVersion of [0, 1, 2, 3]) {
     withPath((path) => {
       if (startVersion) {
@@ -73,7 +74,7 @@ test('V14 DB: fresh and v1/v2/v3 databases migrate to v4 and reopen idempotently
         old.close();
       }
       const first = openTelemetryDatabase({ dbPath: path });
-      assert.equal(first.db.prepare('PRAGMA user_version').get().user_version, 4);
+      assert.equal(first.db.prepare('PRAGMA user_version').get().user_version, 5);
       assert.equal(first.db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
       if (startVersion) {
         assert.equal(first.db.prepare('SELECT COUNT(*) AS n FROM session_links').get().n, 1);
@@ -83,7 +84,7 @@ test('V14 DB: fresh and v1/v2/v3 databases migrate to v4 and reopen idempotently
       }
       first.close();
       const second = openTelemetryDatabase({ dbPath: path });
-      assert.equal(second.db.prepare('PRAGMA user_version').get().user_version, 4);
+      assert.equal(second.db.prepare('PRAGMA user_version').get().user_version, 5);
       if (startVersion) assert.equal(second.db.prepare('SELECT COUNT(*) AS n FROM executions').get().n, 2);
       second.close();
     });
@@ -347,7 +348,28 @@ test('V14 DB: reopen refuses a draft v4 missing privacy constraints', () => {
     assert.throws(() => openTelemetryDatabase({ dbPath: path }),
       /provenance constraints are missing or outdated/);
     const raw = new DatabaseSync(path);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 5);
+    raw.close();
+  });
+});
+
+test('V14 DB: migrating a draft v4 (missing privacy constraints) to v5 rolls back without bumping the version', () => {
+  withPath((path) => {
+    const draft = new DatabaseSync(path);
+    draft.exec('PRAGMA foreign_keys = ON');
+    for (const sql of [...MIGRATION_V1_STATEMENTS, ...MIGRATION_V2_STATEMENTS,
+      ...MIGRATION_V3_STATEMENTS, ...MIGRATION_V4_STATEMENTS]) {
+      draft.exec(sql);
+    }
+    draft.exec('DROP TRIGGER collection_attempts_counters_update');
+    draft.exec('PRAGMA user_version = 4');
+    draft.close();
+
+    assert.throws(() => openTelemetryDatabase({ dbPath: path }),
+      /provenance constraints are missing or outdated/);
+    const raw = new DatabaseSync(path);
     assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 4);
+    assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'session_role_link_audit'").get().n, 0);
     raw.close();
   });
 });

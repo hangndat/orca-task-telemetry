@@ -10,8 +10,9 @@ import {
 } from './migrations/v2.js';
 import { MIGRATION_V3_STATEMENTS, SCHEMA_VERSION_V3 } from './migrations/v3.js';
 import { MIGRATION_V4_STATEMENTS, SCHEMA_VERSION_V4 } from './migrations/v4.js';
+import { MIGRATION_V5_STATEMENTS, SCHEMA_VERSION_V5 } from './migrations/v5.js';
 
-export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V4;
+export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V5;
 
 function readUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as
@@ -37,9 +38,11 @@ export function migrateDatabase(db: DatabaseSync): void {
   if (current === SUPPORTED_SCHEMA_VERSION) {
     return;
   }
-  if (current !== 0 && current !== SCHEMA_VERSION_V1 && current !== SCHEMA_VERSION_V2 && current !== SCHEMA_VERSION_V3) {
+  if (current !== 0 && current !== SCHEMA_VERSION_V1 && current !== SCHEMA_VERSION_V2
+    && current !== SCHEMA_VERSION_V3 && current !== SCHEMA_VERSION_V4) {
     throw dbSchemaError(
-      `Unsupported intermediate schema version ${current}; expected 0, ${SCHEMA_VERSION_V1}, ${SCHEMA_VERSION_V2}, ${SCHEMA_VERSION_V3} or ${SUPPORTED_SCHEMA_VERSION}.`,
+      `Unsupported intermediate schema version ${current}; expected 0, ${SCHEMA_VERSION_V1}, ` +
+      `${SCHEMA_VERSION_V2}, ${SCHEMA_VERSION_V3}, ${SCHEMA_VERSION_V4} or ${SUPPORTED_SCHEMA_VERSION}.`,
     );
   }
 
@@ -72,10 +75,17 @@ export function migrateDatabase(db: DatabaseSync): void {
       }
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V3}`);
     }
-    for (const sql of MIGRATION_V4_STATEMENTS) {
+    if (current < SCHEMA_VERSION_V4) {
+      for (const sql of MIGRATION_V4_STATEMENTS) {
+        db.exec(sql);
+      }
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V4}`);
+    }
+    assertV4ProvenanceHardened(db);
+    for (const sql of MIGRATION_V5_STATEMENTS) {
       db.exec(sql);
     }
-    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V4}`);
+    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V5}`);
     const invalid = db.prepare('PRAGMA foreign_key_check').get();
     if (invalid) {
       throw dbSchemaError('Existing database contains invalid foreign key references.');
@@ -91,21 +101,12 @@ export function migrateDatabase(db: DatabaseSync): void {
   }
 }
 
-export function assertSchemaCurrent(db: DatabaseSync): void {
-  const current = readUserVersion(db);
-  if (current > SUPPORTED_SCHEMA_VERSION) {
-    throw dbSchemaError(
-      `Database schema version ${current} is newer than supported ${SUPPORTED_SCHEMA_VERSION}.`,
-    );
-  }
-  if (current < SUPPORTED_SCHEMA_VERSION) {
-    throw dbSchemaError(
-      `Database schema version ${current} is older than required ${SUPPORTED_SCHEMA_VERSION}.`,
-    );
-  }
-  // v4 was hardened before release without changing its version. Refuse a
-  // database created by the earlier draft schema rather than silently opening
-  // it with weaker identity or privacy constraints.
+/**
+ * v4 was hardened before release without changing its version. Refuse a
+ * database created by the earlier draft schema rather than silently opening
+ * it with weaker identity or privacy constraints.
+ */
+function assertV4ProvenanceHardened(db: DatabaseSync): void {
   const requiredSql: readonly [string, string][] = [
     ['scoped_executions', "hex(host_id)"],
     ['session_role_links', "evidence_kind = 'bounded_manual'"],
@@ -125,4 +126,19 @@ export function assertSchemaCurrent(db: DatabaseSync): void {
   if (requiredSql.some(([name, marker]) => !schema.get(name)?.includes(marker))) {
     throw dbSchemaError('Database v4 provenance constraints are missing or outdated.');
   }
+}
+
+export function assertSchemaCurrent(db: DatabaseSync): void {
+  const current = readUserVersion(db);
+  if (current > SUPPORTED_SCHEMA_VERSION) {
+    throw dbSchemaError(
+      `Database schema version ${current} is newer than supported ${SUPPORTED_SCHEMA_VERSION}.`,
+    );
+  }
+  if (current < SUPPORTED_SCHEMA_VERSION) {
+    throw dbSchemaError(
+      `Database schema version ${current} is older than required ${SUPPORTED_SCHEMA_VERSION}.`,
+    );
+  }
+  assertV4ProvenanceHardened(db);
 }

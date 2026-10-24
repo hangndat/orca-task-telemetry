@@ -68,6 +68,27 @@ export function insertManualRoleLink(db: DatabaseSync, input: {
     );
 }
 
+export function insertRoleLinkAudit(db: DatabaseSync, input: {
+  sessionKey: string;
+  role: 'coordinator' | 'worker';
+  hostId: string;
+  runId: string;
+  dispatchId?: string | null;
+  linkedAt: string;
+  linkedBy: string;
+  unlinkedAt: string;
+  verifier: string;
+}): void {
+  db.prepare(`INSERT INTO session_role_link_audit
+    (session_key, role, host_id, run_id, dispatch_id, linked_at, linked_by,
+      unlinked_at, unlinked_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      input.sessionKey, input.role, input.hostId, input.runId,
+      input.dispatchId ?? null, input.linkedAt, input.linkedBy,
+      input.unlinkedAt, verifierHash(input.verifier),
+    );
+}
+
 export type CollectionErrorCode =
   | 'source_unavailable'
   | 'source_invalid_json'

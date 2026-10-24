@@ -10,6 +10,8 @@ import { runInit } from './init.js';
 import { runProjects } from './projects.js';
 import { runCollect } from './collect.js';
 import { runLink } from './link.js';
+import { runLinkRole } from './link-role.js';
+import { runUnlinkRole } from './unlink-role.js';
 import { runReport, runReportTask, runReportTrace } from './report.js';
 import { runTrace } from './trace.js';
 
@@ -59,6 +61,20 @@ export async function routeCommand(
 
   if (command === 'link') {
     return runLink(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
+  }
+
+  if (command === 'link-role') {
+    return runLinkRole(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
+  }
+
+  if (command === 'unlink-role') {
+    return runUnlinkRole(restPositionals, {
       json,
       cwd: options.cwd ?? process.cwd(),
     });

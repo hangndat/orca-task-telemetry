@@ -1,0 +1,414 @@
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test } from 'vitest';
+import { emptyConfig, saveConfig } from '../dist/config.js';
+import { upsertProfile } from '../dist/profiles.js';
+import { importCodeBurnUsage, openTelemetryDatabase } from '../dist/db/index.js';
+import { parseCodexSessions } from '../dist/codeburn/codex.js';
+import { linkSessionToRole, unlinkSessionRole } from '../dist/attribution/role-link.js';
+
+const dir = dirname(fileURLToPath(import.meta.url));
+const cli = resolve(dir, '../dist/cli.js');
+const ghResolveStub = resolve(dir, 'helpers/integration-stubs/gh-collect.mjs');
+
+function runCli(cwd, env, ...args) {
+  return spawnSync(process.execPath, [cli, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
+}
+
+function makeCodexRow(sessionId) {
+  return {
+    sessionId,
+    title: '',
+    project: 'role-link-fixture',
+    provider: 'codex',
+    models: ['GPT-6.1 Sol'],
+    cost: 0.01,
+    savingsUSD: 0,
+    calls: 1,
+    turns: 1,
+    inputTokens: 10,
+    outputTokens: 20,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    startedAt: '2026-10-24T00:00:00.000Z',
+    endedAt: '2026-10-24T00:00:01.000Z',
+    durationMs: 1000,
+    estimatedCost: 0,
+    isEstimated: false,
+  };
+}
+
+function insertRunGraph(db, host, run, dispatch) {
+  db.prepare('INSERT OR IGNORE INTO orca_runs VALUES (?, ?, ?, ?)')
+    .run(host, run, '2026-10-24T00:00:00Z', '1.4.237');
+  db.prepare('INSERT OR IGNORE INTO orca_tasks (host_id, run_id, task_id) VALUES (?, ?, ?)')
+    .run(host, run, 'task-1');
+  if (dispatch) {
+    db.prepare(`INSERT OR IGNORE INTO orca_dispatches
+      (host_id, run_id, task_id, dispatch_id) VALUES (?, ?, ?, ?)`)
+      .run(host, run, 'task-1', dispatch);
+  }
+}
+
+function setupRepoAndHome() {
+  const repo = mkdtempSync(join(tmpdir(), 'orca-role-repo-'));
+  execFileSync('git', ['init'], { cwd: repo });
+  execFileSync('git', ['config', 'user.email', 'r@test.com'], { cwd: repo });
+  execFileSync('git', ['config', 'user.name', 'r'], { cwd: repo });
+  execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/o/r.git'], { cwd: repo });
+
+  const appHome = mkdtempSync(join(tmpdir(), 'orca-role-home-'));
+  mkdirSync(appHome, { recursive: true });
+  const { config } = upsertProfile(emptyConfig(), {
+    id: 'R_role', nameWithOwner: 'o/r', url: 'https://github.com/o/r',
+  }, {
+    id: 'PVT_role', number: 1, title: 'P', url: 'https://github.com/users/o/projects/1',
+    closed: false, owner: { kind: 'user', login: 'o' }, sources: ['repository'],
+  });
+  saveConfig(appHome, config);
+
+  const dbPath = join(appHome, 'telemetry.sqlite');
+  const handle = openTelemetryDatabase({ dbPath, gitRoot: repo });
+
+  const env = {
+    ORCA_TELEMETRY_HOME: appHome,
+    ORCA_TELEMETRY_GH: ghResolveStub,
+    GH_STUB_REPO_VIEW_JSON: JSON.stringify({ id: 'R_role', nameWithOwner: 'o/r', url: 'https://github.com/o/r' }),
+  };
+
+  return { repo, appHome, env, dbPath, handle };
+}
+
+function seedSession(db, rawId, provider = 'codex') {
+  const observedAt = '2026-01-01T00:00:00.000Z';
+  const row = makeCodexRow(rawId);
+  const parsed = parseCodexSessions([row], observedAt, '0.9.27')[0];
+  importCodeBurnUsage(db, [{
+    session: parsed.session,
+    snapshot: parsed.snapshot,
+    models: parsed.metadata.models,
+    tokenAllocation: 'known',
+    projectHint: parsed.metadata.projectHint,
+  }]);
+  return `${provider}:codeburn:${rawId}`;
+}
+
+function throwsCode(fn, code) {
+  try {
+    fn();
+  } catch (err) {
+    assert.equal(err.code, code, `expected code ${code}, got ${err.code}: ${err.message}`);
+    return;
+  }
+  assert.fail(`expected a CliError with code ${code}`);
+}
+
+function cleanup(ctx) {
+  try {
+    ctx.handle.close();
+  } catch {
+    // already closed
+  }
+  rmSync(ctx.repo, { recursive: true, force: true });
+  rmSync(ctx.appHome, { recursive: true, force: true });
+}
+
+test('role-links: coordinator link via CLI is idempotent, then rejects a conflicting re-link', () => {
+  const ctx = setupRepoAndHome();
+  insertRunGraph(ctx.handle.db, 'host-a', 'run-1', 'dispatch-x');
+  const sessionId = seedSession(ctx.handle.db, 's-coord-1');
+  ctx.handle.close();
+
+  const linkArgs = [
+    'link-role', '--host', 'host-a', '--run', 'run-1', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-coord-1', '--verifier', 'operator1',
+    '--evidence-note', 'operator_observed_same_session', '--confirm-same-session', '--json',
+  ];
+  const first = runCli(ctx.repo, ctx.env, ...linkArgs);
+  assert.equal(first.status, 0, first.stderr);
+  const firstBody = JSON.parse(first.stdout.trim());
+  assert.equal(firstBody.ok, true);
+  assert.equal(firstBody.data.outcome, 'created');
+  assert.equal(firstBody.data.link.sessionKey, sessionId);
+  assert.equal(firstBody.data.link.role, 'coordinator');
+
+  const second = runCli(ctx.repo, ctx.env, ...linkArgs);
+  assert.equal(second.status, 0);
+  const secondBody = JSON.parse(second.stdout.trim());
+  assert.equal(secondBody.data.outcome, 'unchanged');
+
+  const conflictArgs = [
+    'link-role', '--host', 'host-a', '--run', 'run-1', '--role', 'worker',
+    '--dispatch', 'dispatch-x', '--provider', 'codex', '--session', 's-coord-1',
+    '--verifier', 'operator1', '--confirm-same-session', '--json',
+  ];
+  const conflict = runCli(ctx.repo, ctx.env, ...conflictArgs);
+  const conflictBody = JSON.parse(conflict.stdout.trim());
+  assert.equal(conflictBody.ok, false);
+  assert.equal(conflictBody.error.code, 'role_link_conflict');
+
+  cleanup(ctx);
+});
+
+test('role-links: CLI validation rejects missing --confirm-same-session, missing --dispatch, and bad --evidence-note', () => {
+  const ctx = setupRepoAndHome();
+  insertRunGraph(ctx.handle.db, 'host-a', 'run-1', 'dispatch-1');
+  seedSession(ctx.handle.db, 's-cli-1');
+  ctx.handle.close();
+
+  const missingConfirm = runCli(ctx.repo, ctx.env,
+    'link-role', '--host', 'host-a', '--run', 'run-1', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-cli-1', '--verifier', 'operator1');
+  assert.equal(missingConfirm.status, 2);
+  assert.match(missingConfirm.stderr, /confirm-same-session/);
+
+  const missingDispatch = runCli(ctx.repo, ctx.env,
+    'link-role', '--host', 'host-a', '--run', 'run-1', '--role', 'worker',
+    '--provider', 'codex', '--session', 's-cli-1', '--verifier', 'operator1',
+    '--confirm-same-session');
+  assert.equal(missingDispatch.status, 2);
+  assert.match(missingDispatch.stderr, /dispatch/i);
+
+  const badEvidence = runCli(ctx.repo, ctx.env,
+    'link-role', '--host', 'host-a', '--run', 'run-1', '--role', 'coordinator',
+    '--provider', 'codex', '--session', 's-cli-1', '--verifier', 'operator1',
+    '--evidence-note', 'prompt leak', '--confirm-same-session');
+  assert.equal(badEvidence.status, 2);
+  assert.match(badEvidence.stderr, /evidence-note/i);
+
+  cleanup(ctx);
+});
+
+test('role-links: missing session, Run, and Dispatch are rejected without writing a link', () => {
+  const ctx = setupRepoAndHome();
+  insertRunGraph(ctx.handle.db, 'host-a', 'run-1', 'dispatch-1');
+  seedSession(ctx.handle.db, 's-missing-1');
+  const db = ctx.handle.db;
+
+  throwsCode(() => linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 'missing-session', role: 'coordinator',
+    hostId: 'host-a', runId: 'run-1', verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  }), 'role_link_session_unknown');
+
+  throwsCode(() => linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-missing-1', role: 'coordinator',
+    hostId: 'host-a', runId: 'missing-run', verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  }), 'role_link_run_unknown');
+
+  throwsCode(() => linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-missing-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'missing-dispatch',
+    verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  }), 'role_link_dispatch_unknown');
+
+  throwsCode(() => linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-missing-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  }), 'role_link_dispatch_missing');
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 0);
+  cleanup(ctx);
+});
+
+test('role-links: cross-host same raw run/dispatch IDs are isolated tuples', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  insertRunGraph(db, 'host-a', 'run-1', 'same-dispatch');
+  insertRunGraph(db, 'host-b', 'run-1', 'same-dispatch');
+  const sessionA = seedSession(db, 's-cross-a');
+  const sessionB = seedSession(db, 's-cross-b');
+
+  const resultA = linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-cross-a', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'same-dispatch',
+    verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  });
+  assert.equal(resultA.outcome, 'created');
+  assert.equal(resultA.link.sessionKey, sessionA);
+
+  const resultB = linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-cross-b', role: 'worker',
+    hostId: 'host-b', runId: 'run-1', dispatchId: 'same-dispatch',
+    verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  });
+  assert.equal(resultB.outcome, 'created');
+  assert.equal(resultB.link.sessionKey, sessionB);
+
+  // The same session cannot be reused against the other host's tuple.
+  throwsCode(() => linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-cross-a', role: 'worker',
+    hostId: 'host-b', runId: 'run-1', dispatchId: 'same-dispatch',
+    verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  }), 'role_link_conflict');
+
+  const rows = db.prepare('SELECT host_id, run_id, dispatch_id FROM session_role_links ORDER BY host_id').all()
+    .map((row) => ({ host_id: row.host_id, run_id: row.run_id, dispatch_id: row.dispatch_id }));
+  assert.deepEqual(rows, [
+    { host_id: 'host-a', run_id: 'run-1', dispatch_id: 'same-dispatch' },
+    { host_id: 'host-b', run_id: 'run-1', dispatch_id: 'same-dispatch' },
+  ]);
+
+  cleanup(ctx);
+});
+
+test('role-links: exact repeat is idempotent, differing provenance is a conflict', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  insertRunGraph(db, 'host-a', 'run-1', 'dispatch-1');
+  seedSession(db, 's-idem-1');
+
+  const base = {
+    provider: 'codex', rawSessionId: 's-idem-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-1',
+    verifier: 'operator1', evidenceNote: 'ids_visible_same_session',
+    linkedAt: '2026-10-24T00:00:00Z',
+  };
+  const created = linkSessionToRole(db, base);
+  assert.equal(created.outcome, 'created');
+
+  const repeatSameVerifier = linkSessionToRole(db, { ...base, verifier: 'operator2' });
+  assert.equal(repeatSameVerifier.outcome, 'unchanged');
+  assert.equal(repeatSameVerifier.link.linkedBy, created.link.linkedBy);
+
+  throwsCode(() => linkSessionToRole(db, { ...base, evidenceNote: 'operator_observed_same_session' }),
+    'role_link_conflict');
+  throwsCode(() => linkSessionToRole(db, { ...base, dispatchId: 'dispatch-2-missing' }),
+    'role_link_dispatch_unknown');
+
+  insertRunGraph(db, 'host-a', 'run-1', 'dispatch-2');
+  throwsCode(() => linkSessionToRole(db, { ...base, dispatchId: 'dispatch-2' }),
+    'role_link_conflict');
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 1);
+  cleanup(ctx);
+});
+
+test('role-links: unlink writes a durable audit row atomically and survives DB reopen', () => {
+  const ctx = setupRepoAndHome();
+  insertRunGraph(ctx.handle.db, 'host-a', 'run-1', 'dispatch-1');
+  seedSession(ctx.handle.db, 's-unlink-1');
+  linkSessionToRole(ctx.handle.db, {
+    provider: 'codex', rawSessionId: 's-unlink-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-1',
+    verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  });
+  ctx.handle.close();
+
+  const reopened1 = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  const result = unlinkSessionRole(reopened1.db, {
+    provider: 'codex', rawSessionId: 's-unlink-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-1',
+    verifier: 'operator2', unlinkedAt: '2026-10-24T01:00:00Z',
+  });
+  assert.equal(result.outcome, 'deleted');
+  assert.equal(reopened1.db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 0);
+  reopened1.close();
+
+  const reopened2 = openTelemetryDatabase({ dbPath: ctx.dbPath, gitRoot: ctx.repo });
+  const audit = reopened2.db.prepare(`SELECT session_key, role, host_id, run_id, dispatch_id,
+    linked_at, linked_by, unlinked_at, unlinked_by FROM session_role_link_audit`).get();
+  assert.equal(audit.session_key, 'codex:codeburn:s-unlink-1');
+  assert.equal(audit.role, 'worker');
+  assert.equal(audit.host_id, 'host-a');
+  assert.equal(audit.run_id, 'run-1');
+  assert.equal(audit.dispatch_id, 'dispatch-1');
+  assert.equal(audit.unlinked_at, '2026-10-24T01:00:00Z');
+  assert.notEqual(audit.linked_by, audit.unlinked_by);
+  assert.equal(reopened2.db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 0);
+  reopened2.close();
+
+  cleanup(ctx);
+});
+
+test('role-links: unlink selector mismatch and missing link are rejected without mutation', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  insertRunGraph(db, 'host-a', 'run-1', 'dispatch-1');
+  seedSession(db, 's-mismatch-1');
+  linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-mismatch-1', role: 'worker',
+    hostId: 'host-a', runId: 'run-1', dispatchId: 'dispatch-1',
+    verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  });
+
+  throwsCode(() => unlinkSessionRole(db, {
+    provider: 'codex', rawSessionId: 's-mismatch-1', role: 'coordinator',
+    hostId: 'host-a', runId: 'run-1', verifier: 'operator2', unlinkedAt: '2026-10-24T01:00:00Z',
+  }), 'role_link_selector_mismatch');
+
+  throwsCode(() => unlinkSessionRole(db, {
+    provider: 'codex', rawSessionId: 'never-linked', role: 'coordinator',
+    hostId: 'host-a', runId: 'run-1', verifier: 'operator2', unlinkedAt: '2026-10-24T01:00:00Z',
+  }), 'role_link_not_found');
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_role_link_audit').get().n, 0);
+
+  cleanup(ctx);
+});
+
+test('role-links: a failing audit write rolls back and leaves the live link untouched', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  insertRunGraph(db, 'host-a', 'run-1', null);
+  seedSession(db, 's-rollback-1');
+  linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-rollback-1', role: 'coordinator',
+    hostId: 'host-a', runId: 'run-1', verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  });
+
+  // Force the audit INSERT inside the transaction to violate its CHECK
+  // constraint (role/dispatch mismatch) and confirm the DELETE never commits.
+  assert.throws(() => {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare(`INSERT INTO session_role_link_audit
+        (session_key, role, host_id, run_id, dispatch_id, linked_at, linked_by,
+          unlinked_at, unlinked_by)
+        VALUES ('codex:codeburn:s-rollback-1', 'coordinator', 'host-a', 'run-1', 'dispatch-1',
+          '2026-10-24T00:00:00Z', ?, '2026-10-24T01:00:00Z', ?)`)
+        .run(
+          'sha256:' + '0'.repeat(64),
+          'sha256:' + '0'.repeat(64),
+        );
+      db.prepare('DELETE FROM session_role_links WHERE session_key = ?').run('codex:codeburn:s-rollback-1');
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  });
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_role_links').get().n, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_role_link_audit').get().n, 0);
+
+  cleanup(ctx);
+});
+
+test('role-links: linking a role never writes to Issue session_links or issues tables', () => {
+  const ctx = setupRepoAndHome();
+  const db = ctx.handle.db;
+  insertRunGraph(db, 'host-a', 'run-1', null);
+  seedSession(db, 's-issue-1');
+
+  const beforeLinks = db.prepare('SELECT COUNT(*) AS n FROM session_links').get().n;
+  const beforeIssues = db.prepare('SELECT COUNT(*) AS n FROM issues').get().n;
+
+  linkSessionToRole(db, {
+    provider: 'codex', rawSessionId: 's-issue-1', role: 'coordinator',
+    hostId: 'host-a', runId: 'run-1', verifier: 'operator1', linkedAt: '2026-10-24T00:00:00Z',
+  });
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM session_links').get().n, beforeLinks);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM issues').get().n, beforeIssues);
+
+  cleanup(ctx);
+});

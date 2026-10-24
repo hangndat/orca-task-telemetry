@@ -6,6 +6,8 @@ const IMPLEMENTED = new Set([
   'init',
   'collect',
   'link',
+  'link-role',
+  'unlink-role',
   'report',
   'trace',
 ]);
@@ -16,6 +18,8 @@ const TOP_LEVEL = [
   { name: 'projects', summary: 'List GitHub Projects for the current repository' },
   { name: 'collect', summary: 'Collect GitHub, Orca, and CodeBurn into local DB' },
   { name: 'link', summary: 'Link a CodeBurn session to a GitHub issue' },
+  { name: 'link-role', summary: 'Link a CodeBurn session to a coordinator/worker role of an Orca Run' },
+  { name: 'unlink-role', summary: 'Remove an explicit session role link (durable audit)' },
   { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
   { name: 'trace', summary: 'Link and refresh verified PR or commit evidence' },
 ];
@@ -53,6 +57,41 @@ export function rootHelpText(): string {
 }
 
 export function commandHelpText(command: string): string {
+  if (command === 'link-role') {
+    return [
+      'orca-task-telemetry link-role — link a CodeBurn session to a Run role',
+      '',
+      'Usage:',
+      '  orca-telemetry link-role --host <host-id> --run <run-id> --role coordinator \\',
+      '    --provider claude|codex --session <raw-id> --verifier <operator-id> \\',
+      '    [--evidence-note ids_visible_same_session|operator_observed_same_session] \\',
+      '    --confirm-same-session [--json]',
+      '  orca-telemetry link-role --host <host-id> --run <run-id> --role worker \\',
+      '    --dispatch <dispatch-id> --provider claude|codex --session <raw-id> \\',
+      '    --verifier <operator-id> [--evidence-note ...] --confirm-same-session [--json]',
+      '',
+      'Requires an already-collected usage session, Orca Run, and (for worker) Dispatch',
+      'in the exact host/run. No fuzzy matching and no Issue auto-link. A session already',
+      'linked to a different role/Run/Dispatch is a conflict; an exact repeat is idempotent.',
+      '--confirm-same-session asserts both IDs were identified in one observed session.',
+    ].join('\n') + '\n';
+  }
+  if (command === 'unlink-role') {
+    return [
+      'orca-task-telemetry unlink-role — remove an explicit session role link',
+      '',
+      'Usage:',
+      '  orca-telemetry unlink-role --host <host-id> --run <run-id> --role coordinator \\',
+      '    --provider claude|codex --session <raw-id> --verifier <operator-id> [--json]',
+      '  orca-telemetry unlink-role --host <host-id> --run <run-id> --role worker \\',
+      '    --dispatch <dispatch-id> --provider claude|codex --session <raw-id> \\',
+      '    --verifier <operator-id> [--json]',
+      '',
+      'Selectors must match the existing link exactly. Writes a durable audit of the',
+      'removed link and both verifiers (no raw evidence/prompt); delete+audit is atomic.',
+      'Unrelated Issue links are unaffected.',
+    ].join('\n') + '\n';
+  }
   if (command === 'trace') {
     return [
       'orca-task-telemetry trace — manual GitHub PR/commit links and explicit refresh',
