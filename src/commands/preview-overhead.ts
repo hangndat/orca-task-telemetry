@@ -51,7 +51,7 @@ function parsePreviewArgs(rest: string[]): { run: string; roles: string } {
   return { run: values.run, roles: values.roles };
 }
 
-function readRolesFile(file: string): RoleEntry[] {
+function readRolesFile(file: string, selectedRunId: string): RoleEntry[] {
   let text: string;
   try {
     const stat = fs.statSync(file);
@@ -66,7 +66,7 @@ function readRolesFile(file: string): RoleEntry[] {
       exitCode: EXIT_USAGE,
     });
   }
-  return parseRolesFile(text);
+  return parseRolesFile(text, selectedRunId);
 }
 
 async function assertLocalOrcaEndpoint(): Promise<string> {
@@ -144,7 +144,7 @@ export async function runPreviewOverhead(
   options: { json: boolean },
 ): Promise<RouteResult> {
   const args = parsePreviewArgs(rest);
-  const entries = readRolesFile(args.roles);
+  const entries = readRolesFile(args.roles, args.run);
   const version = await assertLocalOrcaEndpoint();
   const provenance = await collectOrcaRunProvenance(args.run, {
     sourceHostId: PREVIEW_HOST_ID, readVersion: async () => version,

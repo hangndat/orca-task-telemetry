@@ -109,9 +109,10 @@ export function commandHelpText(command: string): string {
       '  orca-telemetry preview overhead --run <run-id> --roles <roles.json> [--json]',
       '',
       'Reads the Orca Run and CodeBurn sessions (read-only) and sums only the sessions',
-      'listed in the roles file: {"schemaVersion":1,"entries":[{"role":"coordinator|worker",',
+      'listed in the roles file: {"schemaVersion":1,"runId":"<exact --run>","entries":[{"role":"coordinator|worker",',
       '"provider":"claude|codex","sessionId":"<raw-id>","dispatchId":"<worker only>"}]}.',
-      'Mappings are operator-confirmed, exact-match only, never inferred. Writes nothing',
+      'Mappings are operator-supplied and unverified; session matching uses exact IDs.',
+      'Raw session IDs stay input-side and are omitted from output. Writes nothing',
       '(no telemetry DB). Coverage is unknown; Run-wide ratios are always null.',
       'See docs/UAT-PREVIEW.md.',
     ].join('\n') + '\n';

@@ -1,6 +1,6 @@
 /**
  * UAT preview of coordinator vs worker overhead. Pure, in-memory: every input is
- * an operator-confirmed role mapping plus read-only Orca/CodeBurn data already
+ * an operator-supplied role mapping plus read-only Orca/CodeBurn data already
  * fetched by the caller. Nothing here touches the telemetry database, infers a
  * mapping, or claims Run-wide coverage. See docs/UAT-PREVIEW.md.
  */
@@ -36,11 +36,12 @@ export type ProviderSource =
 export type PreviewEntryStatus = 'resolved' | 'session_not_found' | 'source_error';
 
 export type PreviewEntry = {
+  /** Zero-based position in the input manifest; never a CodeBurn identifier. */
+  entryIndex: number;
   role: PreviewRole;
   provider: UsageProvider;
-  sessionId: string;
   dispatchId: string | null;
-  verification: 'manual_operator_confirmed';
+  verification: 'operator_supplied_unverified';
   status: PreviewEntryStatus;
   tokens: {
     input: number;
@@ -58,8 +59,13 @@ export type PreviewProviderUsage = {
   provider: UsageProvider;
   sessionCount: number;
   unresolvedCount: number;
-  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number | null };
+  /** Complete total only when every selected session for this provider resolved. */
+  tokens: PreviewTokens | null;
+  /** Sum of resolved sessions only; unknown reasoning stays null. */
+  knownTokens: PreviewTokens;
 };
+
+export type PreviewTokens = { input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number | null };
 
 export type PreviewRoleUsage = {
   sessionCount: number;
@@ -127,7 +133,7 @@ function allowedKeys(obj: Record<string, unknown>, keys: string[], where: string
  * Strict parse of the versioned roles file. Values never echo into errors
  * (only positions), so a malformed file cannot leak its content.
  */
-export function parseRolesFile(text: string): RoleEntry[] {
+export function parseRolesFile(text: string, selectedRunId: string): RoleEntry[] {
   let root: unknown;
   try {
     root = JSON.parse(text);
@@ -137,9 +143,13 @@ export function parseRolesFile(text: string): RoleEntry[] {
   if (!isPlainObject(root)) {
     throw previewError('preview_roles_invalid', 'Roles file must be a JSON object.');
   }
-  allowedKeys(root, ['schemaVersion', 'entries'], 'root');
+  allowedKeys(root, ['schemaVersion', 'runId', 'entries'], 'root');
   if (root['schemaVersion'] !== ROLES_SCHEMA_VERSION) {
     throw previewError('preview_roles_invalid', `Roles file schemaVersion must be ${ROLES_SCHEMA_VERSION}.`);
+  }
+  const runId = validId(root['runId'], 'runId');
+  if (runId !== selectedRunId) {
+    throw previewError('preview_roles_run_mismatch', 'Roles file runId does not match --run.');
   }
   const rows = root['entries'];
   if (!Array.isArray(rows) || rows.length === 0 || rows.length > MAX_ROLE_ENTRIES) {
@@ -199,10 +209,10 @@ function emptyTokens() {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: null as number | null };
 }
 
-function resolveEntry(entry: RoleEntry, source: ProviderSource | undefined): PreviewEntry {
+function resolveEntry(entry: RoleEntry, entryIndex: number, source: ProviderSource | undefined): PreviewEntry {
   const base = {
-    role: entry.role, provider: entry.provider, sessionId: entry.sessionId, dispatchId: entry.dispatchId,
-    verification: 'manual_operator_confirmed' as const,
+    entryIndex, role: entry.role, provider: entry.provider, dispatchId: entry.dispatchId,
+    verification: 'operator_supplied_unverified' as const,
   };
   const unresolved = (status: PreviewEntryStatus): PreviewEntry => ({
     ...base, status, tokens: null, tokenAllocation: null, costUsd: null, costKind: 'unknown',
@@ -244,22 +254,24 @@ function rollup(entries: PreviewEntry[], role: PreviewRole): PreviewRoleUsage {
     const rows = scoped.filter((entry) => entry.provider === provider);
     if (rows.length === 0) continue;
     const resolved = rows.filter((entry) => entry.tokens !== null);
-    const tokens = emptyTokens();
+    const knownTokens = emptyTokens();
     for (const row of resolved) {
-      tokens.input += row.tokens!.input;
-      tokens.output += row.tokens!.output;
-      tokens.cacheRead += row.tokens!.cacheRead;
-      tokens.cacheWrite += row.tokens!.cacheWrite;
+      knownTokens.input += row.tokens!.input;
+      knownTokens.output += row.tokens!.output;
+      knownTokens.cacheRead += row.tokens!.cacheRead;
+      knownTokens.cacheWrite += row.tokens!.cacheWrite;
     }
-    // Reasoning is only known when every selected session reports it.
-    tokens.reasoning = resolved.length === rows.length && resolved.every((row) => row.tokens!.reasoning !== null)
+    // Reasoning is known only when every resolved session reports it.
+    knownTokens.reasoning = resolved.length > 0 && resolved.every((row) => row.tokens!.reasoning !== null)
       ? resolved.reduce((sum, row) => sum + row.tokens!.reasoning!, 0) : null;
-    for (const value of [tokens.input, tokens.output, tokens.cacheRead, tokens.cacheWrite]) {
+    for (const value of [knownTokens.input, knownTokens.output, knownTokens.cacheRead, knownTokens.cacheWrite, knownTokens.reasoning]) {
+      if (value === null) continue;
       if (!Number.isSafeInteger(value)) {
         throw previewError('preview_aggregate_overflow', 'Token aggregate exceeded the safe integer range.');
       }
     }
-    byProvider.push({ provider, sessionCount: rows.length, unresolvedCount: rows.length - resolved.length, tokens });
+    byProvider.push({ provider, sessionCount: rows.length, unresolvedCount: rows.length - resolved.length,
+      tokens: resolved.length === rows.length ? knownTokens : null, knownTokens });
   }
   const dispatches = new Set(scoped.map((entry) => entry.dispatchId).filter((id): id is string => id !== null));
   return {
@@ -293,8 +305,11 @@ export function buildOverheadPreview(input: {
   providers: Partial<Record<UsageProvider, ProviderSource>>;
 }): OverheadPreview {
   const { provenance, providers } = input;
+  if (provenance.runId !== input.runId) {
+    throw previewError('preview_run_unverified', 'Orca did not verify the selected Run; refusing to preview.');
+  }
   assertEntriesInRun(input.entries, provenance);
-  const entries = input.entries.map((entry) => resolveEntry(entry, providers[entry.provider]));
+  const entries = input.entries.map((entry, index) => resolveEntry(entry, index, providers[entry.provider]));
   const coordinator = rollup(entries, 'coordinator');
   const workers = rollup(entries, 'worker');
   const resolved = entries.filter((entry) => entry.status === 'resolved').length;
@@ -312,7 +327,7 @@ export function buildOverheadPreview(input: {
     USAGE_PROVIDERS.some((provider) => codeburn[provider].status === 'error');
 
   const warnings = [
-    'Preview only: role mappings are operator-confirmed and unverified by Orca/CodeBurn; nothing is persisted.',
+    'Preview only: role mappings are operator-supplied and unverified by Orca/CodeBurn; nothing is persisted.',
     'Coverage is unknown: sessions outside the roles file are not counted; Run-wide ratios are null.',
     'Cost is estimated API equivalent, never actual billing or Orca runtime cost.',
     'hostId "local" is an unverified endpoint label (AC3 durable endpoint identity is not established).',
@@ -363,9 +378,12 @@ function formatRoleUsage(label: string, usage: PreviewRoleUsage): string[] {
       ` cost=${formatUsd(usage.costUsd)} (known=${formatUsd(usage.knownCostUsd)}, unknownCostSessions=${usage.unknownCostSessionCount})`,
   ];
   for (const p of usage.byProvider) {
-    lines.push(`    ${p.provider}: sessions=${p.sessionCount} unresolved=${p.unresolvedCount} ` +
-      `in=${p.tokens.input} out=${p.tokens.output} cacheR=${p.tokens.cacheRead} ` +
-      `cacheW=${p.tokens.cacheWrite} reasoning=${p.tokens.reasoning ?? 'unknown'}`);
+    const tokens = p.tokens;
+    const total = tokens === null ? 'tokens=unknown' :
+      `in=${tokens.input} out=${tokens.output} cacheR=${tokens.cacheRead} cacheW=${tokens.cacheWrite} reasoning=${tokens.reasoning ?? 'unknown'}`;
+    const known = p.knownTokens;
+    lines.push(`    ${p.provider}: sessions=${p.sessionCount} unresolved=${p.unresolvedCount} ${total}` +
+      (tokens === null ? ` (known: in=${known.input} out=${known.output} cacheR=${known.cacheRead} cacheW=${known.cacheWrite} reasoning=${known.reasoning ?? 'unknown'})` : ''));
   }
   return lines;
 }
