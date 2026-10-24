@@ -359,32 +359,89 @@ test('CLI: report overhead requires explicit --host/--run, reports a safe error 
   }
 });
 
-test('V14-01 golden: exactly one coordinator and two workers, correct per-role cardinality', () => {
+test('V14-01 golden: CLI JSON and text for one coordinator and two workers across two Dispatches', () => {
   const fixture = setupOverheadDb();
   try {
-    const { db } = fixture;
+    const { db, dbPath } = fixture;
+    const appHome = dirname(dbPath);
+    const collectedAt = new Date();
+    const observedAt = collectedAt.toISOString();
     insertRunGraph(db, 'host-a', 'run-1', ['dispatch-1', 'dispatch-2']);
     insertSession(db, { key: 'claude:codeburn:coord', provider: 'claude', rawId: 'coord',
-      snapshot: { observedAt: isoMinus(NOW, 100), cost: 2.0 } });
+      snapshot: { observedAt, cost: 2.0 } });
     linkRole(db, { key: 'claude:codeburn:coord', role: 'coordinator', host: 'host-a', run: 'run-1' });
     insertSession(db, { key: 'claude:codeburn:w1', provider: 'claude', rawId: 'w1',
-      snapshot: { observedAt: isoMinus(NOW, 100), cost: 1.0 } });
+      snapshot: { observedAt, cost: 1.0 } });
     linkRole(db, { key: 'claude:codeburn:w1', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-1' });
-    insertSession(db, { key: 'claude:codeburn:w2', provider: 'claude', rawId: 'w2',
-      snapshot: { observedAt: isoMinus(NOW, 100), cost: 0.5 } });
-    linkRole(db, { key: 'claude:codeburn:w2', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-2' });
-    freshAttempts(db, 'host-a', 'run-1');
+    insertSession(db, { key: 'codex:codeburn:w2', provider: 'codex', rawId: 'w2',
+      snapshot: { observedAt, cost: 0.5, tokensOverride: { reasoning: 7 } } });
+    linkRole(db, { key: 'codex:codeburn:w2', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-2' });
+    for (const source of ['orca', 'claude', 'codex']) {
+      attempt(db, { source: source === 'orca' ? 'orca' : 'codeburn',
+        ...(source === 'orca' ? { hostId: 'host-a', runId: 'run-1' } : { provider: source }),
+        startedAt: isoMinus(collectedAt, 60), completedAt: observedAt, status: 'success' });
+    }
 
-    const report = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
+    const jsonResult = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-1', '--format', 'json');
+    assert.equal(jsonResult.status, 0, jsonResult.stderr);
+    assert.equal(jsonResult.stderr, '');
+    const { ok, data } = JSON.parse(jsonResult.stdout);
+    assert.equal(ok, true);
+    assert.equal(data.hostId, 'host-a');
+    assert.equal(data.runId, 'run-1');
+    assert.equal(data.coverage, 'unknown');
+    assert.equal(data.classifiedSessionCount, 3);
+    assert.equal(data.unclassifiedSessionCount, null);
+    for (const source of ['orca', 'claude', 'codex']) {
+      assert.equal(data.sourceStatus[source].status, 'success');
+      assert.equal(data.sourceStatus[source].completedAt, observedAt);
+      assert.equal(data.sourceStatus[source].errorCode, null);
+    }
+    assert.deepEqual(data.coordinator, {
+      sessionCount: 1, dispatchCount: null,
+      byProvider: [{ provider: 'claude', sessionCount: 1, missingSnapshotCount: 0,
+        tokens: { input: 8, output: 4, cacheRead: 2, cacheWrite: 1, reasoning: null } }],
+      missingSnapshotCount: 0, knownCostUsd: 2, unknownCostSessionCount: 0, costUsd: 2,
+    });
+    assert.deepEqual(data.workers, {
+      sessionCount: 2, dispatchCount: 2,
+      byProvider: [
+        { provider: 'claude', sessionCount: 1, missingSnapshotCount: 0,
+          tokens: { input: 8, output: 4, cacheRead: 2, cacheWrite: 1, reasoning: null } },
+        { provider: 'codex', sessionCount: 1, missingSnapshotCount: 0,
+          tokens: { input: 10, output: 5, cacheRead: 1, cacheWrite: 0, reasoning: 7 } },
+      ],
+      missingSnapshotCount: 0, knownCostUsd: 1.5, unknownCostSessionCount: 0, costUsd: 1.5,
+    });
+    assert.deepEqual(data.overheadShare, { value: 4 / 7, unknownReason: null }); // 2 / (2 + 1 + 0.5)
+    assert.deepEqual(data.overheadPerWorkerCost, { value: 4 / 3, unknownReason: null }); // 2 / (1 + 0.5)
+    assert.ok(data.warnings.some((warning) => warning.includes('coverage is unknown')));
 
-    assert.equal(report.coordinator.sessionCount, 1);
-    assert.equal(report.coordinator.byProvider.length, 1);
-    assert.equal(report.workers.sessionCount, 2);
-    assert.equal(report.workers.dispatchCount, 2);
-    assert.equal(report.classifiedSessionCount, 3);
-    assert.equal(report.coordinator.costUsd, 2.0);
-    assert.equal(report.workers.costUsd, 1.5);
-    assert.equal(report.overheadShare.value, 2.0 / 3.5);
+    const textResult = runCli(appHome, 'report', 'overhead', '--host', 'host-a', '--run', 'run-1');
+    assert.equal(textResult.status, 0, textResult.stderr);
+    assert.equal(textResult.stderr, '');
+    const normalizedText = textResult.stdout.replace(/age=\d+s/g, 'age=<recent>');
+    assert.equal(normalizedText, [
+      'Overhead report — host host-a / run run-1',
+      `Source status: orca=success (completedAt=${observedAt}, age=<recent>, error=none)`,
+      `               claude=success (completedAt=${observedAt}, age=<recent>, error=none)`,
+      `               codex=success (completedAt=${observedAt}, age=<recent>, error=none)`,
+      'Coverage: unknown; classifiedSessionCount=3; unclassifiedSessionCount=null',
+      '',
+      '  Coordinator: sessions=1 cost=$2.00 (known=$2.00, unknownCostSessions=0)',
+      '    claude: sessions=1 missingSnapshots=0 in=8 out=4 cacheR=2 cacheW=1 reasoning=unknown',
+      '  Workers: sessions=2 dispatches=2 cost=$1.50 (known=$1.50, unknownCostSessions=0)',
+      '    claude: sessions=1 missingSnapshots=0 in=8 out=4 cacheR=2 cacheW=1 reasoning=unknown',
+      '    codex: sessions=1 missingSnapshots=0 in=10 out=5 cacheR=1 cacheW=0 reasoning=7',
+      '',
+      'overheadShare: 0.5714',
+      'overheadPerWorkerCost: 1.3333',
+      'Warnings:',
+      '  coverage is unknown: Orca/CodeBurn collection success does not prove every session of this Run was found.',
+      '  Cost is estimated API equivalent, never actual billing or Orca runtime cost.',
+      '  overheadShare only describes the linked/classified session set, not full Run usage.',
+      '',
+    ].join('\n'));
   } finally {
     fixture.close();
   }
