@@ -12,6 +12,7 @@ const IMPLEMENTED = new Set([
   'trace',
   'writeback',
   'preview',
+  'suggest-links',
 ]);
 
 const TOP_LEVEL = [
@@ -23,6 +24,7 @@ const TOP_LEVEL = [
   { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
   { name: 'trace', summary: 'Link and refresh verified PR or commit evidence' },
   { name: 'writeback', summary: 'Preview or explicitly apply GitHub Project NUMBER field writeback' },
+  { name: 'suggest-links', summary: 'Suggest high-confidence session↔Issue links (explicit apply)' },
 ];
 
 const REPORT_SUBCOMMANDS = [
@@ -32,6 +34,10 @@ const REPORT_SUBCOMMANDS = [
   { name: 'project', summary: 'Project-level totals with deduped linked sessions' },
   { name: 'hierarchy', summary: 'Direct and inclusive cost through native Issue parents' },
   { name: 'overhead', summary: 'Coordinator vs worker usage for one Orca Run' },
+  { name: 'retries', summary: 'Retry chains and wasted retry cost for one Orca Run' },
+  { name: 'duplicates', summary: 'Non-retry duplicate Dispatches for one Orca Run' },
+  { name: 'waste', summary: 'Cache-miss and oversize-context heuristics for linked sessions' },
+  { name: 'budget', summary: 'Warn when Issue hierarchy cost exceeds --limit-usd' },
   { name: 'unmapped', summary: 'Sessions without an Issue link and link suggestions' },
 ];
 
@@ -186,6 +192,19 @@ if (command === 'preview') {
       'Raw session IDs stay input-side and are omitted from output. Writes nothing',
       '(no telemetry DB). Coverage is unknown; Run-wide ratios are always null.',
       'See docs/UAT-PREVIEW.md.',
+    ].join('\n') + '\n';
+  }
+
+  if (command === 'suggest-links') {
+    return [
+      'orca-telemetry suggest-links — high-confidence session suggestions (no silent linking)',
+      '',
+      'Usage:',
+      '  orca-telemetry suggest-links [--json]',
+      '  orca-telemetry suggest-links apply --issue <sel> --provider claude|codex --session <id> --yes [--json]',
+      '',
+      'Lists ready / needs_approval / no_match suggestions from agent-top projectHint.',
+      'apply only accepts a ready pair and requires --yes. Ambiguous cases stay manual `link`.',
     ].join('\n') + '\n';
   }
 
