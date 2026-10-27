@@ -12,7 +12,7 @@ Là một lập trình viên sử dụng repository GitHub hiện có cùng Orca
 | MVP-02 | `init` + profile | Xác định danh tính repository GitHub; chọn GitHub Project; lưu profile trong thư mục dữ liệu người dùng mà không đụng đến các file trong repository. |
 | MVP-03 | Bộ đọc GitHub Projects | Đọc các mục trong Project cùng ID ổn định, URL và tiêu đề của Issue được liên kết, có hỗ trợ phân trang. |
 | MVP-04 | Orca collector | Đọc worker/task được giám sát và worktree tạo thủ công khi được hỗ trợ, không thay đổi trạng thái. |
-| MVP-05 | CodeBurn collector | Đọc dữ liệu mức sử dụng session Claude và Codex đã chuẩn hóa từ các giao diện JSON đã được xác minh. |
+| MVP-05 | Usage collector (agent-top) | Đọc dữ liệu mức sử dụng session Claude và Codex đã chuẩn hóa từ giao diện JSON đã verify của agent-top (`sql --json`). |
 | MVP-06 | Ánh xạ session | Lệnh tường minh `link --issue --provider --session` ánh xạ toàn bộ một session vào một GitHub Issue và từ chối các xung đột. |
 | MVP-07 | SQLite | Import an toàn, có tính idempotent và quản lý phiên bản schema; không lưu thông tin xác thực hay prompt thô. |
 | MVP-08 | Báo cáo | `report tasks`, `report project` và `report unmapped` phân biệt mức sử dụng đã quy thuộc, chưa quy thuộc, ước tính và chưa biết. |
@@ -45,7 +45,7 @@ orca-telemetry report unmapped
 
 1. **Nền tảng:** build, test, pack, install, doctor. (Repository khởi đầu chứa bộ khung nền tảng, chưa phải MVP hoàn chỉnh.)
 2. **GitHub:** khởi tạo profile và liệt kê Project/Issue.
-3. **Telemetry:** metadata Orca + mức sử dụng Claude/Codex từ CodeBurn → SQLite.
+3. **Telemetry:** metadata Orca + mức sử dụng Claude/Codex từ agent-top → SQLite.
 4. **Quy thuộc:** ánh xạ GitHub Issue ↔ session tường minh, đã được xác minh.
 5. **Báo cáo và kiểm chứng:** tổng hợp mức sử dụng, chi phí theo Issue và Project, fixture, kiểm tra tích hợp thực tế, tài liệu.
 

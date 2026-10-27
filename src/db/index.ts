@@ -18,11 +18,11 @@ export { SCHEMA_VERSION_V1 } from './migrations/v1.js';
 export {
   importGitHubRecords,
   importOrcaExecutions,
-  importCodeBurnUsage,
+  importUsageSnapshots,
   insertSessionLink,
   countRows,
   sanitizeCollectionMessage,
   type GitHubImportInput,
-  type CodeBurnImportRow,
+  type UsageImportRow,
   type CollectionSource,
 } from './repository.js';

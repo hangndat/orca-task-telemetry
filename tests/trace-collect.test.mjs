@@ -22,7 +22,7 @@ test('collect reads each stored PR once, preserves manual links/snapshots, and r
   try {
     fixture.db.prepare(`INSERT INTO session_pull_links
       (session_key, issue_node_id, pull_node_id, method, linked_at)
-      VALUES ('codex:codeburn:s2', 'I_1', 'PR_7', 'manual', ?)`)
+      VALUES ('codex:agent-top:s2', 'I_1', 'PR_7', 'manual', ?)`)
       .run(at);
     const seen = [];
     const read = async ({ pullNodeId }) => { seen.push(pullNodeId); return evidence(pullNodeId); };

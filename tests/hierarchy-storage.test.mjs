@@ -62,7 +62,7 @@ test('V1.1: parent change and null clear are idempotent; identity-only link look
   });
 });
 
-test('V1.1: schema v1 migrates to current without losing existing issue and link rows', () => {
+test('V1.1: schema v1 migrates to current; issues remain, CodeBurn usage links dropped at v4', () => {
   const dir = mkdtempSync(join(tmpdir(), 'hierarchy-migrate-'));
   const dbPath = join(dir, 'telemetry.sqlite');
   const raw = new DatabaseSync(dbPath);
@@ -91,8 +91,8 @@ test('V1.1: schema v1 migrates to current without losing existing issue and link
     assert.equal(row.parent_issue_node_id, null);
     assert.equal(row.parent_issue_observed, 0);
     assert.equal(handle.db.prepare('SELECT count(*) AS n FROM project_memberships').get().n, 1);
-    assert.equal(handle.db.prepare('SELECT count(*) AS n FROM session_links').get().n, 1);
-    assert.equal(handle.db.prepare('SELECT cost_amount_usd FROM usage_snapshots').get().cost_amount_usd, 0.2);
+    assert.equal(handle.db.prepare('SELECT count(*) AS n FROM session_links').get().n, 0);
+    assert.equal(handle.db.prepare('SELECT count(*) AS n FROM usage_snapshots').get().n, 0);
   } finally {
     handle.close();
     rmSync(dir, { recursive: true, force: true });

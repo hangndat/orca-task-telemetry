@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { CostKind, UsageProvider } from '../contracts.js';
-import type { ClaudeTokenAllocation } from '../codeburn/claude.js';
+import type { ClaudeTokenAllocation } from '../usage/sessions.js';
 import { parseTokensJson } from '../db/serialize.js';
 
 export type ProviderUsageRollup = {

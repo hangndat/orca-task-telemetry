@@ -27,18 +27,18 @@ import { upsertProfile } from '../dist/profiles.js';
 const dir = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(dir, '../dist/cli.js');
 const orcaRouter = resolve(dir, 'helpers/integration-stubs/orca-router.mjs');
-const codeburnRouter = resolve(dir, 'helpers/integration-stubs/codeburn-router.mjs');
+const agentTopRouter = resolve(dir, 'helpers/integration-stubs/agent-top-router.mjs');
 const page1 = resolve(dir, 'fixtures/github/project-items-page1.json');
 const page2 = resolve(dir, 'fixtures/github/project-items-page2.json');
 const statusFixture = resolve(dir, 'fixtures/orca/status-trimmed.json');
 const workerListFixture = resolve(dir, 'fixtures/orca/worker-list-snippet.json');
 const claudeSessions = resolve(
   dir,
-  'fixtures/codeburn/claude/session-sonnet-aggregated.json',
+  'fixtures/agent-top/claude/session-sonnet-aggregated.json',
 );
 const codexSessions = resolve(
   dir,
-  'fixtures/codeburn/codex/session-gpt-small-aggregated.json',
+  'fixtures/agent-top/codex/session-gpt-small-aggregated.json',
 );
 
 function initRepo() {
@@ -87,9 +87,9 @@ function stubEnv(appHome, _gitRoot, extra = {}) {
     ORCA_STUB_STATUS_PATH: statusFixture,
     ORCA_STUB_WORKER_LIST_PATH: workerListFixture,
     ORCA_TELEMETRY_COLLECT_RUN: 'run_1a060327fe49',
-    ORCA_TELEMETRY_CODEBURN: codeburnRouter,
-    CODEBURN_STUB_CLAUDE_PATH: claudeSessions,
-    CODEBURN_STUB_CODEX_PATH: codexSessions,
+    ORCA_TELEMETRY_AGENT_TOP: agentTopRouter,
+    AGENT_TOP_STUB_CLAUDE_PATH: claudeSessions,
+    AGENT_TOP_STUB_CODEX_PATH: codexSessions,
     GH_STUB_PAGE1_PATH: page1,
     GH_STUB_PAGE2_PATH: page2,
     ...extra,
@@ -178,7 +178,7 @@ describe.sequential('T33 collect integration', () => {
         assert.equal(payload.exitCode, EXIT_PARTIAL);
         assert.equal(payload.sources.find((s) => s.source === 'orca')?.status, 'error');
         assert.equal(payload.sources.find((s) => s.source === 'github')?.status, 'ok');
-        assert.equal(payload.sources.find((s) => s.source === 'codeburn')?.status, 'ok');
+        assert.equal(payload.sources.find((s) => s.source === 'agent-top')?.status, 'ok');
       },
       { ORCA_TELEMETRY_ORCA: '/no/orca-binary' },
     );
@@ -186,7 +186,7 @@ describe.sequential('T33 collect integration', () => {
     rmSync(appHome, { recursive: true, force: true });
   }, 20_000);
 
-  test('partial when codeburn unavailable only', async () => {
+  test('partial when agent-top unavailable only', async () => {
     const repo = initRepo();
     const appHome = mkdtempSync(join(tmpdir(), 'orca-collect-home-'));
     writeProfile(appHome);
@@ -196,11 +196,11 @@ describe.sequential('T33 collect integration', () => {
       async () => {
         const payload = await runCollectCommand({ cwd: repo });
         assert.equal(payload.exitCode, EXIT_PARTIAL);
-        assert.equal(payload.sources.find((s) => s.source === 'codeburn')?.status, 'error');
+        assert.equal(payload.sources.find((s) => s.source === 'agent-top')?.status, 'error');
         assert.equal(payload.sources.find((s) => s.source === 'github')?.status, 'ok');
         assert.equal(payload.sources.find((s) => s.source === 'orca')?.status, 'ok');
       },
-      { ORCA_TELEMETRY_CODEBURN: '/no/codeburn-binary' },
+      { ORCA_TELEMETRY_AGENT_TOP: '/no/agent-top-binary' },
     );
     rmSync(repo, { recursive: true, force: true });
     rmSync(appHome, { recursive: true, force: true });
@@ -244,7 +244,7 @@ describe.sequential('T33 collect integration', () => {
       },
       {
         ORCA_TELEMETRY_ORCA: '/no/orca',
-        ORCA_TELEMETRY_CODEBURN: '/no/codeburn',
+        ORCA_TELEMETRY_AGENT_TOP: '/no/agent-top',
         GH_STUB_SCOPE_ERROR: '1',
       },
     );
@@ -336,7 +336,7 @@ describe.sequential('T33 collect integration', () => {
     writeProfile(appHome);
     const env = stubEnv(appHome, repo, {
       ORCA_TELEMETRY_ORCA: '/no/orca',
-      ORCA_TELEMETRY_CODEBURN: '/no/codeburn',
+      ORCA_TELEMETRY_AGENT_TOP: '/no/agent-top',
       GH_STUB_SCOPE_ERROR: '1',
     });
     const result = runCliCollect(repo, env, '--json');

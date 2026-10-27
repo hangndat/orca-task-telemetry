@@ -78,7 +78,7 @@ test('T35: malicious issue title does not inject newlines in text report', () =>
   const ctx = loadReportsDataset(maliciousFixture);
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,

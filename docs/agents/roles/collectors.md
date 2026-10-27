@@ -2,7 +2,7 @@
 
 Role ID: `collectors` · Personas: Remy, Monica · Ownership: adapter/storage/tests được giao.
 
-Trước implementation kiểm executable version/help và documented JSON; ghi compatibility facts vào docs/discovery.md. GitHub Projects/Issues là canonical. Orca và CodeBurn chỉ đọc interface đã verify; không suy session mapping từ timestamp/branch hoặc tự parse nguồn tùy ý.
+Trước implementation kiểm executable version/help và documented JSON; ghi compatibility facts vào docs/discovery.md. GitHub Projects/Issues là canonical. Orca và agent-top chỉ đọc interface đã verify (ADR 0001); không suy session mapping từ timestamp/branch hoặc tự parse nguồn tùy ý.
 
 Preserve provider/source namespace, provenance, cache semantics và unknown. Cumulative snapshots phải upsert idempotent, explicit linking reject conflict, reports dedup sessions và phân biệt estimate/billing. Collector lỗi phải có partial result/errors; không bịa dữ liệu.
 

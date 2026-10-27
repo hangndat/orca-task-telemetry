@@ -19,7 +19,7 @@ test('T29: new link creates manual link with linkedBy null', () => {
   const ctx = loadSyntheticDataset(fixture);
   const result = linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: CLAUDE_1,
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
@@ -35,14 +35,14 @@ test('T29: identical link is no-op and preserves timestamp', () => {
   const ctx = loadSyntheticDataset(fixture);
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: CLAUDE_1,
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
   });
   const second = linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: CLAUDE_1,
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: '2026-07-01T00:00:00.000Z',
@@ -56,7 +56,7 @@ test('T29: link to different issue conflicts with existing ref', () => {
   const ctx = loadSyntheticDataset(fixture);
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: CLAUDE_1,
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
@@ -65,7 +65,7 @@ test('T29: link to different issue conflicts with existing ref', () => {
     () =>
       linkSessionToIssue(ctx.db, {
         provider: 'claude',
-        source: 'codeburn',
+        source: 'agent-top',
         rawSessionId: CLAUDE_1,
         issueNodeId: 'I_attr_issue_beta',
         linkedAt: LINKED_AT,
@@ -83,7 +83,7 @@ test('T29: unknown session and unknown issue are actionable', () => {
     () =>
       linkSessionToIssue(ctx.db, {
         provider: 'claude',
-        source: 'codeburn',
+        source: 'agent-top',
         rawSessionId: 'missing-session-id',
         issueNodeId: 'I_attr_issue_alpha',
         linkedAt: LINKED_AT,
@@ -94,7 +94,7 @@ test('T29: unknown session and unknown issue are actionable', () => {
     () =>
       linkSessionToIssue(ctx.db, {
         provider: 'claude',
-        source: 'codeburn',
+        source: 'agent-top',
         rawSessionId: CLAUDE_1,
         issueNodeId: 'I_does_not_exist',
         linkedAt: LINKED_AT,
@@ -108,14 +108,14 @@ test('T29: two sessions can link to one issue', () => {
   const ctx = loadSyntheticDataset(fixture);
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: CLAUDE_1,
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
   });
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee02',
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
@@ -134,22 +134,22 @@ test('T29: same raw id different provider namespaces are distinct', () => {
   const shared = fixture.sharedRawSessionId;
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: shared,
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
   });
   const codex = linkSessionToIssue(ctx.db, {
     provider: 'codex',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: shared,
     issueNodeId: 'I_attr_issue_beta',
     linkedAt: LINKED_AT,
   });
   assert.equal(codex.outcome, 'created');
   assert.notEqual(
-    sessionKey('claude', 'codeburn', shared),
-    sessionKey('codex', 'codeburn', shared),
+    sessionKey('claude', 'agent-top', shared),
+    sessionKey('codex', 'agent-top', shared),
   );
   disposeDataset(ctx);
 });

@@ -20,21 +20,21 @@ const LINKED_AT = '2026-06-01T10:00:00.000Z';
 function linkAllToAlpha(ctx) {
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
   });
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee02',
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
   });
   linkSessionToIssue(ctx.db, {
     provider: 'codex',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: fixture.sharedRawSessionId,
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
@@ -63,7 +63,7 @@ test('T30: project scope dedupes session when issue appears twice in memberships
   const ctx = loadSyntheticDataset(fixture);
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
@@ -82,7 +82,7 @@ test('T30: shared raw id across providers only counts linked sessions in rollup'
   const ctx = loadSyntheticDataset(fixture);
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: fixture.sharedRawSessionId,
     issueNodeId: 'I_attr_issue_beta',
     linkedAt: LINKED_AT,

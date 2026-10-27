@@ -4,7 +4,7 @@ export function attributionSessionUnknown(sessionKey: string): CliError {
   return new CliError({
     code: 'attribution_session_unknown',
     message: `Usage session ${sessionKey} is not in the database.`,
-    hint: 'Collect CodeBurn sessions before linking.',
+    hint: 'Collect agent-top sessions before linking.',
     exitCode: EXIT_USAGE,
   });
 }

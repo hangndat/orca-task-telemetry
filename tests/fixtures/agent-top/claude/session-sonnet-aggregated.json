@@ -1,0 +1,15 @@
+{
+  "harness": "claude",
+  "session_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01",
+  "model": "Sonnet 5",
+  "project": "<PROJECT_SLUG>",
+  "input": 32,
+  "output": 4732,
+  "cache_read": 1252461,
+  "cache_write_5m": 48529,
+  "cache_write_1h": 0,
+  "cache_write_unsplit": 0,
+  "cost_usd": 0.49199219999999994,
+  "unpriced_tokens": 0,
+  "parent_session_id": null
+}

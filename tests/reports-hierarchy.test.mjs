@@ -41,7 +41,7 @@ function session(rawId, provider, amount) {
       : { provider, input: 1, output: 2, cacheRead: 3, cacheWrite: 4 },
     cost: amount === null
       ? { amountUsd: null, kind: 'unknown', source: null }
-      : { amountUsd: amount, kind: 'estimated_api_equivalent', source: { tool: 'codeburn', version: '0.9.27' } },
+      : { amountUsd: amount, kind: 'estimated_api_equivalent', source: { tool: 'agent-top', version: '0.27.1' } },
   };
 }
 
@@ -78,7 +78,7 @@ function linkFixture(ctx) {
   ]) {
     linkSessionToIssue(ctx.db, {
       provider,
-      source: 'codeburn',
+      source: 'agent-top',
       rawSessionId,
       issueNodeId,
       linkedAt: '2026-06-01T10:00:00Z',
@@ -220,7 +220,7 @@ test('V1.1: text distinguishes Issues with same number/title in different reposi
     for (const [rawSessionId, issueNodeId] of [['a', 'I_a'], ['b', 'I_b']]) {
       linkSessionToIssue(ctx.db, {
         provider: 'claude',
-        source: 'codeburn',
+        source: 'agent-top',
         rawSessionId,
         issueNodeId,
         linkedAt: '2026-06-01T10:00:00Z',

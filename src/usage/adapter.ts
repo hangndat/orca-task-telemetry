@@ -6,37 +6,39 @@ import {
   EXIT_USAGE,
 } from '../errors.js';
 
-export const CODEBURN_VERIFIED_VERSION = '0.9.27';
-export const DEFAULT_CODEBURN_TIMEOUT_MS = 120_000;
-export const DEFAULT_CODEBURN_MAX_BUFFER = 20 * 1024 * 1024;
+export const AGENT_TOP_VERIFIED_VERSION = '0.27.1';
+export const DEFAULT_AGENT_TOP_TIMEOUT_MS = 120_000;
+export const DEFAULT_AGENT_TOP_MAX_BUFFER = 20 * 1024 * 1024;
+
+/** Allowlisted read-only query — documented counted_sessions columns only. */
+export const COUNTED_SESSIONS_QUERY =
+  "SELECT harness, session_id, model, project, input, output, cache_read, cache_write_5m, cache_write_1h, cache_write_unsplit, cost_usd, unpriced_tokens, parent_session_id FROM counted_sessions WHERE harness IN ('claude', 'codex')";
 
 const DENIED_SUBCOMMANDS = new Set([
-  'export',
-  'audit',
-  'doctor',
-  'login',
-  'config',
+  'sync',
+  'fails',
+  'report',
+  'live',
 ]);
 
-export type CodeburnAdapterOptions = {
-  codeburnPath?: string;
+export type AgentTopAdapterOptions = {
+  agentTopPath?: string;
   timeoutMs?: number;
   maxBuffer?: number;
 };
 
-export type CodeburnInvocationResult = {
+export type AgentTopInvocationResult = {
   stdout: string;
   /** Always empty; raw subprocess stderr is never exposed. */
   stderr: string;
   exitCode: number | null;
 };
 
-/** Raw subprocess stderr must not be exposed to callers or error surfaces. */
-export function discardCodeburnStderr(_stderr: string): string {
+export function discardAgentTopStderr(_stderr: string): string {
   return '';
 }
 
-function cbError(
+function atError(
   code: string,
   message: string,
   exitCode: number,
@@ -45,12 +47,12 @@ function cbError(
   return new CliError({ code, message, hint, exitCode });
 }
 
-export function resolveCodeburnBinary(): string {
-  const fromEnv = process.env['ORCA_TELEMETRY_CODEBURN'];
+export function resolveAgentTopBinary(): string {
+  const fromEnv = process.env['ORCA_TELEMETRY_AGENT_TOP'];
   if (fromEnv && fromEnv.length > 0) {
     return fromEnv;
   }
-  return 'codeburn';
+  return 'agent-top';
 }
 
 function resolveSpawnTarget(
@@ -63,84 +65,61 @@ function resolveSpawnTarget(
   return { command: executable, argv: args };
 }
 
-function assertSessionsArgv(argv: string[]): void {
-  if (argv[0] !== 'sessions') {
-    return;
-  }
-  if (!argv.includes('--format') || !argv.includes('json')) {
-    throw cbError(
-      'codeburn_command_denied',
-      'sessions must use --format json.',
-      EXIT_USAGE,
-    );
-  }
-  const providerIdx = argv.indexOf('--provider');
-  if (providerIdx < 0) {
-    throw cbError(
-      'codeburn_command_denied',
-      'sessions requires --provider claude or codex.',
-      EXIT_USAGE,
-    );
-  }
-  const provider = argv[providerIdx + 1];
-  if (provider !== 'claude' && provider !== 'codex') {
-    throw cbError(
-      'codeburn_command_denied',
-      'Unsupported --provider for MVP sessions collection.',
-      EXIT_USAGE,
-    );
-  }
-}
-
 /**
- * Reject non-read-only CodeBurn argv before spawn.
+ * Reject non-read-only agent-top argv before spawn.
  */
-export function assertAllowlistedCodeburnArgv(argv: string[]): void {
+export function assertAllowlistedAgentTopArgv(argv: string[]): void {
   if (argv.length === 1 && argv[0] === '--version') {
     return;
   }
   if (argv.length === 0) {
-    throw cbError('codeburn_command_denied', 'Empty argv is not allowlisted.', EXIT_USAGE);
+    throw atError('agent_top_command_denied', 'Empty argv is not allowlisted.', EXIT_USAGE);
   }
   const head = argv[0] ?? '';
   if (head === '--help' || head === '-h') {
-    throw cbError('codeburn_command_denied', 'Help is not invoked via collector.', EXIT_USAGE);
+    throw atError('agent_top_command_denied', 'Help is not invoked via collector.', EXIT_USAGE);
   }
   if (DENIED_SUBCOMMANDS.has(head)) {
-    throw cbError(
-      'codeburn_command_denied',
-      `CodeBurn subcommand '${head}' is not allowlisted.`,
+    throw atError(
+      'agent_top_command_denied',
+      `agent-top subcommand '${head}' is not allowlisted.`,
       EXIT_USAGE,
     );
   }
-  if (head !== 'sessions') {
-    throw cbError(
-      'codeburn_command_denied',
-      `CodeBurn argv must be --version or sessions; got '${head}'.`,
+  if (head !== 'sql') {
+    throw atError(
+      'agent_top_command_denied',
+      `agent-top argv must be --version or sql --json; got '${head}'.`,
       EXIT_USAGE,
     );
   }
-  assertSessionsArgv(argv);
+  if (argv.length !== 3 || argv[1] !== '--json' || argv[2] !== COUNTED_SESSIONS_QUERY) {
+    throw atError(
+      'agent_top_command_denied',
+      'sql must use --json and the allowlisted counted_sessions query.',
+      EXIT_USAGE,
+    );
+  }
 }
 
-export function parseCodeburnVersionText(stdout: string): string {
+export function parseAgentTopVersionText(stdout: string): string {
   const line = stdout.trim().split('\n')[0]?.trim() ?? '';
-  const match = /^(\d+\.\d+\.\d+)/.exec(line);
+  const match = /(\d+\.\d+\.\d+)/.exec(line);
   if (!match?.[1]) {
-    throw cbError(
-      'codeburn_schema_drift',
-      'Could not parse codeburn --version output.',
+    throw atError(
+      'agent_top_schema_drift',
+      'Could not parse agent-top --version output.',
       EXIT_SOURCE_UNAVAILABLE,
     );
   }
   return match[1];
 }
 
-export function assertSupportedCodeburnVersion(version: string): void {
-  if (version !== CODEBURN_VERIFIED_VERSION) {
-    throw cbError(
-      'codeburn_version_unsupported',
-      `CodeBurn version ${version} is not the verified ${CODEBURN_VERIFIED_VERSION} build.`,
+export function assertSupportedAgentTopVersion(version: string): void {
+  if (version !== AGENT_TOP_VERIFIED_VERSION) {
+    throw atError(
+      'agent_top_version_unsupported',
+      `agent-top version ${version} is not the verified ${AGENT_TOP_VERIFIED_VERSION} build.`,
       EXIT_SOURCE_UNAVAILABLE,
     );
   }
@@ -151,7 +130,7 @@ function runCommand(
   args: string[],
   timeoutMs: number,
   maxBuffer: number,
-): Promise<CodeburnInvocationResult & { spawnError?: NodeJS.ErrnoException }> {
+): Promise<AgentTopInvocationResult & { spawnError?: NodeJS.ErrnoException }> {
   const target = resolveSpawnTarget(executable, args);
   return new Promise((resolve) => {
     const child = spawn(target.command, target.argv, {
@@ -231,74 +210,72 @@ function runCommand(
   });
 }
 
-export async function invokeCodeburn(
+export async function invokeAgentTop(
   argv: string[],
-  options: CodeburnAdapterOptions = {},
-): Promise<CodeburnInvocationResult> {
-  assertAllowlistedCodeburnArgv(argv);
-  const executable = options.codeburnPath ?? resolveCodeburnBinary();
-  const timeoutMs = options.timeoutMs ?? DEFAULT_CODEBURN_TIMEOUT_MS;
-  const maxBuffer = options.maxBuffer ?? DEFAULT_CODEBURN_MAX_BUFFER;
+  options: AgentTopAdapterOptions = {},
+): Promise<AgentTopInvocationResult> {
+  assertAllowlistedAgentTopArgv(argv);
+  const executable = options.agentTopPath ?? resolveAgentTopBinary();
+  const timeoutMs = options.timeoutMs ?? DEFAULT_AGENT_TOP_TIMEOUT_MS;
+  const maxBuffer = options.maxBuffer ?? DEFAULT_AGENT_TOP_MAX_BUFFER;
 
   const result = await runCommand(executable, argv, timeoutMs, maxBuffer);
 
   if (result.spawnError?.code === 'ENOENT') {
-    throw cbError(
-      'codeburn_runtime_unavailable',
-      'CodeBurn CLI was not found.',
+    throw atError(
+      'agent_top_runtime_unavailable',
+      'agent-top CLI was not found.',
       EXIT_ENVIRONMENT,
-      'Set ORCA_TELEMETRY_CODEBURN or install codeburn@0.9.27.',
+      'Set ORCA_TELEMETRY_AGENT_TOP or install agent-top 0.27.1.',
     );
   }
   if (result.spawnError?.code === 'ETIMEDOUT') {
-    throw cbError(
-      'codeburn_runtime_unavailable',
-      'CodeBurn CLI invocation timed out.',
+    throw atError(
+      'agent_top_runtime_unavailable',
+      'agent-top CLI invocation timed out.',
       EXIT_SOURCE_UNAVAILABLE,
     );
   }
   if (result.spawnError) {
-    throw cbError(
-      'codeburn_runtime_unavailable',
-      'Failed to start CodeBurn CLI.',
+    throw atError(
+      'agent_top_runtime_unavailable',
+      'Failed to start agent-top CLI.',
       EXIT_SOURCE_UNAVAILABLE,
     );
   }
 
   return {
     stdout: result.stdout,
-    stderr: discardCodeburnStderr(result.stderr),
+    stderr: discardAgentTopStderr(result.stderr),
     exitCode: result.exitCode,
   };
 }
 
-export async function readCodeburnVersion(
-  options: CodeburnAdapterOptions = {},
+export async function readAgentTopVersion(
+  options: AgentTopAdapterOptions = {},
 ): Promise<string> {
-  const result = await invokeCodeburn(['--version'], options);
+  const result = await invokeAgentTop(['--version'], options);
   if (result.exitCode !== 0) {
-    throw cbError(
-      'codeburn_runtime_unavailable',
-      'codeburn --version failed.',
+    throw atError(
+      'agent_top_runtime_unavailable',
+      'agent-top --version failed.',
       EXIT_SOURCE_UNAVAILABLE,
     );
   }
-  const version = parseCodeburnVersionText(result.stdout);
-  assertSupportedCodeburnVersion(version);
+  const version = parseAgentTopVersionText(result.stdout);
+  assertSupportedAgentTopVersion(version);
   return version;
 }
 
 export function schemaDrift(path: string, detail: string): CliError {
-  return cbError(
-    'codeburn_schema_drift',
-    `CodeBurn JSON invalid at ${path}: ${detail}`,
+  return atError(
+    'agent_top_schema_drift',
+    `agent-top JSON invalid at ${path}: ${detail}`,
     EXIT_SOURCE_UNAVAILABLE,
   );
 }
 
-/**
- * Parse sessions stdout as JSON array (empty array allowed).
- */
+/** Parse sql --json stdout as a JSON array (empty array allowed). */
 export function parseSessionsJsonArray(text: string): unknown[] {
   const trimmed = text.trim();
   if (trimmed.length === 0) {
@@ -311,7 +288,7 @@ export function parseSessionsJsonArray(text: string): unknown[] {
     throw schemaDrift('root', 'stdout is not valid JSON');
   }
   if (!Array.isArray(parsed)) {
-    throw schemaDrift('root', 'expected JSON array from sessions --format json');
+    throw schemaDrift('root', 'expected JSON array from sql --json');
   }
   return parsed;
 }

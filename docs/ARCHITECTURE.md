@@ -3,7 +3,7 @@
 ```text
 GitHub Projects V2 --(chỉ đọc)--> Collector GitHub
 Luồng Orca được giám sát/thủ công --> Collector Orca
-Session Claude/Codex từ CodeBurn --> Collector mức sử dụng
+Session Claude/Codex từ agent-top --> Collector mức sử dụng
                  \                |                /
                  Bản ghi đã chuẩn hóa
                           |
@@ -18,7 +18,7 @@ Session Claude/Codex từ CodeBurn --> Collector mức sử dụng
 
 - **GitHub**: Là nguồn chuẩn cho định danh Project, repository, Issue và trạng thái lập kế hoạch. Quan hệ Project↔Issue là nhiều-nhiều.
 - **Orca**: Metadata về task, dispatch, worker và worktree chỉ được xem là dữ liệu chuẩn khi được cung cấp qua giao diện đã xác minh. Worktree thủ công không đồng nghĩa với việc có worker đang được giám sát và hoạt động.
-- **CodeBurn**: Mức sử dụng session chỉ được xem là dữ liệu chuẩn đối với những dữ liệu mà CodeBurn có thể trích xuất một cách kiểm chứng được. Không đánh đồng phí provider thực thu với chi phí ước tính tương đương API.
+- **agent-top**: Mức sử dụng session chỉ được xem là dữ liệu chuẩn đối với những cột `counted_sessions` đã verify (ADR 0001). Không đánh đồng phí provider thực thu với chi phí ước tính tương đương API. Không gọi `sync`; không đọc transcript hay SQLite agent-top trực tiếp.
 - **Adapter**: Đối chiếu các định danh và lưu snapshot. Không tự tạo ID thực thi còn thiếu hoặc âm thầm quy thuộc dữ liệu.
 
 ## Các bất biến khi tổng hợp mức sử dụng và chi phí
@@ -47,6 +47,6 @@ Không có daemon, webhook, dịch vụ từ xa, thao tác sửa đổi GitHub, 
 
 - Phân trang và quyền truy cập GitHub Projects GraphQL.
 - Định danh ổn định để đối chiếu dispatch/session của Orca.
-- Định dạng JSON của CodeBurn và ngữ nghĩa token tích lũy theo từng provider.
+- Định dạng JSON `sql --json` của agent-top và ngữ nghĩa token tích lũy theo từng harness.
 - Cách tổng hợp mức sử dụng subagent tại nguồn.
 - Lưu trữ profile cục bộ đa nền tảng và khả năng hỗ trợ SQLite trong Node 24.

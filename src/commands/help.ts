@@ -14,8 +14,8 @@ const TOP_LEVEL = [
   { name: 'doctor', summary: 'Check local tools (implemented)' },
   { name: 'init', summary: 'Initialize telemetry profile for this repository' },
   { name: 'projects', summary: 'List GitHub Projects for the current repository' },
-  { name: 'collect', summary: 'Collect GitHub, Orca, and CodeBurn into local DB' },
-  { name: 'link', summary: 'Link a CodeBurn session to a GitHub issue' },
+  { name: 'collect', summary: 'Collect GitHub, Orca, and agent-top usage into local DB' },
+  { name: 'link', summary: 'Link an agent-top session to a GitHub issue' },
   { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
   { name: 'trace', summary: 'Link and refresh verified PR or commit evidence' },
 ];
@@ -113,7 +113,7 @@ export function commandHelpText(command: string): string {
       'Usage:',
       '  orca-telemetry doctor [--json]',
       '',
-      'Checks Node.js, gh auth (read:project), Orca/CodeBurn versions, profile, and DB schema.',
+      'Checks Node.js, gh auth (read:project), Orca/agent-top versions, profile, and DB schema.',
       'Exit codes: 0 when summary is pass or warn; 2 when summary is fail (diagnostic).',
     ].join('\n') + '\n';
   }

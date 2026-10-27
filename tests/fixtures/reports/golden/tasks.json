@@ -4,7 +4,7 @@
   "repository": "org-a/repo",
   "freshness": [
     {
-      "source": "codeburn",
+      "source": "agent-top",
       "status": "success",
       "recordedAt": "2026-01-01T00:00:00.000Z"
     },
@@ -68,7 +68,7 @@
       },
       "sessions": [
         {
-          "sessionKey": "claude:codeburn:aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01",
+          "sessionKey": "claude:agent-top:aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01",
           "provider": "claude",
           "rawSessionId": "aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01",
           "models": [
@@ -93,7 +93,7 @@
           "observedAt": "2026-05-01T12:00:00.000Z"
         },
         {
-          "sessionKey": "claude:codeburn:aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee02",
+          "sessionKey": "claude:agent-top:aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee02",
           "provider": "claude",
           "rawSessionId": "aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee02",
           "models": [
@@ -119,7 +119,7 @@
           "observedAt": "2026-05-02T12:00:00.000Z"
         },
         {
-          "sessionKey": "codex:codeburn:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "sessionKey": "codex:agent-top:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
           "provider": "codex",
           "rawSessionId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
           "models": [],

@@ -10,7 +10,7 @@ import {
 } from '../db/trace.js';
 
 export function traceSessionKey(provider: UsageProvider, rawSessionId: string): string {
-  return sessionKey(provider, 'codeburn', rawSessionId);
+  return sessionKey(provider, 'agent-top', rawSessionId);
 }
 
 export function assertIssueLink(db: DatabaseSync, key: string, issueNodeId: string): void {

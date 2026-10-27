@@ -3,13 +3,13 @@ import path from 'node:path';
 import { loadConfig } from '../config.js';
 import {
   parseSessionsJsonArray,
-  readCodeburnVersion,
-  invokeCodeburn,
-  CODEBURN_VERIFIED_VERSION,
-} from '../codeburn/adapter.js';
-import { parseClaudeSessions } from '../codeburn/claude.js';
-import { parseCodexSessions } from '../codeburn/codex.js';
-import type { ClaudeTokenAllocation } from '../codeburn/claude.js';
+  readAgentTopVersion,
+  invokeAgentTop,
+  AGENT_TOP_VERIFIED_VERSION,
+  COUNTED_SESSIONS_QUERY,
+} from '../usage/adapter.js';
+import { parseCountedSessions } from '../usage/sessions.js';
+import type { ClaudeTokenAllocation } from '../usage/sessions.js';
 import {
   CliError,
   EXIT_PARTIAL,
@@ -21,11 +21,11 @@ import { readProjectItems } from '../github/items.js';
 import { openTelemetryDatabase } from '../db/index.js';
 import {
   countRows,
-  importCodeBurnUsage,
+  importUsageSnapshots,
   importGitHubRecords,
   importOrcaExecutions,
   sanitizeCollectionMessage,
-  type CodeBurnImportRow,
+  type UsageImportRow,
 } from '../db/repository.js';
 import {
   assertRuntimeReachable,
@@ -39,7 +39,7 @@ import { createDefaultPathEnv, resolveAppPaths } from '../paths.js';
 import { resolveRepository } from '../repo.js';
 import type { RouteResult } from './router.js';
 
-export type CollectSourceName = 'github' | 'orca' | 'codeburn';
+export type CollectSourceName = 'github' | 'orca' | 'agent-top';
 
 export type CollectSourceResult = {
   source: CollectSourceName;
@@ -108,15 +108,15 @@ function tokenAllocationForModels(
 
 function toImportRow(
   parsed: {
-    session: CodeBurnImportRow['session'];
-    snapshot: CodeBurnImportRow['snapshot'];
+    session: UsageImportRow['session'];
+    snapshot: UsageImportRow['snapshot'];
     metadata: {
       models: string[] | null;
       projectHint: string | null;
       tokenAllocation?: ClaudeTokenAllocation | null;
     };
   },
-): CodeBurnImportRow {
+): UsageImportRow {
   const models = parsed.metadata.models;
   const allocation =
     parsed.metadata.tokenAllocation ??
@@ -210,75 +210,47 @@ async function collectOrca(
   }
 }
 
-async function collectCodeburn(
+async function collectAgentTop(
   db: import('node:sqlite').DatabaseSync,
   observedAt: string,
 ): Promise<CollectSourceResult> {
   try {
-    const version = await readCodeburnVersion();
-    if (version !== CODEBURN_VERIFIED_VERSION) {
+    const version = await readAgentTopVersion();
+    if (version !== AGENT_TOP_VERIFIED_VERSION) {
       throw new CliError({
-        code: 'codeburn_version_unsupported',
-        message: `Unexpected CodeBurn version ${version}.`,
+        code: 'agent_top_version_unsupported',
+        message: `Unexpected agent-top version ${version}.`,
         exitCode: EXIT_SOURCE_UNAVAILABLE,
       });
     }
-    const rows: CodeBurnImportRow[] = [];
-    for (const provider of ['claude', 'codex'] as const) {
-      const result = await invokeCodeburn([
-        'sessions',
-        '--provider',
-        provider,
-        '--period',
-        'all',
-        '--format',
-        'json',
-        '--no-pager',
-      ]);
-      if (result.exitCode !== 0) {
-        throw new CliError({
-          code: 'codeburn_runtime_unavailable',
-          message: `CodeBurn sessions (${provider}) failed.`,
-          exitCode: EXIT_SOURCE_UNAVAILABLE,
-        });
-      }
-      const array = parseSessionsJsonArray(result.stdout);
-      if (provider === 'claude') {
-        for (const parsed of parseClaudeSessions(array, observedAt, version)) {
-          rows.push(
-            toImportRow({
-              ...parsed,
-              metadata: {
-                models: parsed.metadata.models,
-                projectHint: parsed.metadata.projectHint,
-                tokenAllocation: parsed.metadata.tokenAllocation,
-              },
-            }),
-          );
-        }
-      } else {
-        for (const parsed of parseCodexSessions(array, observedAt, version)) {
-          rows.push(
-            toImportRow({
-              ...parsed,
-              metadata: {
-                models: parsed.metadata.models,
-                projectHint: parsed.metadata.projectHint,
-                tokenAllocation: tokenAllocationForModels(parsed.metadata.models),
-              },
-            }),
-          );
-        }
-      }
+    const result = await invokeAgentTop(['sql', '--json', COUNTED_SESSIONS_QUERY]);
+    if (result.exitCode !== 0) {
+      throw new CliError({
+        code: 'agent_top_runtime_unavailable',
+        message: 'agent-top sql counted_sessions failed.',
+        exitCode: EXIT_SOURCE_UNAVAILABLE,
+      });
     }
-    importCodeBurnUsage(db, rows);
+    const array = parseSessionsJsonArray(result.stdout);
+    const rows: UsageImportRow[] = parseCountedSessions(array, observedAt, version).map(
+      (parsed) =>
+        toImportRow({
+          ...parsed,
+          metadata: {
+            models: parsed.metadata.models,
+            projectHint: parsed.metadata.projectHint,
+            tokenAllocation: parsed.metadata.tokenAllocation,
+          },
+        }),
+    );
+    importUsageSnapshots(db, rows);
     return {
-      source: 'codeburn',
+      source: 'agent-top',
       status: 'ok',
       counts: { sessions: rows.length },
     };
   } catch (err) {
-    return { source: 'codeburn', status: 'error', error: mapSourceError(err) };
+    return { source: 'agent-top', status: 'error', error: mapSourceError(err) };
   }
 }
 
@@ -318,7 +290,7 @@ export async function runCollectCommand(
   const sources: CollectSourceResult[] = [];
   sources.push(await collectGithub(profile.project.id, handle.db));
   sources.push(await collectOrca(handle.db));
-  sources.push(await collectCodeburn(handle.db, observedAt));
+  sources.push(await collectAgentTop(handle.db, observedAt));
 
   const exitCode = computeExitCode(sources);
   const counts = {

@@ -96,7 +96,7 @@ function parseLinkArgs(kind: 'link-pr' | 'link-commit', rest: string[]) {
   if (!provider || !(USAGE_PROVIDERS as readonly string[]).includes(provider)) {
     throw usageError('Invalid or missing --provider.', 'Use --provider claude or codex.');
   }
-  if (!session) throw usageError('Missing --session.', 'Pass the CodeBurn provider session ID.');
+  if (!session) throw usageError('Missing --session.', 'Pass the agent-top provider session ID.');
   if (kind === 'link-pr' && (!issue || sha)) {
     throw usageError('link-pr requires --issue and does not accept --sha.');
   }

@@ -1,5 +1,7 @@
 # Báo cáo kiểm chứng MVP (self-check)
 
+> **ADR 0001:** collector usage đã chuyển sang agent-top. Bằng chứng live CodeBurn @ `818ca30` **không** áp dụng cho SHA sau thay SoT. Cần collect/link/re-review mới.
+
 > **Không phải independent PASS.** Reviewer độc lập phải xác nhận từng gate trên **cùng exact SHA** với worker report. Review gộp trước link @ `818ca30de1954d72122329d464b974e3b4c9fb83` (`/tmp/orca-telemetry-resume/review-Final-818ca30.md`) ghi **T41 FAIL / blocked live** — **không** được kế thừa thành PASS sau bằng chứng link mới; cần **re-review độc lập** trên SHA sau commit docs live evidence.
 
 | Trường | Giá trị |

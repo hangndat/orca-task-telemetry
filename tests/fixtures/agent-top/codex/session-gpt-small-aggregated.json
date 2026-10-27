@@ -1,0 +1,15 @@
+{
+  "harness": "codex",
+  "session_id": "01a10000-bbbb-4ccc-8ddd-eeeeeeeeee01",
+  "model": "GPT-6.1 Sol",
+  "project": "<PROJECT_SLUG>",
+  "input": 51600,
+  "output": 2040,
+  "cache_read": 661504,
+  "cache_write_5m": 0,
+  "cache_write_1h": 0,
+  "cache_write_unsplit": 0,
+  "cost_usd": 0.18975039999999999,
+  "unpriced_tokens": 0,
+  "parent_session_id": null
+}

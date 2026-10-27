@@ -17,7 +17,7 @@ import { linkSessionToIssue } from '../../dist/attribution/link.js';
 import { sessionKey } from '../../dist/contracts.js';
 import { emptyConfig, saveConfig } from '../../dist/config.js';
 import {
-  importCodeBurnUsage,
+  importUsageSnapshots,
   importGitHubRecords,
   openTelemetryDatabase,
 } from '../../dist/db/index.js';
@@ -34,7 +34,7 @@ const FIXTURE_COLLECTION_TIME = '2026-01-01T00:00:00.000Z';
 
 export function seedDeterministicCollectionLogs(db) {
   db.exec('DELETE FROM collection_logs');
-  for (const source of ['codeburn', 'github', 'orca']) {
+  for (const source of ['agent-top', 'github', 'orca']) {
     db.prepare(
       `INSERT INTO collection_logs (source, status, message, recorded_at)
        VALUES (?, 'success', 'fixture import', ?)`,
@@ -88,12 +88,12 @@ export function installDatasetInHome(appHome, linkFn, datasetFixture = fixture) 
     memberships: datasetFixture.memberships,
   });
   const rows = datasetFixture.sessions.map((s) => {
-    const key = sessionKey(s.provider, 'codeburn', s.rawId);
+    const key = sessionKey(s.provider, 'agent-top', s.rawId);
     return {
       session: {
         sessionKey: key,
         provider: s.provider,
-        source: 'codeburn',
+        source: 'agent-top',
         rawId: s.rawId,
       },
       snapshot: {
@@ -107,7 +107,7 @@ export function installDatasetInHome(appHome, linkFn, datasetFixture = fixture) 
       claudeProjectHint: s.claudeProjectHint ?? null,
     };
   });
-  importCodeBurnUsage(handle.db, rows);
+  importUsageSnapshots(handle.db, rows);
   seedDeterministicCollectionLogs(handle.db);
   const ctx = { db: handle.db, dir: appHome, path: dest, close: () => handle.close() };
   if (linkFn) {
@@ -121,21 +121,21 @@ export function installDatasetInHome(appHome, linkFn, datasetFixture = fixture) 
 export function linkAlphaSessions(ctx) {
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
   });
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee02',
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
   });
   linkSessionToIssue(ctx.db, {
     provider: 'codex',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: fixture.sharedRawSessionId,
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,
@@ -145,7 +145,7 @@ export function linkAlphaSessions(ctx) {
 export function linkBetaClaudeShared(ctx) {
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: fixture.sharedRawSessionId,
     issueNodeId: 'I_attr_issue_beta',
     linkedAt: LINKED_AT,

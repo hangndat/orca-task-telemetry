@@ -23,7 +23,7 @@ test('trace report dedupes Issue and PR usage while retaining repeated PR/commit
     assert.ok(report.pullRequests.every(pr => pr.commits.length === 2));
     assert.ok(report.pullRequests.every(pr => pr.commits.every(commit =>
       commit.sessionKeys.length === 1 && commit.usage.sessionCount === 1)));
-    assert.deepEqual(report.pullRequests[0].sessions.map(s => s.sessionKey), ['codex:codeburn:s1']);
+    assert.deepEqual(report.pullRequests[0].sessions.map(s => s.sessionKey), ['codex:agent-top:s1']);
     assert.ok(report.issueSessions.every(s => s.orcaReference.status === 'unknown'));
     assert.equal(report.pullRequests[0].mergedAt, null);
     assert.equal(report.pullRequests[0].isDraft, true);
@@ -38,24 +38,24 @@ test('redacted golden text and JSON keep provider tokens at each scope without a
   try {
     const db = fixture.db;
     db.prepare(`INSERT INTO usage_sessions (session_key, provider, source, raw_id)
-      VALUES ('claude:codeburn:c1', 'claude', 'codeburn', 'c1')`).run();
+      VALUES ('claude:agent-top:c1', 'claude', 'agent-top', 'c1')`).run();
     db.prepare(`INSERT INTO usage_snapshots
       (session_key, observed_at, tokens_json, cost_amount_usd, cost_kind)
-      VALUES ('claude:codeburn:c1', ?, ?, 0.5, 'estimated_api_equivalent')`)
+      VALUES ('claude:agent-top:c1', ?, ?, 0.5, 'estimated_api_equivalent')`)
       .run(at, JSON.stringify({ provider: 'claude', input: 7, output: 4,
         cacheRead: 1, cacheWrite: 2, reasoning: null }));
     db.prepare(`INSERT INTO session_links (session_key, issue_node_id, method, linked_at)
-      VALUES ('claude:codeburn:c1', 'I_1', 'manual', ?)` ).run(at);
+      VALUES ('claude:agent-top:c1', 'I_1', 'manual', ?)` ).run(at);
     db.prepare(`INSERT INTO session_pull_links
       (session_key, issue_node_id, pull_node_id, method, linked_at)
-      VALUES ('claude:codeburn:c1', 'I_1', 'PR_7', 'manual', ?)` ).run(at);
+      VALUES ('claude:agent-top:c1', 'I_1', 'PR_7', 'manual', ?)` ).run(at);
     db.prepare(`INSERT INTO session_commit_links (session_key, pull_node_id, oid, method, linked_at)
-      VALUES ('claude:codeburn:c1', 'PR_7', ?, 'manual', ?)` ).run(oidA, at);
+      VALUES ('claude:agent-top:c1', 'PR_7', ?, 'manual', ?)` ).run(oidA, at);
     db.prepare(`INSERT INTO session_pull_links
       (session_key, issue_node_id, pull_node_id, method, linked_at)
-      VALUES ('codex:codeburn:s3', 'I_1', 'PR_8', 'manual', ?)` ).run(at);
+      VALUES ('codex:agent-top:s3', 'I_1', 'PR_8', 'manual', ?)` ).run(at);
     db.prepare(`INSERT INTO session_commit_links (session_key, pull_node_id, oid, method, linked_at)
-      VALUES ('codex:codeburn:s3', 'PR_8', ?, 'manual', ?)` ).run(oidB, at);
+      VALUES ('codex:agent-top:s3', 'PR_8', ?, 'manual', ?)` ).run(oidB, at);
 
     const report = buildTraceReport(ctx(db), '3');
     const scopeUsage = [report.issueUsage, ...report.pullRequests.flatMap(pr =>
@@ -139,7 +139,7 @@ test('missing Issue and corrupt snapshot fail with structured errors', () => {
   const fixture = setupTraceDb();
   try {
     assert.throws(() => buildTraceReport(ctx(fixture.db), '404'), e => e.code === 'report_setup');
-    fixture.db.prepare(`UPDATE usage_snapshots SET tokens_json = 'invalid' WHERE session_key = 'codex:codeburn:s1'`).run();
+    fixture.db.prepare(`UPDATE usage_snapshots SET tokens_json = 'invalid' WHERE session_key = 'codex:agent-top:s1'`).run();
     assert.throws(() => buildTraceReport(ctx(fixture.db), '3'), e => e.code === 'db_schema_drift');
   } finally { fixture.close(); }
 });

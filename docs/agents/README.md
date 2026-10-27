@@ -18,7 +18,7 @@ Bộ hướng dẫn được điều chỉnh từ `ticket-solution` cho một pa
 | product-ba | Kazu · ba | AC, scope và docs trong MVP |
 | architect | Dexter · arch | Contract, storage/trust boundaries và handoff trong docs |
 | cli | Gonic, Colin · cli | CLI và tests được giao |
-| collectors | Remy, Monica · collect | Adapters GitHub/Orca/CodeBurn và fixtures được giao |
+| collectors | Remy, Monica · collect | Adapters GitHub/Orca/agent-top và fixtures được giao |
 | reviewer-dod | James · dod | Codex nghiệm thu độc lập trên exact SHA |
 | reviewer-security | James · sec | Codex review độc lập secrets, subprocess, storage, external mutation |
 | dod+sec | James · dod+sec | Một reviewer Codex, chung evidence, verdict DoD/security riêng |

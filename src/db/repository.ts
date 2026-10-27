@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Execution, GitHubIssue, SessionLink, UsageSession, UsageSnapshot } from '../contracts.js';
-import type { ClaudeTokenAllocation } from '../codeburn/claude.js';
+import type { ClaudeTokenAllocation } from '../usage/sessions.js';
 import type { ProjectMembership } from '../github/memberships.js';
 import { dbSnapshotConflict } from './errors.js';
 import {
@@ -11,7 +11,7 @@ import {
   type SnapshotRowExtras,
 } from './serialize.js';
 
-export type CollectionSource = 'github' | 'orca' | 'codeburn';
+export type CollectionSource = 'github' | 'orca' | 'agent-top';
 
 export type GitHubImportInput = {
   /** Full Project snapshot when set; stale memberships for this Project are removed. */
@@ -20,14 +20,14 @@ export type GitHubImportInput = {
   memberships: ProjectMembership[];
 };
 
-export type CodeBurnImportRow = {
+export type UsageImportRow = {
   session: UsageSession;
   snapshot: UsageSnapshot;
   /** Provider session model labels (Claude and Codex). */
   models?: string[] | null;
   /** Per-session model/token allocation semantics when multiple models apply. */
   tokenAllocation?: ClaudeTokenAllocation | null;
-  /** CodeBurn project slug hint (not GitHub Project membership). */
+  /** agent-top project slug hint (not GitHub Project membership). */
   projectHint?: string | null;
   /** @deprecated use `models` */
   claudeModels?: string[] | null;
@@ -71,7 +71,7 @@ function appendCollectionLog(
   stmt.run(source, status, sanitizeCollectionMessage(message), nowIso());
 }
 
-function extrasFromRow(row: CodeBurnImportRow): SnapshotRowExtras {
+function extrasFromRow(row: UsageImportRow): SnapshotRowExtras {
   const modelList = row.models ?? row.claudeModels;
   const models =
     modelList && modelList.length > 0 ? JSON.stringify(modelList) : null;
@@ -305,9 +305,9 @@ export function importOrcaExecutions(
   }
 }
 
-export function importCodeBurnUsage(
+export function importUsageSnapshots(
   db: DatabaseSync,
-  rows: CodeBurnImportRow[],
+  rows: UsageImportRow[],
 ): void {
   db.exec('BEGIN IMMEDIATE');
   try {
@@ -329,7 +329,7 @@ export function importCodeBurnUsage(
       upsertSnapshotRow(db, row.snapshot, extrasFromRow(row));
     }
     db.exec('COMMIT');
-    appendCollectionLog(db, 'codeburn', 'success', 'CodeBurn import completed.');
+    appendCollectionLog(db, 'agent-top', 'success', 'agent-top import completed.');
   } catch (err) {
     try {
       db.exec('ROLLBACK');
@@ -337,8 +337,8 @@ export function importCodeBurnUsage(
       // ignore
     }
     const message =
-      err instanceof Error ? err.message : 'CodeBurn import failed.';
-    appendCollectionLog(db, 'codeburn', 'failed', message);
+      err instanceof Error ? err.message : 'agent-top import failed.';
+    appendCollectionLog(db, 'agent-top', 'failed', message);
     throw err;
   }
 }

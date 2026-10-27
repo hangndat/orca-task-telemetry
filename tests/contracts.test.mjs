@@ -22,42 +22,42 @@ const WORKTREE_ID =
   '161803f0-8d29-4bf2-90d8-b774907ef80d::/Users/admin/orca/workspaces/orca-task-telemetry/Foundation';
 
 test('sessionKey round-trip for claude and codex', () => {
-  const claudeKey = sessionKey('claude', 'codeburn', CLAUDE_UUID);
-  assert.equal(claudeKey, `claude:codeburn:${CLAUDE_UUID}`);
+  const claudeKey = sessionKey('claude', 'agent-top', CLAUDE_UUID);
+  assert.equal(claudeKey, `claude:agent-top:${CLAUDE_UUID}`);
   assert.deepEqual(parseSessionKey(claudeKey), {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawId: CLAUDE_UUID,
   });
 
-  const codexKey = sessionKey('codex', 'codeburn', CODEX_UUID);
-  assert.equal(codexKey, `codex:codeburn:${CODEX_UUID}`);
+  const codexKey = sessionKey('codex', 'agent-top', CODEX_UUID);
+  assert.equal(codexKey, `codex:agent-top:${CODEX_UUID}`);
   assert.deepEqual(parseSessionKey(codexKey), {
     provider: 'codex',
-    source: 'codeburn',
+    source: 'agent-top',
     rawId: CODEX_UUID,
   });
 });
 
 test('claude and codex with same rawId produce different sessionKeys', () => {
   const shared = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01';
-  const a = sessionKey('claude', 'codeburn', shared);
-  const b = sessionKey('codex', 'codeburn', shared);
+  const a = sessionKey('claude', 'agent-top', shared);
+  const b = sessionKey('codex', 'agent-top', shared);
   assert.notEqual(a, b);
 });
 
 test('parseSessionKey rejects unknown provider, source, and empty rawId', () => {
   assert.throws(
-    () => parseSessionKey('openai:codeburn:abc'),
+    () => parseSessionKey('openai:agent-top:abc'),
     ContractParseError,
   );
   assert.throws(
     () => parseSessionKey('claude:unknown:abc'),
     ContractParseError,
   );
-  assert.throws(() => sessionKey('claude', 'codeburn', ''), ContractParseError);
+  assert.throws(() => sessionKey('claude', 'agent-top', ''), ContractParseError);
   assert.throws(
-    () => parseSessionKey('claude:codeburn:'),
+    () => parseSessionKey('claude:agent-top:'),
     ContractParseError,
   );
   assert.throws(
@@ -84,7 +84,7 @@ test('orcaExecutionKey round-trip with dispatch and worktree rawId containing co
 
 test('contract constants are frozen vocabulary', () => {
   assert.deepEqual([...USAGE_PROVIDERS], ['claude', 'codex']);
-  assert.deepEqual([...USAGE_SOURCES], ['codeburn']);
+  assert.deepEqual([...USAGE_SOURCES], ['agent-top']);
   assert.equal(ORCA_EXECUTION_PREFIX, 'orca');
   assert.equal(CLAUDE_SUBAGENT_POLICY, 'separate_session_per_row');
   assert.ok(COST_KINDS.includes('estimated_api_equivalent'));

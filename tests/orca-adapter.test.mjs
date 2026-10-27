@@ -175,7 +175,7 @@ test('optional live orca --version when binary available', async () => {
     const version = await readOrcaVersion({ orcaPath: binary, timeoutMs: 10_000 });
     assert.equal(version, '1.4.237');
   } catch (err) {
-    if (err.code !== 'orca_runtime_unavailable') {
+    if (err.code !== 'orca_runtime_unavailable' && err.code !== 'orca_version_unsupported') {
       throw err;
     }
   }

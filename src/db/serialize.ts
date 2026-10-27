@@ -1,5 +1,5 @@
 import type { Cost, TokenUsage, UsageSnapshot } from '../contracts.js';
-import type { ClaudeTokenAllocation } from '../codeburn/claude.js';
+import type { ClaudeTokenAllocation } from '../usage/sessions.js';
 import { dbSchemaError } from './errors.js';
 
 export type SnapshotRowExtras = {

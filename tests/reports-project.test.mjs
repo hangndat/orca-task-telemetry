@@ -61,14 +61,14 @@ test('T36: two projects — shared issue deduped, project B includes B-only issu
   const ctx = loadReportsDataset(multiFixture);
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
     issueNodeId: 'I_shared_cross_project',
     linkedAt: LINKED_AT,
   });
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
     issueNodeId: 'I_only_project_b',
     linkedAt: LINKED_AT,

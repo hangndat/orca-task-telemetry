@@ -8,15 +8,15 @@ import { test } from 'vitest';
 import { sessionKey } from '../dist/contracts.js';
 import { emptyConfig, saveConfig } from '../dist/config.js';
 import { upsertProfile } from '../dist/profiles.js';
-import { importCodeBurnUsage, importGitHubRecords, openTelemetryDatabase } from '../dist/db/index.js';
-import { parseCodexSessions } from '../dist/codeburn/codex.js';
+import { importUsageSnapshots, importGitHubRecords, openTelemetryDatabase } from '../dist/db/index.js';
+import { parseCodexSessions } from '../dist/usage/sessions.js';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(dir, '../dist/cli.js');
 const ghResolveStub = resolve(dir, 'helpers/integration-stubs/gh-collect.mjs');
 const codexRow = JSON.parse(
   readFileSync(
-    join(dir, 'fixtures/codeburn/codex/session-gpt-small-aggregated.json'),
+    join(dir, 'fixtures/agent-top/codex/session-gpt-small-aggregated.json'),
     'utf8',
   ),
 );
@@ -61,8 +61,8 @@ function setupRepoAndSession() {
   const dbPath = join(appHome, 'telemetry.sqlite');
   const handle = openTelemetryDatabase({ dbPath, gitRoot: repo });
   const observedAt = '2026-01-01T00:00:00.000Z';
-  const parsed = parseCodexSessions([codexRow], observedAt, '0.9.27')[0];
-  importCodeBurnUsage(handle.db, [
+  const parsed = parseCodexSessions([codexRow], observedAt, '0.27.1')[0];
+  importUsageSnapshots(handle.db, [
     {
       session: parsed.session,
       snapshot: parsed.snapshot,
@@ -99,7 +99,7 @@ function setupRepoAndSession() {
     GH_STUB_GRAPHQL_JSON: issueFixture,
   };
 
-  return { repo, appHome, env, sessionId: codexRow.sessionId };
+  return { repo, appHome, env, sessionId: codexRow.session_id };
 }
 
 test('T34: link success and idempotent second link', () => {
@@ -236,7 +236,7 @@ test('T34: CLI link conflict does not overwrite existing issue mapping', () => {
   const verify = openTelemetryDatabase({ dbPath, gitRoot: repo });
   const row = verify.db
     .prepare('SELECT issue_node_id FROM session_links WHERE session_key = ?')
-    .get(sessionKey('codex', 'codeburn', sessionId));
+    .get(sessionKey('codex', 'agent-top', sessionId));
   assert.equal(row.issue_node_id, 'I_link_issue_003');
   verify.close();
 

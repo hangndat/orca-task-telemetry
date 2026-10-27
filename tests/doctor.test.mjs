@@ -20,7 +20,7 @@ test('T32: doctor pass when core checks healthy', async () => {
       scopes: ['read:project', 'repo'],
     }),
     orcaVersion: async () => '1.4.237',
-    codeburnVersion: async () => '0.9.27',
+    agentTopVersion: async () => '0.27.1',
     readDbUserVersion: () => SUPPORTED_SCHEMA_VERSION,
   });
   assert.equal(report.summary, 'pass');
@@ -32,7 +32,7 @@ test('T32: doctor warn on missing sources still exits 0', async () => {
     nodeVersion: 'v24.1.0',
     ghAuthStatus: async () => ({ authenticated: false, scopes: [] }),
     orcaVersion: async () => null,
-    codeburnVersion: async () => null,
+    agentTopVersion: async () => null,
     readDbUserVersion: () => null,
   });
   assert.equal(report.summary, 'warn');

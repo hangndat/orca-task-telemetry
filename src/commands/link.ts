@@ -70,7 +70,7 @@ export async function runLink(
   const linkedAt = new Date().toISOString();
   const result = linkSessionToIssue(handle.db, {
     provider,
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: session,
     issueNodeId: githubIssue.issueNodeId,
     linkedAt,

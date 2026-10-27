@@ -6,7 +6,7 @@ import { test } from 'vitest';
 import { sessionKey } from '../dist/contracts.js';
 import {
   countRows,
-  importCodeBurnUsage,
+  importUsageSnapshots,
   importGitHubRecords,
   insertSessionLink,
   openTelemetryDatabase,
@@ -53,12 +53,12 @@ test('T27: duplicate issue node id upserts not multiplies', () => {
 
 test('T27: duplicate session key upserts session row', () => {
   withDb((db) => {
-    const key = sessionKey('claude', 'codeburn', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01');
+    const key = sessionKey('claude', 'agent-top', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01');
     const row = {
       session: {
         sessionKey: key,
         provider: 'claude',
-        source: 'codeburn',
+        source: 'agent-top',
         rawId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01',
       },
       snapshot: {
@@ -74,8 +74,8 @@ test('T27: duplicate session key upserts session row', () => {
         cost: { amountUsd: 0.01, kind: 'estimated_api_equivalent', source: null },
       },
     };
-    importCodeBurnUsage(db, [row]);
-    importCodeBurnUsage(db, [row]);
+    importUsageSnapshots(db, [row]);
+    importUsageSnapshots(db, [row]);
     assert.equal(countRows(db, 'usage_sessions'), 1);
     assert.equal(countRows(db, 'usage_snapshots'), 1);
   });
@@ -87,13 +87,13 @@ test('T27: second session link for same session is rejected', () => {
       issues: [issueA],
       memberships: [{ projectId: 'P1', issueNodeId: issueA.issueNodeId }],
     });
-    const key = sessionKey('codex', 'codeburn', '01a10000-bbbb-4ccc-8ddd-eeeeeeeeee01');
-    importCodeBurnUsage(db, [
+    const key = sessionKey('codex', 'agent-top', '01a10000-bbbb-4ccc-8ddd-eeeeeeeeee01');
+    importUsageSnapshots(db, [
       {
         session: {
           sessionKey: key,
           provider: 'codex',
-          source: 'codeburn',
+          source: 'agent-top',
           rawId: '01a10000-bbbb-4ccc-8ddd-eeeeeeeeee01',
         },
         snapshot: {

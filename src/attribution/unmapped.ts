@@ -7,7 +7,7 @@ export type UnmappedSession = {
   sessionKey: string;
   provider: UsageProvider;
   snapshot: UsageSnapshot;
-  /** CodeBurn project slug hint only — not GitHub Project membership. */
+  /** agent-top project slug hint only — not GitHub Project membership. */
   projectHint: string | null;
 };
 

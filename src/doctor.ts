@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { CODEBURN_VERIFIED_VERSION } from './codeburn/adapter.js';
+import { AGENT_TOP_VERIFIED_VERSION } from './usage/adapter.js';
 import { ORCA_VERIFIED_VERSION } from './orca/adapter.js';
 import { loadConfig } from './config.js';
 import { EXIT_ENVIRONMENT, EXIT_SUCCESS, EXIT_USAGE } from './errors.js';
@@ -35,7 +35,7 @@ export type DoctorDeps = {
   }>;
   ghAuthStatus?: () => Promise<{ authenticated: boolean; scopes: string[] }>;
   orcaVersion?: () => Promise<string | null>;
-  codeburnVersion?: () => Promise<string | null>;
+  agentTopVersion?: () => Promise<string | null>;
   appHome?: string;
   configExists?: boolean;
   readDbUserVersion?: (dbPath: string) => number | null | Promise<number | null>;
@@ -158,35 +158,35 @@ export async function runDoctorChecks(
     }
   }
 
-  if (deps.codeburnVersion) {
+  if (deps.agentTopVersion) {
     try {
-      const version = await deps.codeburnVersion();
+      const version = await deps.agentTopVersion();
       if (!version) {
         checks.push({
-          id: 'codeburn',
+          id: 'agent-top',
           status: 'warn',
-          message: 'CodeBurn CLI is not available.',
-          remedy: 'Use codeburn@0.9.27 via npx or set ORCA_TELEMETRY_CODEBURN.',
+          message: 'agent-top CLI is not available.',
+          remedy: 'Install agent-top 0.27.1 or set ORCA_TELEMETRY_AGENT_TOP.',
         });
-      } else if (version !== CODEBURN_VERIFIED_VERSION) {
+      } else if (version !== AGENT_TOP_VERIFIED_VERSION) {
         checks.push({
-          id: 'codeburn',
+          id: 'agent-top',
           status: 'warn',
-          message: `CodeBurn version ${version} is not verified ${CODEBURN_VERIFIED_VERSION}.`,
-          remedy: 'Pin codeburn@0.9.27 as documented.',
+          message: `agent-top version ${version} is not verified ${AGENT_TOP_VERIFIED_VERSION}.`,
+          remedy: 'Pin agent-top 0.27.1 as documented in docs/adr/0001-agent-top-usage-sot.md.',
         });
       } else {
         checks.push({
-          id: 'codeburn',
+          id: 'agent-top',
           status: 'pass',
-          message: `CodeBurn ${version} verified.`,
+          message: `agent-top ${version} verified.`,
         });
       }
     } catch {
       checks.push({
-        id: 'codeburn',
+        id: 'agent-top',
         status: 'warn',
-        message: 'CodeBurn CLI is not available.',
+        message: 'agent-top CLI is not available.',
       });
     }
   }
@@ -318,7 +318,7 @@ export async function buildDefaultDoctorDeps(
     },
     ghAuthStatus: defaultGhAuthStatus,
     orcaVersion: defaultOrcaVersion,
-    codeburnVersion: defaultCodeburnVersion,
+    agentTopVersion: defaultAgentTopVersion,
     readDbUserVersion: readUserVersionReadOnly,
   };
 }
@@ -363,10 +363,10 @@ async function defaultOrcaVersion(): Promise<string | null> {
   }
 }
 
-async function defaultCodeburnVersion(): Promise<string | null> {
+async function defaultAgentTopVersion(): Promise<string | null> {
   try {
-    const { readCodeburnVersion } = await import('./codeburn/adapter.js');
-    return await readCodeburnVersion();
+    const { readAgentTopVersion } = await import('./usage/adapter.js');
+    return await readAgentTopVersion();
   } catch {
     return null;
   }

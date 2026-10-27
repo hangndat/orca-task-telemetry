@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openTelemetryDatabase } from '../../dist/db/index.js';
 
-// Synthetic/redacted fixture; no live GitHub, Orca, or CodeBurn evidence.
+// Synthetic/redacted fixture; no live GitHub, Orca, or agent-top evidence.
 export const oidA = 'a'.repeat(40);
 export const oidB = 'b'.repeat(40);
 export const at = '2026-10-24T00:00:00.000Z';
@@ -22,9 +22,9 @@ export function setupTraceDb() {
   db.prepare(`INSERT INTO issues (issue_node_id, repository_name_with_owner, number, url, title, state)
     VALUES ('I_1','o/r',3,'https://github.com/o/r/issues/3','Synthetic','OPEN')`).run();
   for (const [id, cost] of [['s1', 1.25], ['s2', null], ['s3', 'missing']]) {
-    const key = `codex:codeburn:${id}`;
+    const key = `codex:agent-top:${id}`;
     db.prepare(`INSERT INTO usage_sessions (session_key, provider, source, raw_id)
-      VALUES (?, 'codex', 'codeburn', ?)`).run(key, id);
+      VALUES (?, 'codex', 'agent-top', ?)`).run(key, id);
     if (cost !== 'missing') db.prepare(`INSERT INTO usage_snapshots
       (session_key, observed_at, tokens_json, cost_amount_usd, cost_kind)
       VALUES (?, ?, ?, ?, ?)`)
@@ -47,14 +47,14 @@ export function setupTraceDb() {
       .run(id, at);
     db.prepare(`INSERT INTO session_pull_links
       (session_key, issue_node_id, pull_node_id, method, linked_at)
-      VALUES ('codex:codeburn:s1', 'I_1', ?, 'manual', ?)`)
+      VALUES ('codex:agent-top:s1', 'I_1', ?, 'manual', ?)`)
       .run(id, at);
     for (const oid of [oidA, oidB]) {
       db.prepare(`INSERT INTO pull_commits (pull_node_id, oid, url, status, last_verified_at)
         VALUES (?, ?, ?, 'verified_current', ?)`)
         .run(id, oid, `https://github.com/o/r/commit/${oid}`, at);
       db.prepare(`INSERT INTO session_commit_links (session_key, pull_node_id, oid, method, linked_at)
-        VALUES ('codex:codeburn:s1', ?, ?, 'manual', ?)`)
+        VALUES ('codex:agent-top:s1', ?, ?, 'manual', ?)`)
         .run(id, oid, at);
     }
   }

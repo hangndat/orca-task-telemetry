@@ -1,0 +1,16 @@
+[
+  {
+    "_fixture": "synthetic — missing cost_usd",
+    "harness": "codex",
+    "session_id": "01a10000-bbbb-4ccc-8ddd-eeeeeeeeee99",
+    "model": "GPT-6.1 Sol",
+    "project": "<SYNTH_PROJECT>",
+    "input": 100,
+    "output": 50,
+    "cache_read": 200,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "cache_write_unsplit": 0,
+    "parent_session_id": null
+  }
+]

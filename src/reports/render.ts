@@ -73,7 +73,7 @@ export type OrcaReferenceField =
   | { status: 'unknown' };
 
 export type CollectionFreshnessSlice = {
-  source: 'github' | 'orca' | 'codeburn';
+  source: 'github' | 'orca' | 'agent-top';
   status: 'success' | 'failed';
   recordedAt: string;
 };

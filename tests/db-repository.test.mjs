@@ -7,7 +7,7 @@ import { orcaExecutionKey, sessionKey } from '../dist/contracts.js';
 import { readFileSync } from 'node:fs';
 import {
   countRows,
-  importCodeBurnUsage,
+  importUsageSnapshots,
   importGitHubRecords,
   importOrcaExecutions,
   openTelemetryDatabase,
@@ -56,16 +56,16 @@ test('T28: duplicate GitHub import keeps stable row counts', () => {
 
 test('T28: newer snapshot replaces, older observedAt is noop', () => {
   const { db, close, dir } = openTemp();
-  const key = sessionKey('claude', 'codeburn', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee02');
+  const key = sessionKey('claude', 'agent-top', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee02');
   const base = {
     session: {
       sessionKey: key,
       provider: 'claude',
-      source: 'codeburn',
+      source: 'agent-top',
       rawId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee02',
     },
   };
-  importCodeBurnUsage(db, [
+  importUsageSnapshots(db, [
     {
       ...base,
       snapshot: {
@@ -82,7 +82,7 @@ test('T28: newer snapshot replaces, older observedAt is noop', () => {
       },
     },
   ]);
-  importCodeBurnUsage(db, [
+  importUsageSnapshots(db, [
     {
       ...base,
       snapshot: {
@@ -103,7 +103,7 @@ test('T28: newer snapshot replaces, older observedAt is noop', () => {
     .prepare('SELECT observed_at, tokens_json FROM usage_snapshots WHERE session_key = ?')
     .get(key);
   assert.equal(row.observed_at, '2026-03-01T00:00:00.000Z');
-  importCodeBurnUsage(db, [
+  importUsageSnapshots(db, [
     {
       ...base,
       snapshot: {
@@ -130,17 +130,17 @@ test('T28: newer snapshot replaces, older observedAt is noop', () => {
 
 test('T28: same observedAt with conflicting payload throws', () => {
   const { db, close, dir } = openTemp();
-  const key = sessionKey('claude', 'codeburn', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee03');
+  const key = sessionKey('claude', 'agent-top', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee03');
   const observedAt = '2026-04-01T00:00:00.000Z';
   const base = {
     session: {
       sessionKey: key,
       provider: 'claude',
-      source: 'codeburn',
+      source: 'agent-top',
       rawId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee03',
     },
   };
-  importCodeBurnUsage(db, [
+  importUsageSnapshots(db, [
     {
       ...base,
       snapshot: {
@@ -159,7 +159,7 @@ test('T28: same observedAt with conflicting payload throws', () => {
   ]);
   assert.throws(
     () =>
-      importCodeBurnUsage(db, [
+      importUsageSnapshots(db, [
         {
           ...base,
           snapshot: {
@@ -187,14 +187,14 @@ test('T28: failed source rolls back only its transaction; prior source remains',
   const { db, close, dir } = openTemp();
   importGitHubRecords(db, normalized);
   const issuesBefore = countRows(db, 'issues');
-  const badKey = 'codex:codeburn:bad';
+  const badKey = 'codex:agent-top:bad';
   assert.throws(() =>
-    importCodeBurnUsage(db, [
+    importUsageSnapshots(db, [
       {
         session: {
           sessionKey: badKey,
           provider: 'claude',
-          source: 'codeburn',
+          source: 'agent-top',
           rawId: 'bad',
         },
         snapshot: {
@@ -215,7 +215,7 @@ test('T28: failed source rolls back only its transaction; prior source remains',
   assert.equal(countRows(db, 'issues'), issuesBefore);
   const failed = db
     .prepare(
-      "SELECT message FROM collection_logs WHERE source = 'codeburn' AND status = 'failed' ORDER BY log_id DESC LIMIT 1",
+      "SELECT message FROM collection_logs WHERE source = 'agent-top' AND status = 'failed' ORDER BY log_id DESC LIMIT 1",
     )
     .get();
   assert.ok(failed?.message);
@@ -245,33 +245,33 @@ test('T33: codex models persist via generic import aliases', () => {
   const observedAt = '2026-06-01T00:00:00.000Z';
   const row = JSON.parse(
     readFileSync(
-      joinPath(testDir, 'fixtures/codeburn/codex/session-gpt-small-aggregated.json'),
+      joinPath(testDir, 'fixtures/agent-top/codex/session-gpt-small-aggregated.json'),
       'utf8',
     ),
   );
-  const key = sessionKey('codex', 'codeburn', row.sessionId);
-  importCodeBurnUsage(db, [
+  const key = sessionKey('codex', 'agent-top', row.session_id);
+  importUsageSnapshots(db, [
     {
       session: {
         sessionKey: key,
         provider: 'codex',
-        source: 'codeburn',
-        rawId: row.sessionId,
+        source: 'agent-top',
+        rawId: row.session_id,
       },
       snapshot: {
         sessionKey: key,
         observedAt,
         tokens: {
           provider: 'codex',
-          input: row.inputTokens,
-          output: row.outputTokens,
-          cacheRead: row.cacheReadTokens,
-          cacheWrite: row.cacheWriteTokens,
+          input: row.input,
+          output: row.output,
+          cacheRead: row.cache_read,
+          cacheWrite: row.cache_write_5m,
           reasoning: null,
         },
-        cost: { amountUsd: row.cost, kind: 'estimated_api_equivalent', source: null },
+        cost: { amountUsd: row.cost_usd, kind: 'estimated_api_equivalent', source: null },
       },
-      models: row.models,
+      models: row.model ? [row.model] : null,
       tokenAllocation: 'known',
     },
   ]);

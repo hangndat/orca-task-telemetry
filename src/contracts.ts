@@ -6,7 +6,7 @@
 export const USAGE_PROVIDERS = ['claude', 'codex'] as const;
 export type UsageProvider = (typeof USAGE_PROVIDERS)[number];
 
-export const USAGE_SOURCES = ['codeburn'] as const;
+export const USAGE_SOURCES = ['agent-top'] as const;
 export type UsageSource = (typeof USAGE_SOURCES)[number];
 
 export const ORCA_EXECUTION_PREFIX = 'orca' as const;
@@ -26,10 +26,9 @@ export const SESSION_LINK_METHODS = ['manual'] as const;
 export type SessionLinkMethod = (typeof SESSION_LINK_METHODS)[number];
 
 /**
- * Claude CodeBurn `subagents[]` rows are separate cumulative sessions; the parent
- * row does not include subagent tokens (discovery: distinct `calls` totals).
- * Emit one {@link UsageSnapshot} per session row under its own {@link sessionKey};
- * never merge subagent metrics into the parent snapshot (avoids double-count).
+ * agent-top `counted_sessions` rows are separate cumulative sessions.
+ * `parent_session_id` is not merged into the parent snapshot (avoids double-count).
+ * Emit one {@link UsageSnapshot} per row under its own {@link sessionKey}.
  */
 export const CLAUDE_SUBAGENT_POLICY = 'separate_session_per_row' as const;
 
@@ -60,7 +59,7 @@ export type TokenUsage = ClaudeTokenUsage | CodexTokenUsage;
 export type Cost = {
   amountUsd: number | null;
   kind: CostKind;
-  source: { tool: 'codeburn'; version: string } | null;
+  source: { tool: 'agent-top'; version: string } | null;
 };
 
 export type UsageSession = {
@@ -70,7 +69,7 @@ export type UsageSession = {
   rawId: string;
 };
 
-/** Cumulative usage for one CodeBurn session at collection time; later collects replace (upsert). */
+/** Cumulative usage for one agent-top session at collection time; later collects replace (upsert). */
 export type UsageSnapshot = {
   sessionKey: string;
   observedAt: string;
@@ -174,7 +173,7 @@ function isUsageSource(value: string): value is UsageSource {
   return (USAGE_SOURCES as readonly string[]).includes(value);
 }
 
-/** CodeBurn usage identity: `<provider>:<source>:<rawId>` (MVP source `codeburn`). */
+/** Usage identity: `<provider>:<source>:<rawId>` (MVP source `agent-top`). */
 export function sessionKey(
   provider: UsageProvider,
   source: UsageSource,

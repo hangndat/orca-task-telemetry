@@ -1,5 +1,5 @@
 import { sessionKey } from '../../dist/contracts.js';
-import { importCodeBurnUsage, importGitHubRecords, openTelemetryDatabase } from '../../dist/db/index.js';
+import { importUsageSnapshots, importGitHubRecords, openTelemetryDatabase } from '../../dist/db/index.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,12 +13,12 @@ export function loadSyntheticDataset(fixture) {
     memberships: fixture.memberships,
   });
   const rows = fixture.sessions.map((s) => {
-    const key = sessionKey(s.provider, 'codeburn', s.rawId);
+    const key = sessionKey(s.provider, 'agent-top', s.rawId);
     return {
       session: {
         sessionKey: key,
         provider: s.provider,
-        source: 'codeburn',
+        source: 'agent-top',
         rawId: s.rawId,
       },
       snapshot: {
@@ -32,7 +32,7 @@ export function loadSyntheticDataset(fixture) {
       claudeProjectHint: s.claudeProjectHint ?? null,
     };
   });
-  importCodeBurnUsage(handle.db, rows);
+  importUsageSnapshots(handle.db, rows);
   return { ...handle, dir, fixture };
 }
 

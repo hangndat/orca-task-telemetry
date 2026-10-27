@@ -2,14 +2,14 @@
 import { appendFileSync } from 'node:fs';
 
 const argv = process.argv.slice(2);
-const logPath = process.env.CODEBURN_STUB_LOG_PATH;
+const logPath = process.env.AGENT_TOP_STUB_LOG_PATH;
 if (logPath) {
   appendFileSync(logPath, `${JSON.stringify({ argv })}\n`);
 }
 
-const stdout = process.env.CODEBURN_STUB_STDOUT ?? '[]\n';
-const stderr = process.env.CODEBURN_STUB_STDERR ?? '';
-const code = Number.parseInt(process.env.CODEBURN_STUB_EXIT_CODE ?? '0', 10);
+const stdout = process.env.AGENT_TOP_STUB_STDOUT ?? '[]\n';
+const stderr = process.env.AGENT_TOP_STUB_STDERR ?? '';
+const code = Number.parseInt(process.env.AGENT_TOP_STUB_EXIT_CODE ?? '0', 10);
 
 const done = () => process.exit(Number.isFinite(code) ? code : 0);
 if (stderr.length > 0) {

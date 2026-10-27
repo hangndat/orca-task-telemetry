@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import { sessionKey } from '../dist/contracts.js';
-import { importCodeBurnUsage } from '../dist/db/index.js';
+import { importUsageSnapshots } from '../dist/db/index.js';
 import { linkSessionToIssue } from '../dist/attribution/link.js';
 import {
   assertUsageIntegrity,
@@ -43,12 +43,12 @@ test('T31: reimport does not break integrity', () => {
   const ctx = loadSyntheticDataset(fixture);
   const before = buildUsageIntegrityReport(ctx.db);
   const rows = fixture.sessions.map((s) => {
-    const key = sessionKey(s.provider, 'codeburn', s.rawId);
+    const key = sessionKey(s.provider, 'agent-top', s.rawId);
     return {
       session: {
         sessionKey: key,
         provider: s.provider,
-        source: 'codeburn',
+        source: 'agent-top',
         rawId: s.rawId,
       },
       snapshot: {
@@ -62,7 +62,7 @@ test('T31: reimport does not break integrity', () => {
       claudeProjectHint: s.claudeProjectHint ?? null,
     };
   });
-  importCodeBurnUsage(ctx.db, rows);
+  importUsageSnapshots(ctx.db, rows);
   const after = assertUsageIntegrity(ctx.db);
   assert.deepEqual(after.providers, before.providers);
   disposeDataset(ctx);
@@ -73,7 +73,7 @@ test('T31: linking moves session between buckets without changing totals', () =>
   const before = buildUsageIntegrityReport(ctx.db);
   linkSessionToIssue(ctx.db, {
     provider: 'claude',
-    source: 'codeburn',
+    source: 'agent-top',
     rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
     issueNodeId: 'I_attr_issue_alpha',
     linkedAt: LINKED_AT,

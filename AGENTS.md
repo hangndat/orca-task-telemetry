@@ -2,7 +2,7 @@
 
 ## Mục tiêu
 
-Xây dựng `orca-task-telemetry` thành một CLI Node.js/TypeScript có thể tái sử dụng, chỉ cần cài đặt một lần, liên kết các mục công việc trong GitHub Projects V2 với metadata thực thi của Orca và mức sử dụng Claude Code, Codex do CodeBurn cung cấp.
+Xây dựng `orca-task-telemetry` thành một CLI Node.js/TypeScript có thể tái sử dụng, chỉ cần cài đặt một lần, liên kết các mục công việc trong GitHub Projects V2 với metadata thực thi của Orca và mức sử dụng Claude Code, Codex do agent-top cung cấp.
 
 ## Đọc trước
 
@@ -16,7 +16,7 @@ Xây dựng `orca-task-telemetry` thành một CLI Node.js/TypeScript có thể 
 - Sử dụng TypeScript strict mode; chốt và kiểm tra phiên bản Node.js runtime tối thiểu.
 - Chỉ duy trì một npm package (không có monorepo, server, frontend hay framework).
 - Ưu tiên các giao diện CLI JSON đã được xác minh và có tài liệu; kiểm tra phiên bản và `--help` trước khi triển khai.
-- Không tự đặt ra các trường dữ liệu của Orca, CodeBurn hoặc GitHub.
+- Không tự đặt ra các trường dữ liệu của Orca, agent-top hoặc GitHub.
 - Không ghi vào các repository đích hiện có, các trường của GitHub Project hoặc cấu hình agent trong giai đoạn MVP.
 - Bảo toàn nguồn gốc session, ngữ nghĩa token của từng provider, các giá trị chưa biết và tính idempotent của snapshot mức sử dụng.
 - Liên kết Issue ↔ session thủ công là đủ cho MVP. Không âm thầm tự quy các session chưa rõ thuộc về Issue nào.
@@ -44,7 +44,7 @@ Xây dựng `orca-task-telemetry` thành một CLI Node.js/TypeScript có thể 
 1. Kiểm tra các công cụ cục bộ và ghi lại thông tin tương thích liên quan trong `docs/discovery.md`.
 2. Hoàn thiện nền tảng package và kiểm thử cài đặt.
 3. Triển khai bộ đọc GitHub Project/Issue và khởi tạo profile bằng `init`.
-4. Triển khai collector Orca/CodeBurn và cơ chế lưu trữ bền vững.
+4. Triển khai collector Orca/agent-top và cơ chế lưu trữ bền vững.
 5. Bổ sung ánh xạ session tường minh và tổng hợp mức sử dụng, chi phí theo Issue.
 6. Bổ sung báo cáo Task/Project qua CLI, fixture và kiểm chứng tích hợp thực tế.
 

@@ -11,7 +11,7 @@ import { MIGRATION_V1_STATEMENTS } from '../dist/db/migrations/v1.js';
 import { MIGRATION_V2_STATEMENTS } from '../dist/db/migrations/v2.js';
 import { refreshStoredPullTrace } from '../dist/db/trace.js';
 
-// Synthetic, redacted GitHub/CodeBurn fixtures. These are not live integration evidence.
+// Synthetic, redacted GitHub/agent-top fixtures. These are not live integration evidence.
 const cli = resolve(dirname(fileURLToPath(import.meta.url)), '../dist/cli.js');
 const oid = 'a'.repeat(40);
 const otherOid = 'b'.repeat(40);
@@ -54,16 +54,16 @@ function setup() {
      VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(issue.id, 'o/r', 3, issue.url, issue.title, issue.state);
   handle.db.prepare(
-    `INSERT INTO usage_sessions (session_key, provider, source, raw_id) VALUES (?, 'codex', 'codeburn', ?)`,
-  ).run('codex:codeburn:s1', 's1');
+    `INSERT INTO usage_sessions (session_key, provider, source, raw_id) VALUES (?, 'codex', 'agent-top', ?)`,
+  ).run('codex:agent-top:s1', 's1');
   handle.db.prepare(
     `INSERT INTO usage_snapshots (session_key, observed_at, tokens_json, cost_amount_usd, cost_kind)
      VALUES (?, ?, ?, ?, 'estimated_api_equivalent')`,
-  ).run('codex:codeburn:s1', '2026-01-01T00:00:00Z', '{}', 1.23);
+  ).run('codex:agent-top:s1', '2026-01-01T00:00:00Z', '{}', 1.23);
   handle.db.prepare(
     `INSERT INTO session_links (session_key, issue_node_id, method, linked_at)
      VALUES (?, ?, 'manual', ?)`,
-  ).run('codex:codeburn:s1', issue.id, '2026-01-01T00:00:00Z');
+  ).run('codex:agent-top:s1', issue.id, '2026-01-01T00:00:00Z');
   handle.close();
 
   const stub = join(root, 'gh-stub.mjs');
@@ -199,7 +199,7 @@ test('manual multi-PR links are explicit; cross-repo Issue identity and session 
         VALUES ('I_foreign', 'PR_7', 'verified_current', 'closingIssuesReferences', '2026-10-24T00:00:00Z')`).run();
       assert.throws(() => db.prepare(`INSERT INTO session_pull_links
         (session_key, issue_node_id, pull_node_id, method, linked_at)
-        VALUES ('codex:codeburn:s1', 'I_foreign', 'PR_7', 'manual', '2026-10-24T00:00:00Z')`).run());
+        VALUES ('codex:agent-top:s1', 'I_foreign', 'PR_7', 'manual', '2026-10-24T00:00:00Z')`).run());
     } finally { db.close(); }
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
@@ -263,7 +263,7 @@ test('a later successful link read refreshes other stored relations without remo
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
-test('schema v3 migrates from v1 and v2 without losing existing links or snapshots', () => {
+test('schema v4 migrates from v1 and v2; issues remain, CodeBurn usage links dropped', () => {
   for (const version of [1, 2]) {
     const root = mkdtempSync(join(tmpdir(), `orca-trace-v${version}-`));
     const dbPath = join(root, 'legacy.sqlite');
@@ -280,8 +280,9 @@ test('schema v3 migrates from v1 and v2 without losing existing links or snapsho
     db.close();
     const migrated = openTelemetryDatabase({ dbPath });
     try {
-      assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version, 3);
-      assert.equal(migrated.db.prepare('SELECT COUNT(*) AS n FROM session_links').get().n, 1);
+      assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version, 4);
+      assert.equal(migrated.db.prepare('SELECT COUNT(*) AS n FROM session_links').get().n, 0);
+      assert.equal(migrated.db.prepare('SELECT COUNT(*) AS n FROM issues').get().n, 1);
       assert.equal(migrated.db.prepare('PRAGMA foreign_key_check').all().length, 0);
     } finally { migrated.close(); rmSync(root, { recursive: true, force: true }); }
   }

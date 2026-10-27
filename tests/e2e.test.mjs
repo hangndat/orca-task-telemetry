@@ -27,9 +27,9 @@ const stubs = resolve(dir, 'helpers/e2e-stubs');
 
 const ghStub = resolve(stubs, 'gh.mjs');
 const orcaStub = resolve(stubs, 'orca.mjs');
-const codeburnStub = resolve(stubs, 'codeburn.mjs');
+const agentTopStub = resolve(stubs, 'agent-top.mjs');
 
-for (const stub of [ghStub, orcaStub, codeburnStub]) {
+for (const stub of [ghStub, orcaStub, agentTopStub]) {
   chmodSync(stub, 0o755);
 }
 
@@ -59,7 +59,7 @@ function baseStubEnv(appHome) {
     ORCA_TELEMETRY_HOME: appHome,
     ORCA_TELEMETRY_GH: ghStub,
     ORCA_TELEMETRY_ORCA: orcaStub,
-    ORCA_TELEMETRY_CODEBURN: codeburnStub,
+    ORCA_TELEMETRY_AGENT_TOP: agentTopStub,
     GH_STUB_REPO_VIEW_JSON: JSON.stringify({
       id: 'R_kgDOVUhnYw',
       nameWithOwner: 'hangndat/orca-task-telemetry',
@@ -72,8 +72,8 @@ function baseStubEnv(appHome) {
     ORCA_STUB_STATUS_PATH: join(e2e, 'orca-status.json'),
     ORCA_STUB_WORKER_LIST_PATH: join(e2e, 'orca-workers.json'),
     ORCA_TELEMETRY_COLLECT_RUN: 'run_e2e_synthetic',
-    CODEBURN_STUB_CLAUDE_PATH: join(e2e, 'codeburn-claude.json'),
-    CODEBURN_STUB_CODEX_PATH: join(e2e, 'codeburn-codex.json'),
+    AGENT_TOP_STUB_CLAUDE_PATH: join(e2e, 'agent-top-claude.json'),
+    AGENT_TOP_STUB_CODEX_PATH: join(e2e, 'agent-top-codex.json'),
   };
 }
 
@@ -241,8 +241,8 @@ describe.sequential('T38 E2E offline pipeline', () => {
     const dbHandle = openTelemetryDatabase({ dbPath, gitRoot: repo });
     assertReportCostPartition(dbHandle.db, reports1.project, reports1.unmapped);
     assertUsageIntegrity(dbHandle.db);
-    const claudeKey = sessionKey('claude', 'codeburn', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01');
-    const subKey = sessionKey('claude', 'codeburn', 'agent-0000000000000001');
+    const claudeKey = sessionKey('claude', 'agent-top', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01');
+    const subKey = sessionKey('claude', 'agent-top', 'agent-0000000000000001');
     assert.notEqual(claudeKey, subKey, 'subagent is separate session namespace');
     const sessionRows = dbHandle.db
       .prepare('SELECT COUNT(*) AS c FROM usage_sessions')

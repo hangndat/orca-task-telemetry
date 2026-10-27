@@ -1,5 +1,24 @@
 # Khảo sát khả năng tương thích
 
+> **ADR 0001 (2026-10-27):** usage SoT là **agent-top 0.27.1** (`sql --json` trên `counted_sessions`). Các mục CodeBurn bên dưới là lịch sử khảo sát, **không** còn là collector runtime. Xem [docs/adr/0001-agent-top-usage-sot.md](adr/0001-agent-top-usage-sot.md).
+
+## agent-top — usage SoT hiện tại
+
+| Mục | Giá trị đã verify (2026-10-27, local) |
+| --- | --- |
+| Version | **0.27.1** (`agent-top --version`) |
+| Collect | `agent-top sql --json "<allowlisted SELECT>"` — read-only |
+| Không gọi | `agent-top sync` |
+| Harness MVP | `claude`, `codex` (bỏ `cursor`: tokens thường 0) |
+| Identity | `sessionKey(harness, 'agent-top', session_id)` |
+| Cost | `unpriced_tokens > 0` → `unknown`; không coi `cost_usd=0` là miễn phí |
+| Cache write | `cache_write_5m + cache_write_1h + cache_write_unsplit` → `cacheWrite` nội bộ |
+| Env | `ORCA_TELEMETRY_AGENT_TOP` |
+
+Fixture: `tests/fixtures/agent-top/`.
+
+
+
 ## V1.3 — GitHub PR/commit trace (2026-10-24 Asia/Manila)
 
 - `gh --version`: **2.103.0** (build 2026-10-21). `gh api graphql --help` xác nhận endpoint GraphQL và `--input -`; adapter dùng client read-only hiện có. [GitHub GraphQL PullRequest](https://docs.github.com/en/graphql/reference/pulls) ghi `closingIssuesReferences` và `commits` là connection; [rate limit docs](https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api) ghi `rateLimit.remaining/resetAt` và giới hạn truy vấn. Không dùng `Commit.associatedPullRequests` để suy PR đang mở ([docs](https://docs.github.com/en/graphql/reference/commits)).
