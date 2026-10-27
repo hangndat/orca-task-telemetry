@@ -1,12 +1,13 @@
 # Báo cáo kiểm chứng MVP (self-check)
 
-> **Không phải independent PASS.** Reviewer độc lập (Codex, session khác tác giả) phải xác nhận từng gate trên **cùng exact SHA** với evidence dưới đây. Self-check / worker completion **không** được gọi là independent PASS hay “MVP complete”.
+> Self-check / worker completion **không** tự cấp independent PASS. **Independent Codex review:** overall **PASS** trên exact SHA `5b464e3f201aeacec1a43cb6ea7e93fbcc954e5f` — [reviews/mvp-5b464e3.md](reviews/mvp-5b464e3.md). MVP P0 acceptance closing gate đã đóng trên SHA đó.
 
 > **ADR 0001:** usage SoT là **agent-top 0.27.1**. Bằng chứng live **CodeBurn** (T41 packet @ `818ca30`, Issue #3, 407 sessions) **đã superseded** — không kế thừa thành PASS collector sau thay SoT. Identity `*:codeburn:*` không migrate; phải `collect` + `link` lại trên agent-top.
 
 | Trường | Giá trị |
 | --- | --- |
-| Evidence SHA (independent review candidate) | `a70ca751e0db62b61e9acd693776556fbe0d017f` (`main`) |
+| Independent review SHA + verdict | `5b464e3f201aeacec1a43cb6ea7e93fbcc954e5f` — **PASS** ([mvp-5b464e3.md](reviews/mvp-5b464e3.md)) |
+| Self-check evidence SHA (pre-review) | `a70ca751e0db62b61e9acd693776556fbe0d017f` |
 | Implementation base (pre-docs) | `2f58473fb81d9a234f2e057aadbc0cb92804d97f` |
 | SoT usage | agent-top **0.27.1** — ADR [0001](adr/0001-agent-top-usage-sot.md); commit `5c41894` |
 | Orca pin | **1.4.241** — `caf5c73` |
@@ -15,7 +16,7 @@
 | Live DB home | `/tmp/orca-telemetry-agent-top-home` (local; không phải CI artifact) |
 | Self-check author | Docs closeout agent (T40–T43); **không** phải Codex independent |
 
-**Giới hạn provenance:** DB và số liệu live dưới `/tmp/…` chỉ trên máy chạy. Independent reviewer nên tái lập `collect`/`link`/`report` hoặc archive DB nếu cần chain-of-custody ngoài repo.
+**Giới hạn provenance:** DB và số liệu live dưới `/tmp/…` chỉ trên máy chạy. Independent review đã đọc DB readonly được bảo toàn; không có CI artifact / chain-of-custody ngoài máy — xem Limitations trong [mvp-5b464e3.md](reviews/mvp-5b464e3.md).
 
 ## Superseded — T41 CodeBurn live (không dùng cho SHA hiện tại)
 
@@ -103,16 +104,16 @@ Pin `ORCA_TELEMETRY_COLLECT_RUN=<run_id>` vẫn hỗ trợ (thu hẹp một run)
 
 ## Definition of Done (self-check ánh xạ)
 
-| DoD | Self-check | Independent | Ghi chú |
+| DoD | Self-check | Independent (`5b464e3`) | Ghi chú |
 | --- | --- | --- | --- |
-| P0 + test xác định | **PASS** | **PENDING** | Chạy `pnpm test` trên exact SHA docs |
-| Đọc ≥1 Project thật | **PASS** | **PENDING** | Project #4, 103 issues |
-| Claude/Codex fixture + báo cáo trung thực | **PASS** | **PENDING** | agent-top fixtures; unmapped cost honesty |
-| ≥1 link Issue↔session thật + báo cáo khớp usage SoT | **PASS (self)** | **PENDING** | `#71` ↔ `3a8a1086-…`; **không** claim independent PASS |
-| Collect lặp không trùng | **PASS** (fixture + stable live totals quan sát) | **PENDING** | Upsert snapshots |
-| Pack ngoài repo, không sửa repo đích | **PASS** (fixture/pack + prior T40) | **PENDING** | Không xâm lấn — tái xác nhận khi re-review |
-| Không P1/P2 / không writeback V1.2 | **PASS** | **PENDING** | Scope closeout docs only |
-| Conventional commit | **PASS** khi docs commit | — | `docs(mvp): …` |
+| P0 + test xác định | **PASS** | **PASS** | `pnpm test` 285/285 trên review SHA |
+| Đọc ≥1 Project thật | **PASS** | **PASS** | Project #4, 103 issues (live DB bảo toàn) |
+| Claude/Codex fixture + báo cáo trung thực | **PASS** | **PASS** | agent-top fixtures; unmapped cost honesty |
+| ≥1 link Issue↔session thật + báo cáo khớp usage SoT | **PASS (self)** | **PASS** | `#71` ↔ `3a8a1086-…`; review xác nhận live report |
+| Collect lặp không trùng | **PASS** (fixture + stable live totals quan sát) | **PASS** | Upsert snapshots; 502/502 |
+| Pack ngoài repo, không sửa repo đích | **PASS** (fixture/pack + prior T40) | **PASS** | `pnpm test:pack` + non-mutation |
+| Không P1/P2 / không writeback V1.2 | **PASS** | **PASS** | Draft PR #109/#111 không merge |
+| Conventional commit | **PASS** | **PASS** | Conventional subjects trên candidate |
 
 Chi tiết checklist: [mvp-dod-self-check.md](mvp-dod-self-check.md).
 
@@ -132,9 +133,9 @@ orca-telemetry report project --json
 orca-telemetry report unmapped --json
 ```
 
-## Việc còn lại (acceptance)
+## Acceptance status
 
-1. **Independent Codex re-review** trên **exact SHA** sau commit docs này — cùng SHA worker evidence; verdict từng gate DoD + security gộp nếu áp dụng.
-2. Archive hoặc tái lập `/tmp/orca-telemetry-agent-top-home` nếu cần evidence bền vững.
-3. **Không** tuyên bố MVP complete cho đến khi independent review **PASS**.
-4. Không merge draft PR writeback (#109 / #111); không triển khai BACKLOG P1–P2.
+1. **Independent Codex review PASS** trên exact SHA `5b464e3` — [reviews/mvp-5b464e3.md](reviews/mvp-5b464e3.md); MVP-01..08 + DoD + security boundary, không finding mở.
+2. MVP P0 **code-complete** và **acceptance complete** trên SHA review; tip `main` sau đó có thể chỉ thêm process/docs wording.
+3. Live home `/tmp/orca-telemetry-agent-top-home` vẫn là evidence local — archive nếu cần chain-of-custody bền vững ngoài máy.
+4. Không merge draft PR writeback (#109 / #111); không triển khai BACKLOG P1–P2 / V1.2 writeback trong closeout này.

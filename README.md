@@ -104,7 +104,7 @@ Chỉ liên kết khi bạn **chủ đích** chọn cặp Issue + `provider` + `
 
 Một phiên agent-top có thể gồm nhiều task hoặc repo trong lịch sử chat. Khi bạn map **toàn bộ** session vào một Issue, `report task` phản ánh **tổng** token/cost của session đó cho Issue — CLI **không** chia nhỏ usage trong cùng session giữa nhiều Issue. Cost trong báo cáo là `estimated_api_equivalent`, **không** phải hóa đơn billing.
 
-Live CodeBurn trước ADR 0001 **đã superseded** — identity không chuyển. Phải `collect` + `link` lại trên agent-top. Self-check + giới hạn: [docs/mvp-validation.md](docs/mvp-validation.md); DoD map: [docs/mvp-dod-self-check.md](docs/mvp-dod-self-check.md). **Independent Codex re-review vẫn PENDING** — không tuyên bố MVP complete từ self-check.
+Live CodeBurn trước ADR 0001 **đã superseded** — identity không chuyển. Phải `collect` + `link` lại trên agent-top. Self-check + giới hạn: [docs/mvp-validation.md](docs/mvp-validation.md); DoD map: [docs/mvp-dod-self-check.md](docs/mvp-dod-self-check.md). **Independent Codex review: PASS** trên SHA `5b464e3` — [docs/reviews/mvp-5b464e3.md](docs/reviews/mvp-5b464e3.md). Live evidence `/tmp/…` là DB local được bảo toàn, không phải CI artifact.
 
 ### Cache, subagent, cost
 
@@ -127,7 +127,7 @@ Bằng chứng fixture vs live: [docs/mvp-validation.md](docs/mvp-validation.md)
 - Thiếu `read:project` → GitHub collector lỗi; có thể vẫn partial nếu Orca/agent-top ok.
 - agent-top không có trên PATH → dùng `ORCA_TELEMETRY_AGENT_TOP` hoặc cài 0.27.1; nếu vẫn thiếu → không import session. Schema v4 xóa snapshot CodeBurn cũ.
 - Bằng chứng tích hợp live trên máy dev có thể nằm ngoài repo (ví dụ `/tmp/…`); không thay thế CI — xem matrix trong `docs/mvp-validation.md`.
-- Evidence CodeBurn @ `818ca30` / Issue #3 **superseded** sau ADR 0001. Live agent-top self-check: Issue **#71** ↔ session `3a8a1086-…` (DB `/tmp/orca-telemetry-agent-top-home`). Cần **independent re-review** trên exact SHA docs — không tự gọi MVP hoàn tất.
+- Evidence CodeBurn @ `818ca30` / Issue #3 **superseded** sau ADR 0001. Live agent-top: Issue **#71** ↔ session `3a8a1086-…` (DB `/tmp/orca-telemetry-agent-top-home`). Independent acceptance **PASS** @ `5b464e3` ([docs/reviews/mvp-5b464e3.md](docs/reviews/mvp-5b464e3.md)); live `/tmp` không thay CI chain-of-custody.
 - Chưa publish npm công khai.
 
 ## Tài liệu
