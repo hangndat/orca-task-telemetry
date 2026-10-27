@@ -54,7 +54,7 @@
 
 ## Author self-check (không phải independent PASS)
 
-- **Fix SHA:** _(điền sau commit)_ — author self-check only; không tuyên bố DoD/V1 acceptance PASS.
+- **Fix SHA:** `f57e98d3a18698acca13c2e86986beb93dd8b883` — author self-check only; không tuyên bố DoD/V1 acceptance PASS.
 - **F01 addressed (code/fixture):** `collect --run` resolve endpoint identity từ verified CLI JSON (`status.runtime.runtimeId` + `_meta.runtimeId`, xác nhận `host list` local `id=local`), lưu `host_id=orca:runtime:v1:<runtimeId>`, persist `orca_runs`/`orca_tasks`/`orca_dispatches`/`scoped_executions` + Orca attempt journal khi provenance complete; fixture collision hai runtimeId không merge. **Residual AC3:** runtimeId đổi sau restart Orca → namespace mới; chưa có live Run evidence / independent re-review.
 - **F02 addressed (tests + apply idempotency):** `tests/suggest-links-apply.test.mjs` — thiếu `--yes` không ghi; ambiguous/wrong pair → `suggest_apply_not_ready`; ready pair ghi `session_links`; rerun `unchanged`; chỉ dùng gh stub read-only. Apply cho phép idempotent khi pair đã link đúng.
 
