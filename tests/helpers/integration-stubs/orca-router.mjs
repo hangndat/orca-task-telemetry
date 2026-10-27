@@ -17,6 +17,19 @@ if (argv.length === 1 && argv[0] === '--version') {
     process.exit(1);
   }
   respond(readFileSync(path, 'utf8'));
+} else if (key.startsWith('orchestration run-list')) {
+  const cursorIdx = argv.indexOf('--cursor');
+  const cursor = cursorIdx >= 0 ? argv[cursorIdx + 1] : undefined;
+  const page2 = process.env.ORCA_STUB_RUN_LIST_PAGE2_PATH;
+  const path =
+    cursor && page2
+      ? page2
+      : process.env.ORCA_STUB_RUN_LIST_PATH;
+  if (!path) {
+    respond(JSON.stringify({ ok: true, result: { runs: [], nextCursor: null } }));
+  } else {
+    respond(readFileSync(path, 'utf8'));
+  }
 } else if (key.startsWith('orchestration worker-list')) {
   const path = process.env.ORCA_STUB_WORKER_LIST_PATH;
   if (!path) {

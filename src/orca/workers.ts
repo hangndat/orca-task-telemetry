@@ -86,10 +86,27 @@ function recordFromWorkerListRow(worker: Record<string, unknown>): OrcaSupervise
   };
 }
 
+export type OrcaWorkerListPage = {
+  records: OrcaSupervisedRecord[];
+  nextCursor: string | null;
+};
+
+function workerListNextCursor(result: Record<string, unknown>): string | null {
+  const page = result['page'];
+  if (!page || typeof page !== 'object') {
+    return null;
+  }
+  const cursor = (page as Record<string, unknown>)['nextCursor'];
+  if (typeof cursor === 'string' && cursor.length > 0) {
+    return cursor;
+  }
+  return null;
+}
+
 /**
- * Parse `orca orchestration worker-list --json` envelope.
+ * Parse `orca orchestration worker-list --json` envelope (workers + page.nextCursor).
  */
-export function parseWorkerListJson(text: string): OrcaSupervisedRecord[] {
+export function parseWorkerListPage(text: string): OrcaWorkerListPage {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -103,16 +120,28 @@ export function parseWorkerListJson(text: string): OrcaSupervisedRecord[] {
   if (!result || typeof result !== 'object') {
     throw schemaError('result', 'missing result');
   }
-  const workers = (result as Record<string, unknown>)['workers'];
+  const rec = result as Record<string, unknown>;
+  const workers = rec['workers'];
   if (!Array.isArray(workers)) {
     throw schemaError('result.workers', 'expected array');
   }
-  return workers.map((row, index) => {
+  const records = workers.map((row, index) => {
     if (!row || typeof row !== 'object') {
       throw schemaError(`result.workers[${index}]`, 'expected object');
     }
     return recordFromWorkerListRow(row as Record<string, unknown>);
   });
+  return {
+    records,
+    nextCursor: workerListNextCursor(rec),
+  };
+}
+
+/**
+ * Parse `orca orchestration worker-list --json` envelope.
+ */
+export function parseWorkerListJson(text: string): OrcaSupervisedRecord[] {
+  return parseWorkerListPage(text).records;
 }
 
 /**

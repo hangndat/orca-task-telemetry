@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "result": {
+    "runs": [
+      {
+        "id": "run_e2e_synthetic",
+        "objective": "<REDACTED>",
+        "coordinator_handle": null,
+        "consumer_generation": 1,
+        "legacy": 0,
+        "created_at": "2026-10-23T00:00:00Z",
+        "updated_at": "2026-10-23T00:00:00Z"
+      }
+    ],
+    "nextCursor": null
+  }
+}

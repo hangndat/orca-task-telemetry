@@ -1,0 +1,27 @@
+{
+  "_fixture": "synthetic — live 1.4.241 shape: result.runs[].id + result.nextCursor",
+  "ok": true,
+  "result": {
+    "runs": [
+      {
+        "id": "run_fixture00000001",
+        "objective": "<REDACTED>",
+        "coordinator_handle": null,
+        "consumer_generation": 1,
+        "legacy": 0,
+        "created_at": "2026-10-27T00:00:00Z",
+        "updated_at": "2026-10-27T00:00:00Z"
+      },
+      {
+        "id": "run_1a060327fe49",
+        "objective": "<REDACTED>",
+        "coordinator_handle": null,
+        "consumer_generation": 1,
+        "legacy": 0,
+        "created_at": "2026-10-23T00:00:00Z",
+        "updated_at": "2026-10-23T00:00:00Z"
+      }
+    ],
+    "nextCursor": null
+  }
+}

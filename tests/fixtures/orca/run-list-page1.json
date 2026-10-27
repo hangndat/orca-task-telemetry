@@ -1,0 +1,18 @@
+{
+  "_fixture": "synthetic run-list page 1 with opaque nextCursor",
+  "ok": true,
+  "result": {
+    "runs": [
+      {
+        "id": "run_fixture_page1a",
+        "objective": "<REDACTED>",
+        "coordinator_handle": null,
+        "consumer_generation": 1,
+        "legacy": 0,
+        "created_at": "2026-10-27T00:00:00Z",
+        "updated_at": "2026-10-27T00:00:00Z"
+      }
+    ],
+    "nextCursor": "eyJmaXh0dXJlIjoicnVuLWxpc3QtcGFnZTIifQ"
+  }
+}

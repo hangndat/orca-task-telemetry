@@ -71,6 +71,7 @@ function baseStubEnv(appHome) {
     GH_STUB_PAGE2_PATH: join(e2e, 'github-project-page2.json'),
     ORCA_STUB_STATUS_PATH: join(e2e, 'orca-status.json'),
     ORCA_STUB_WORKER_LIST_PATH: join(e2e, 'orca-workers.json'),
+    ORCA_STUB_RUN_LIST_PATH: join(e2e, 'orca-run-list.json'),
     ORCA_TELEMETRY_COLLECT_RUN: 'run_e2e_synthetic',
     AGENT_TOP_STUB_CLAUDE_PATH: join(e2e, 'agent-top-claude.json'),
     AGENT_TOP_STUB_CODEX_PATH: join(e2e, 'agent-top-codex.json'),

@@ -1,0 +1,18 @@
+{
+  "_fixture": "synthetic run-list page 2",
+  "ok": true,
+  "result": {
+    "runs": [
+      {
+        "id": "run_fixture_page2a",
+        "objective": "<REDACTED>",
+        "coordinator_handle": null,
+        "consumer_generation": 1,
+        "legacy": 0,
+        "created_at": "2026-10-26T00:00:00Z",
+        "updated_at": "2026-10-26T00:00:00Z"
+      }
+    ],
+    "nextCursor": null
+  }
+}

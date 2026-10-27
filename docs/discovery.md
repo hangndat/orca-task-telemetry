@@ -447,6 +447,7 @@ Fixture: `tests/fixtures/orca/` (README + JSON đã redact).
 
 | Artifact | Fixture | Live lệnh |
 | --- | --- | --- |
+| Run list | `run-list-snippet.json` (synthetic) | live `run-list --json --limit`: `result.runs[].id`, `result.nextCursor` (opaque; `--cursor` continues) |
 | Run supervised | `run-show.json` | `run-show --id run_1a060327fe49` |
 | Task (spec cắt) | `task-supervised-brief.json` | `task-list --run run_1a060327fe49 --brief` |
 | Dispatch settled | `dispatch-show.json`, `worker-show-settled.json` | `dispatch-show --task …`; `worker-show --dispatch ctx_005f2513ac06` |

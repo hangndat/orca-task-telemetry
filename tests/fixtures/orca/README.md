@@ -36,6 +36,9 @@ rg $'Task Spec \u2014' tests/fixtures/orca --glob '*.json'   # expect no match
 | `worker-show-settled.json` | `orca orchestration worker-show --dispatch ctx_005f2513ac06 --json` |
 | `dispatch-show.json` | `orca orchestration dispatch-show --task task_6be81dd44e83 --json` |
 | `worker-list-snippet.json` | `orca orchestration worker-list --run … --json` (1 row) |
+| `run-list-snippet.json` | synthetic `run-list --json` (`runs[].id`, `nextCursor`) |
+| `run-list-page1.json` / `run-list-page2.json` | synthetic cursor pages |
+| `run-list-empty.json` | empty `runs` |
 | `worktree-manual-show.json` | `orca worktree show --worktree path:<HOME>/<OTHER_REPO_PATH> --json` |
 | `worktree-manual-ps-row.json` | `orca worktree ps --json` (1 row) |
 | `reference-list-empty.json` | `orca reference list --worktree path:…/Foundation --json` |

@@ -32,8 +32,8 @@ import {
   invokeOrcaReadOnly,
   readOrcaVersion,
 } from '../orca/adapter.js';
+import { collectSupervisedRecords } from '../orca/enumerate.js';
 import { normalizeSupervisedRecords } from '../orca/normalize.js';
-import { parseWorkerListJson } from '../orca/workers.js';
 import { getProfile } from '../profiles.js';
 import { createDefaultPathEnv, resolveAppPaths } from '../paths.js';
 import { resolveRepository } from '../repo.js';
@@ -172,25 +172,7 @@ async function collectOrca(
     const statusJson = JSON.parse(statusResult.stdout) as unknown;
     assertRuntimeReachable(statusJson);
 
-    const runId =
-      process.env['ORCA_TELEMETRY_COLLECT_RUN'] ??
-      process.env['ORCA_COLLECT_RUN_ID'] ??
-      'run_collect_default';
-    const workersResult = await invokeOrcaReadOnly([
-      'orchestration',
-      'worker-list',
-      '--json',
-      '--run',
-      runId,
-    ]);
-    if (workersResult.exitCode !== 0) {
-      throw new CliError({
-        code: 'orca_runtime_unavailable',
-        message: 'Orca worker-list failed.',
-        exitCode: EXIT_SOURCE_UNAVAILABLE,
-      });
-    }
-    const supervised = parseWorkerListJson(workersResult.stdout);
+    const supervised = await collectSupervisedRecords();
     const executions = normalizeSupervisedRecords(supervised).map((e) => ({
       executionKey: e.executionKey,
       hostId: e.hostId,

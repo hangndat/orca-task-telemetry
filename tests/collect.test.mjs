@@ -32,6 +32,10 @@ const page1 = resolve(dir, 'fixtures/github/project-items-page1.json');
 const page2 = resolve(dir, 'fixtures/github/project-items-page2.json');
 const statusFixture = resolve(dir, 'fixtures/orca/status-trimmed.json');
 const workerListFixture = resolve(dir, 'fixtures/orca/worker-list-snippet.json');
+const runListFixture = resolve(dir, 'fixtures/orca/run-list-snippet.json');
+const runListEmpty = resolve(dir, 'fixtures/orca/run-list-empty.json');
+const runListPage1 = resolve(dir, 'fixtures/orca/run-list-page1.json');
+const runListPage2 = resolve(dir, 'fixtures/orca/run-list-page2.json');
 const claudeSessions = resolve(
   dir,
   'fixtures/agent-top/claude/session-sonnet-aggregated.json',
@@ -86,6 +90,7 @@ function stubEnv(appHome, _gitRoot, extra = {}) {
     ORCA_TELEMETRY_ORCA: orcaRouter,
     ORCA_STUB_STATUS_PATH: statusFixture,
     ORCA_STUB_WORKER_LIST_PATH: workerListFixture,
+    ORCA_STUB_RUN_LIST_PATH: runListFixture,
     ORCA_TELEMETRY_COLLECT_RUN: 'run_1a060327fe49',
     ORCA_TELEMETRY_AGENT_TOP: agentTopRouter,
     AGENT_TOP_STUB_CLAUDE_PATH: claudeSessions,
@@ -347,6 +352,77 @@ describe.sequential('T33 collect integration', () => {
     rmSync(repo, { recursive: true, force: true });
     rmSync(appHome, { recursive: true, force: true });
   }, 25_000);
+
+  test('without COLLECT_RUN enumerates run-list then worker-list', async () => {
+    const repo = initRepo();
+    const appHome = mkdtempSync(join(tmpdir(), 'orca-collect-home-'));
+    writeProfile(appHome);
+    await withCollectEnv(
+      repo,
+      appHome,
+      async () => {
+        const payload = await runCollectCommand({ cwd: repo });
+        assert.equal(payload.exitCode, EXIT_SUCCESS);
+        const orca = payload.sources.find((s) => s.source === 'orca');
+        assert.equal(orca?.status, 'ok');
+        assert.ok((orca?.counts?.executions ?? 0) >= 1);
+      },
+      {
+        ORCA_TELEMETRY_COLLECT_RUN: '',
+        ORCA_COLLECT_RUN_ID: '',
+      },
+    );
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(appHome, { recursive: true, force: true });
+  }, 20_000);
+
+  test('empty run-list is orca error with zero invented executions', async () => {
+    const repo = initRepo();
+    const appHome = mkdtempSync(join(tmpdir(), 'orca-collect-home-'));
+    writeProfile(appHome);
+    await withCollectEnv(
+      repo,
+      appHome,
+      async () => {
+        const payload = await runCollectCommand({ cwd: repo });
+        assert.equal(payload.exitCode, EXIT_PARTIAL);
+        const orca = payload.sources.find((s) => s.source === 'orca');
+        assert.equal(orca?.status, 'error');
+        assert.equal(orca?.error?.code, 'orca_runtime_unavailable');
+        assert.equal(payload.counts.executions, 0);
+      },
+      {
+        ORCA_TELEMETRY_COLLECT_RUN: '',
+        ORCA_COLLECT_RUN_ID: '',
+        ORCA_STUB_RUN_LIST_PATH: runListEmpty,
+      },
+    );
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(appHome, { recursive: true, force: true });
+  }, 20_000);
+
+  test('run-list nextCursor loads a second page', async () => {
+    const repo = initRepo();
+    const appHome = mkdtempSync(join(tmpdir(), 'orca-collect-home-'));
+    writeProfile(appHome);
+    await withCollectEnv(
+      repo,
+      appHome,
+      async () => {
+        const payload = await runCollectCommand({ cwd: repo });
+        assert.equal(payload.exitCode, EXIT_SUCCESS);
+        assert.equal(payload.sources.find((s) => s.source === 'orca')?.status, 'ok');
+      },
+      {
+        ORCA_TELEMETRY_COLLECT_RUN: '',
+        ORCA_COLLECT_RUN_ID: '',
+        ORCA_STUB_RUN_LIST_PATH: runListPage1,
+        ORCA_STUB_RUN_LIST_PAGE2_PATH: runListPage2,
+      },
+    );
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(appHome, { recursive: true, force: true });
+  }, 20_000);
 
   test('successful collect does not modify target git tree', async () => {
     const repo = initRepo();
