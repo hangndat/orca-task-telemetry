@@ -12,8 +12,9 @@ import { MIGRATION_V3_STATEMENTS, SCHEMA_VERSION_V3 } from './migrations/v3.js';
 import { MIGRATION_V4_STATEMENTS, SCHEMA_VERSION_V4 } from './migrations/v4.js';
 import { MIGRATION_V5_STATEMENTS, SCHEMA_VERSION_V5 } from './migrations/v5.js';
 import { MIGRATION_V6_STATEMENTS, SCHEMA_VERSION_V6 } from './migrations/v6.js';
+import { MIGRATION_V7_STATEMENTS, SCHEMA_VERSION_V7 } from './migrations/v7.js';
 
-export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V6;
+export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V7;
 
 function readUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as
@@ -45,11 +46,13 @@ export function migrateDatabase(db: DatabaseSync): void {
     current !== SCHEMA_VERSION_V2 &&
     current !== SCHEMA_VERSION_V3 &&
     current !== SCHEMA_VERSION_V4 &&
-    current !== SCHEMA_VERSION_V5
+    current !== SCHEMA_VERSION_V5 &&
+    current !== SCHEMA_VERSION_V6
   ) {
     throw dbSchemaError(
       `Unsupported intermediate schema version ${current}; expected 0, ${SCHEMA_VERSION_V1}, ` +
-        `${SCHEMA_VERSION_V2}, ${SCHEMA_VERSION_V3}, ${SCHEMA_VERSION_V4}, ${SCHEMA_VERSION_V5} or ${SUPPORTED_SCHEMA_VERSION}.`,
+        `${SCHEMA_VERSION_V2}, ${SCHEMA_VERSION_V3}, ${SCHEMA_VERSION_V4}, ${SCHEMA_VERSION_V5}, ` +
+        `${SCHEMA_VERSION_V6} or ${SUPPORTED_SCHEMA_VERSION}.`,
     );
   }
 
@@ -102,6 +105,13 @@ export function migrateDatabase(db: DatabaseSync): void {
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V6}`);
     }
     assertV6AuditHardened(db);
+    if (current < SCHEMA_VERSION_V7) {
+      for (const sql of MIGRATION_V7_STATEMENTS) {
+        db.exec(sql);
+      }
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V7}`);
+    }
+    assertV7CursorProvider(db);
     const invalid = db.prepare('PRAGMA foreign_key_check').get();
     if (invalid) {
       throw dbSchemaError('Existing database contains invalid foreign key references.');
@@ -185,4 +195,32 @@ export function assertSchemaCurrent(db: DatabaseSync): void {
   }
   assertV5ProvenanceHardened(db);
   assertV6AuditHardened(db);
+  assertV7CursorProvider(db);
+}
+
+/**
+ * v7 widens usage provider CHECKs to include `cursor`. Refuse a database whose
+ * `usage_sessions` / `collection_attempts` still omit cursor rather than silently
+ * rejecting cursor imports.
+ */
+function assertV7CursorProvider(db: DatabaseSync): void {
+  const tables = new Map(
+    (
+      db
+        .prepare(
+          `SELECT name, sql FROM sqlite_master WHERE type = 'table'
+           AND name IN ('usage_sessions', 'collection_attempts')`,
+        )
+        .all() as { name: string; sql: string }[]
+    ).map((row) => [row.name, row.sql]),
+  );
+  const usageSql = tables.get('usage_sessions') ?? '';
+  const attemptsSql = tables.get('collection_attempts') ?? '';
+  if (
+    !usageSql.includes("'cursor'") ||
+    !usageSql.includes('cursor:agent-top:*') ||
+    !attemptsSql.includes("'cursor'")
+  ) {
+    throw dbSchemaError('Database v7 cursor provider constraints are missing or outdated.');
+  }
 }

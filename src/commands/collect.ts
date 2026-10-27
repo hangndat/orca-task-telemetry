@@ -8,6 +8,7 @@ import {
   AGENT_TOP_VERIFIED_VERSION,
   COUNTED_SESSIONS_QUERY,
 } from '../usage/adapter.js';
+import { USAGE_PROVIDERS } from '../contracts.js';
 import { parseCountedSessions } from '../usage/sessions.js';
 import type { ClaudeTokenAllocation } from '../usage/sessions.js';
 import {
@@ -212,8 +213,8 @@ async function collectAgentTop(
   observedAt: string,
   now: () => string,
 ): Promise<CollectSourceResult> {
-  const providers = ['claude', 'codex'] as const;
-  const attempts = new Map<(typeof providers)[number], number | bigint>();
+  const providers = USAGE_PROVIDERS;
+  const attempts = new Map<(typeof USAGE_PROVIDERS)[number], number | bigint>();
   db.exec('BEGIN IMMEDIATE');
   try {
     for (const provider of providers) {

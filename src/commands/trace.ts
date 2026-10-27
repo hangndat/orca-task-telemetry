@@ -94,7 +94,7 @@ function parseLinkArgs(kind: 'link-pr' | 'link-commit', rest: string[]) {
   const { issue, pr, sha, provider, session } = parsed.values;
   if (!pr) throw usageError('Missing --pr.', `Run orca-telemetry trace ${kind} --help.`);
   if (!provider || !(USAGE_PROVIDERS as readonly string[]).includes(provider)) {
-    throw usageError('Invalid or missing --provider.', 'Use --provider claude or codex.');
+    throw usageError('Invalid or missing --provider.', 'Use --provider claude, codex, or cursor.');
   }
   if (!session) throw usageError('Missing --session.', 'Pass the agent-top provider session ID.');
   if (kind === 'link-pr' && (!issue || sha)) {

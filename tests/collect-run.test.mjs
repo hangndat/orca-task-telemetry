@@ -202,7 +202,7 @@ test('explicit Run persists scoped provenance under runtime endpoint host id', a
         db.db.prepare("SELECT COUNT(*) AS n FROM collection_attempts WHERE source = 'orca' AND status = 'success'").get().n,
         1,
       );
-      assert.equal(db.db.prepare("SELECT COUNT(*) AS n FROM collection_attempts WHERE source = 'agent-top'").get().n, 2);
+      assert.equal(db.db.prepare("SELECT COUNT(*) AS n FROM collection_attempts WHERE source = 'agent-top'").get().n, 3);
       db.close();
 
       // Idempotent re-collect keeps one scoped row.

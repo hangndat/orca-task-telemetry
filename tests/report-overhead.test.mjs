@@ -38,6 +38,8 @@ function freshAttempts(db, host, run) {
     completedAt: isoMinus(NOW, 3600), status: 'success' });
   attempt(db, { source: 'agent-top', provider: 'codex', startedAt: isoMinus(NOW, 3700),
     completedAt: isoMinus(NOW, 3600), status: 'success' });
+  attempt(db, { source: 'agent-top', provider: 'cursor', startedAt: isoMinus(NOW, 3700),
+    completedAt: isoMinus(NOW, 3600), status: 'success' });
 }
 
 test('V14-01: one coordinator, two workers across two Dispatches, multi-provider — provider buckets, dispatch count, and overheadShare/overheadPerWorkerCost', () => {
@@ -256,8 +258,15 @@ test('V14-05: attempt status/freshness precedence — partial_source before stal
       'partial_source',
     );
 
-    // codex succeeds exactly at the 24h boundary (inclusive) -> all fresh, ratio computed.
+    // cursor still missing while codex fails/runs above -> partial_source (covered).
+    // Refresh claude+orca and succeed codex+cursor at the 24h boundary -> all fresh.
+    attempt(db, { source: 'orca', hostId: 'host-a', runId: 'run-1', startedAt: isoMinus(NOW, 24 * 3600 + 100),
+      completedAt: isoMinus(NOW, 24 * 3600), status: 'success' });
+    attempt(db, { source: 'agent-top', provider: 'claude', startedAt: isoMinus(NOW, 24 * 3600 + 100),
+      completedAt: isoMinus(NOW, 24 * 3600), status: 'success' });
     attempt(db, { source: 'agent-top', provider: 'codex', startedAt: isoMinus(NOW, 24 * 3600 + 100),
+      completedAt: isoMinus(NOW, 24 * 3600), status: 'success' });
+    attempt(db, { source: 'agent-top', provider: 'cursor', startedAt: isoMinus(NOW, 24 * 3600 + 100),
       completedAt: isoMinus(NOW, 24 * 3600), status: 'success' });
     const boundaryReport = buildOverheadReport(ctx(db), 'host-a', 'run-1', NOW);
     assert.equal(boundaryReport.overheadShare.unknownReason, null);
@@ -590,7 +599,7 @@ test('V14-01 golden: CLI JSON and text for one coordinator and two workers acros
     insertSession(db, { key: 'codex:agent-top:w2', provider: 'codex', rawId: 'w2',
       snapshot: { observedAt, cost: 0.5, tokensOverride: { reasoning: 7 } } });
     linkRole(db, { key: 'codex:agent-top:w2', role: 'worker', host: 'host-a', run: 'run-1', dispatch: 'dispatch-2' });
-    for (const source of ['orca', 'claude', 'codex']) {
+    for (const source of ['orca', 'claude', 'codex', 'cursor']) {
       attempt(db, { source: source === 'orca' ? 'orca' : 'agent-top',
         ...(source === 'orca' ? { hostId: 'host-a', runId: 'run-1' } : { provider: source }),
         startedAt: isoMinus(collectedAt, 60), completedAt: observedAt, status: 'success' });
@@ -606,7 +615,7 @@ test('V14-01 golden: CLI JSON and text for one coordinator and two workers acros
     assert.equal(data.coverage, 'unknown');
     assert.equal(data.classifiedSessionCount, 3);
     assert.equal(data.unclassifiedSessionCount, null);
-    for (const source of ['orca', 'claude', 'codex']) {
+    for (const source of ['orca', 'claude', 'codex', 'cursor']) {
       assert.equal(data.sourceStatus[source].status, 'success');
       assert.equal(data.sourceStatus[source].completedAt, observedAt);
       assert.equal(data.sourceStatus[source].errorCode, null);
@@ -640,6 +649,7 @@ test('V14-01 golden: CLI JSON and text for one coordinator and two workers acros
       `Source status: orca=success (completedAt=${observedAt}, age=<recent>, error=none)`,
       `               claude=success (completedAt=${observedAt}, age=<recent>, error=none)`,
       `               codex=success (completedAt=${observedAt}, age=<recent>, error=none)`,
+      `               cursor=success (completedAt=${observedAt}, age=<recent>, error=none)`,
       'Coverage: unknown; classifiedSessionCount=3; unclassifiedSessionCount=null',
       '',
       '  Coordinator: sessions=1 cost=$2.00 (known=$2.00, unknownCostSessions=0)',
@@ -710,7 +720,7 @@ test('V14-04: retry chain and overlapping agent-top sessions count only distinct
       }
     }
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM session_role_links').get().count, 5);
-    for (const source of ['orca', 'claude', 'codex']) {
+    for (const source of ['orca', 'claude', 'codex', 'cursor']) {
       attempt(db, { source: source === 'orca' ? 'orca' : 'agent-top',
         ...(source === 'orca' ? { hostId: 'host-a', runId: 'run-retry' } : { provider: source }),
         startedAt: isoMinus(new Date(observedAt), 60), completedAt: observedAt, status: 'success' });

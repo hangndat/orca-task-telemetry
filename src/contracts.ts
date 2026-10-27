@@ -3,7 +3,7 @@
  * Pure types and functions only — no I/O.
  */
 
-export const USAGE_PROVIDERS = ['claude', 'codex'] as const;
+export const USAGE_PROVIDERS = ['claude', 'codex', 'cursor'] as const;
 export type UsageProvider = (typeof USAGE_PROVIDERS)[number];
 
 export const USAGE_SOURCES = ['agent-top'] as const;
@@ -54,7 +54,21 @@ export type CodexTokenUsage = {
   reasoning: number | null;
 };
 
-export type TokenUsage = ClaudeTokenUsage | CodexTokenUsage;
+/**
+ * Cursor via agent-top `counted_sessions` uses the same verified token columns
+ * as Claude (no per-session reasoning field). agent-top 0.27.1 has process-table
+ * discovery for cursor-agent but typically zero SQL rows / tokens=0 — import is
+ * allowed; zero-token rows must not look like measured free usage.
+ */
+export type CursorTokenUsage = {
+  provider: 'cursor';
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+};
+
+export type TokenUsage = ClaudeTokenUsage | CodexTokenUsage | CursorTokenUsage;
 
 export type Cost = {
   amountUsd: number | null;

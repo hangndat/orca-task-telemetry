@@ -1,0 +1,18 @@
+[
+  {
+    "_fixture": "synthetic — cursor null model, zero tokens",
+    "harness": "cursor",
+    "session_id": "cursor-synth-null-model-0001",
+    "model": null,
+    "project": "<SYNTH_PROJECT>",
+    "input": 0,
+    "output": 0,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "cache_write_unsplit": 0,
+    "cost_usd": 0,
+    "unpriced_tokens": 0,
+    "parent_session_id": null
+  }
+]

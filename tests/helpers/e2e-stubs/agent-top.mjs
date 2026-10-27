@@ -23,6 +23,7 @@ if (argv.length === 1 && argv[0] === '--version') {
   const combined = [
     ...loadRows(process.env.AGENT_TOP_STUB_CLAUDE_PATH),
     ...loadRows(process.env.AGENT_TOP_STUB_CODEX_PATH),
+    ...loadRows(process.env.AGENT_TOP_STUB_CURSOR_PATH),
   ];
   const single = process.env.AGENT_TOP_STUB_SESSIONS_PATH;
   const body = `${JSON.stringify(single ? loadRows(single) : combined)}\n`;

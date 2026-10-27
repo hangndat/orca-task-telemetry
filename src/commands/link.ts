@@ -29,10 +29,10 @@ function parseLinkArgs(rest: string[]): {
   const providerRaw = parsed.values.provider;
   const session = parsed.values.session;
   if (!issue) {
-    throw usageError('Missing --issue.', 'Usage: orca-telemetry link --issue <url|owner/repo#n> --provider claude|codex --session <id>');
+    throw usageError('Missing --issue.', 'Usage: orca-telemetry link --issue <url|owner/repo#n> --provider claude|codex|cursor --session <id>');
   }
   if (!providerRaw) {
-    throw usageError('Missing --provider.', 'Use --provider claude or codex.');
+    throw usageError('Missing --provider.', 'Use --provider claude, codex, or cursor.');
   }
   if (!session || session.length === 0) {
     throw usageError('Missing --session.', 'Pass the provider session id (rawId).');
@@ -40,7 +40,7 @@ function parseLinkArgs(rest: string[]): {
   if (!(USAGE_PROVIDERS as readonly string[]).includes(providerRaw)) {
     throw usageError(
       `Invalid --provider '${providerRaw}'.`,
-      'Use claude or codex explicitly.',
+      'Use claude, codex, or cursor explicitly.',
     );
   }
   return { issue, provider: providerRaw as UsageProvider, session };

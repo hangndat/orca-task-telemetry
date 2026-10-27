@@ -58,7 +58,7 @@ function insertRole(db, key, role, host, run, dispatch) {
   });
 }
 
-test('V14 DB: fresh and v1/v2/v3 databases migrate to v6 and reopen idempotently', () => {
+test('V14 DB: fresh and v1/v2/v3 databases migrate to v7 and reopen idempotently', () => {
   for (const startVersion of [0, 1, 2, 3]) {
     withPath((path) => {
       if (startVersion) {
@@ -77,7 +77,7 @@ test('V14 DB: fresh and v1/v2/v3 databases migrate to v6 and reopen idempotently
         old.close();
       }
       const first = openTelemetryDatabase({ dbPath: path });
-      assert.equal(first.db.prepare('PRAGMA user_version').get().user_version, 6);
+      assert.equal(first.db.prepare('PRAGMA user_version').get().user_version, 7);
       assert.equal(first.db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
       if (startVersion) {
         assert.equal(first.db.prepare('SELECT COUNT(*) AS n FROM session_links').get().n, 0);
@@ -89,7 +89,7 @@ test('V14 DB: fresh and v1/v2/v3 databases migrate to v6 and reopen idempotently
       }
       first.close();
       const second = openTelemetryDatabase({ dbPath: path });
-      assert.equal(second.db.prepare('PRAGMA user_version').get().user_version, 6);
+      assert.equal(second.db.prepare('PRAGMA user_version').get().user_version, 7);
       if (startVersion) assert.equal(second.db.prepare('SELECT COUNT(*) AS n FROM executions').get().n, 2);
       second.close();
     });
@@ -371,7 +371,7 @@ test('V14 DB: reopen refuses a draft v5 missing privacy constraints', () => {
     assert.throws(() => openTelemetryDatabase({ dbPath: path }),
       /provenance constraints are missing or outdated/);
     const raw = new DatabaseSync(path);
-    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 7);
     raw.close();
   });
 });
@@ -384,7 +384,7 @@ test('V14 DB F03: reopen refuses a v6 database missing the audit table', () => {
     assert.throws(() => openTelemetryDatabase({ dbPath: path }),
       /session_role_link_audit schema is missing or outdated/);
     const raw = new DatabaseSync(path);
-    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 7);
     raw.close();
   });
 });
@@ -413,7 +413,7 @@ test('V14 DB F03: reopen refuses a v6 audit table missing its role/dispatch cons
     assert.throws(() => openTelemetryDatabase({ dbPath: path }),
       /session_role_link_audit schema is missing or outdated/);
     const raw = new DatabaseSync(path);
-    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 7);
     raw.close();
   });
 });
@@ -449,7 +449,7 @@ test('V14 DB F03: writable and read-only reopen refuse a v6 audit table with bot
       (err) => err.code === 'db_schema_drift',
     );
     const raw = new DatabaseSync(path);
-    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 7);
     raw.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -490,7 +490,7 @@ test('V14 DB F03: writable and read-only reopen refuse a v6 audit table missing 
       (err) => err.code === 'db_schema_drift',
     );
     const raw = new DatabaseSync(path);
-    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(raw.prepare('PRAGMA user_version').get().user_version, 7);
     raw.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });

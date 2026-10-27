@@ -9,13 +9,32 @@
 | Version | **0.27.1** (`agent-top --version`) |
 | Collect | `agent-top sql --json "<allowlisted SELECT>"` — read-only |
 | Không gọi | `agent-top sync` |
-| Harness MVP | `claude`, `codex` (bỏ `cursor`: tokens thường 0) |
+| Harness OTT | `claude`, `codex`, `cursor` (SQL allowlist) |
 | Identity | `sessionKey(harness, 'agent-top', session_id)` |
-| Cost | `unpriced_tokens > 0` → `unknown`; không coi `cost_usd=0` là miễn phí |
+| Cost | `unpriced_tokens > 0` → `unknown`; không coi `cost_usd=0` là miễn phí; **cursor tokens=0** → cost `unknown` + allocation `unknown` |
 | Cache write | `cache_write_5m + cache_write_1h + cache_write_unsplit` → `cacheWrite` nội bộ |
 | Env | `ORCA_TELEMETRY_AGENT_TOP` |
 
-Fixture: `tests/fixtures/agent-top/`.
+Fixture: `tests/fixtures/agent-top/` (gồm `cursor/` synthetic).
+
+### Cursor / Composer (2026-10-27, agent-top 0.27.1)
+
+Read-only evidence trên máy dev:
+
+```sh
+agent-top --version
+# → 0.27.1
+
+agent-top sql --json "SELECT harness, COUNT(*) AS n FROM sessions GROUP BY harness"
+# → chỉ claude (204), codex (302) — **0 hàng cursor**
+
+agent-top sql --json "SELECT COUNT(*) AS n FROM sessions WHERE harness='cursor'"
+# → [{"n":0}]
+```
+
+agent-top README (0.27.1): hàng **Aider / Copilot CLI / cursor-agent** = *process table only* / tokens **not yet** / CPU heuristic. Không có documented JSON store Cursor/Composer riêng trong OTT docs → **không** parse transcript tùy ý.
+
+**Hệ quả:** OTT vẫn mở allowlist `harness IN ('claude','codex','cursor')` và `USAGE_PROVIDERS` gồm `cursor` để khi agent-top sync được hàng cursor thì `collect`/`link` hoạt động. Hiện tại live import cursor = 0 session. Fixture synthetic (zeros / null model / tokens>0 cột verified) kiểm plumbing; không phải measured Cursor usage.
 
 ### Tip — Orca collect run scope
 

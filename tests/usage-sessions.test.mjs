@@ -4,7 +4,12 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import { sessionKey } from '../dist/contracts.js';
-import { parseCountedSessions, parseClaudeSessions, parseCodexSessions } from '../dist/usage/sessions.js';
+import {
+  parseCountedSessions,
+  parseClaudeSessions,
+  parseCodexSessions,
+  parseCursorSessions,
+} from '../dist/usage/sessions.js';
 import { parseSessionsJsonArray } from '../dist/usage/adapter.js';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -99,6 +104,50 @@ test('missing cost maps to unknown', () => {
     readFileSync(join(fixtureDir, 'synthetic-codex-missing-cost.json'), 'utf8'),
   );
   const parsed = parseCodexSessions(rows, OBSERVED, VERSION);
+  assert.equal(parsed[0].snapshot.cost.kind, 'unknown');
+  assert.equal(parsed[0].snapshot.cost.amountUsd, null);
+});
+
+test('cursor zero tokens: honest zeros, unknown cost and allocation', () => {
+  const rows = loadSessionRows(join(fixtureDir, 'cursor/session-zero-tokens.json'));
+  const parsed = parseCursorSessions(rows, OBSERVED, VERSION);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].session.sessionKey, 'cursor:agent-top:cursor-synth-zero-0001');
+  assert.equal(parsed[0].snapshot.tokens.provider, 'cursor');
+  assert.equal(parsed[0].snapshot.tokens.input, 0);
+  assert.equal(parsed[0].snapshot.tokens.output, 0);
+  assert.equal(parsed[0].snapshot.cost.kind, 'unknown');
+  assert.equal(parsed[0].snapshot.cost.amountUsd, null);
+  assert.equal(parsed[0].metadata.tokenAllocation, 'unknown');
+});
+
+test('cursor null model keeps unknown allocation', () => {
+  const rows = parseSessionsJsonArray(
+    readFileSync(join(fixtureDir, 'cursor/session-null-model.json'), 'utf8'),
+  );
+  const parsed = parseCursorSessions(rows, OBSERVED, VERSION);
+  assert.equal(parsed[0].metadata.tokenAllocation, 'unknown');
+  assert.equal(parsed[0].metadata.models, null);
+  assert.equal(parsed[0].snapshot.cost.kind, 'unknown');
+});
+
+test('cursor synthetic tokens>0 maps verified buckets and known cost', () => {
+  const rows = loadSessionRows(join(fixtureDir, 'cursor/session-with-tokens-synthetic.json'));
+  const parsed = parseCursorSessions(rows, OBSERVED, VERSION);
+  assert.equal(parsed[0].snapshot.tokens.input, 120);
+  assert.equal(parsed[0].snapshot.tokens.output, 40);
+  assert.equal(parsed[0].snapshot.tokens.cacheRead, 500);
+  assert.equal(parsed[0].snapshot.tokens.cacheWrite, 10);
+  assert.equal(parsed[0].snapshot.cost.kind, 'estimated_api_equivalent');
+  assert.equal(parsed[0].snapshot.cost.amountUsd, 0.02);
+  assert.equal(parsed[0].metadata.tokenAllocation, 'known');
+});
+
+test('cursor missing cost maps to unknown', () => {
+  const rows = parseSessionsJsonArray(
+    readFileSync(join(fixtureDir, 'synthetic-cursor-missing-cost.json'), 'utf8'),
+  );
+  const parsed = parseCursorSessions(rows, OBSERVED, VERSION);
   assert.equal(parsed[0].snapshot.cost.kind, 'unknown');
   assert.equal(parsed[0].snapshot.cost.amountUsd, null);
 });
