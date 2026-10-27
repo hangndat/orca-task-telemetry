@@ -2,6 +2,8 @@
 
 Stories [#48](https://github.com/hangndat/orca-task-telemetry/issues/48)–[#52](https://github.com/hangndat/orca-task-telemetry/issues/52) · Epic [#11](https://github.com/hangndat/orca-task-telemetry/issues/11).
 
+**Closeout 2026-10-27:** V1.9 F02 đã **CLOSED** qua independent convergence review tại `docs/reviews/v1-7185231.md`; apply tests khóa `--yes`, exact ready pair, ambiguous refusal, local idempotency và no GitHub mutation.
+
 **Architecture impact: Không** for read-only reports; **Có** for V1.9 only in that it adds an explicit opt-in `suggest-links apply` that writes the same local `session_links` table as `link` (never GitHub, never silent attribution).
 
 ## Commands
