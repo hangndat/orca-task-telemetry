@@ -96,6 +96,20 @@ test('parseProjectUrl accepts users and orgs paths', () => {
     login: 'acme',
     number: 2,
   });
+  assert.deepEqual(
+    parseProjectUrl('https://github.com/users/hangndat/projects/4/views/1?query=is%3Aopen'),
+    { kind: 'user', login: 'hangndat', number: 4 },
+  );
+  assert.deepEqual(parseProjectUrl('users/hangndat/projects/4'), {
+    kind: 'user',
+    login: 'hangndat',
+    number: 4,
+  });
+  assert.deepEqual(parseProjectUrl('hangndat/projects/4'), {
+    login: 'hangndat',
+    number: 4,
+  });
+  assert.equal(parseProjectUrl('4'), null);
 });
 
 test('init --project saves profile without modifying target git repo', () => {
@@ -201,9 +215,53 @@ test('init with project URL matches discovered project', () => {
     url,
     '--json',
   );
-  assert.equal(result.status, 0);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
   const body = JSON.parse(result.stdout.trim());
   assert.equal(body.data.profile.project.url, url);
+
+  rmSync(gitRoot, { recursive: true, force: true });
+  rmSync(appHome, { recursive: true, force: true });
+});
+
+test('init --project accepts board URL with views/query and owner/projects path', () => {
+  const gitRoot = initTempRepo([
+    ['origin', 'https://github.com/hangndat/orca-task-telemetry.git'],
+  ]);
+  const appHome = mkdtempSync(join(tmpdir(), 'orca-init-home-'));
+  const env = stubEnvForHangndat();
+  const canonical = 'https://github.com/users/hangndat/projects/4';
+
+  const fromBoard = runInitInRepo(
+    gitRoot,
+    appHome,
+    env,
+    '--project',
+    'https://github.com/users/hangndat/projects/4/views/1?query=is%3Aopen',
+    '--json',
+  );
+  assert.equal(fromBoard.status, 0, fromBoard.stderr || fromBoard.stdout);
+  assert.equal(JSON.parse(fromBoard.stdout.trim()).data.profile.project.url, canonical);
+
+  const fromUsersPath = runInitInRepo(
+    gitRoot,
+    appHome,
+    env,
+    '--project',
+    'users/hangndat/projects/4',
+    '--json',
+  );
+  assert.equal(fromUsersPath.status, 0, fromUsersPath.stderr || fromUsersPath.stdout);
+  assert.equal(JSON.parse(fromUsersPath.stdout.trim()).data.unchanged, true);
+
+  const fromOwnerPath = runInitInRepo(
+    gitRoot,
+    appHome,
+    env,
+    '--project',
+    'hangndat/projects/4',
+    '--json',
+  );
+  assert.equal(fromOwnerPath.status, 0, fromOwnerPath.stderr || fromOwnerPath.stdout);
 
   rmSync(gitRoot, { recursive: true, force: true });
   rmSync(appHome, { recursive: true, force: true });

@@ -24,15 +24,17 @@ export type InitCommandOptions = {
 };
 
 export type ParsedProjectUrl = {
-  kind: 'user' | 'organization';
+  kind?: 'user' | 'organization';
   login: string;
   number: number;
 };
 
-const USER_PROJECT_URL =
-  /^https:\/\/github\.com\/users\/([^/]+)\/projects\/(\d+)\/?$/i;
-const ORG_PROJECT_URL =
-  /^https:\/\/github\.com\/orgs\/([^/]+)\/projects\/(\d+)\/?$/i;
+/** users|orgs/<login>/projects/<n> with optional /views/<n> and trailing slash. */
+const USER_OR_ORG_PROJECT_PATH =
+  /^(?:\/)?(users|orgs)\/([^/]+)\/projects\/(\d+)(?:\/views\/\d+)?\/?$/i;
+/** <login>/projects/<n> with optional /views/<n> (kind inferred from discovery). */
+const OWNER_PROJECT_PATH =
+  /^(?:\/)?([^/]+)\/projects\/(\d+)(?:\/views\/\d+)?\/?$/i;
 
 function parseInitArgs(rest: string[]): { remote?: string; project?: string } {
   try {
@@ -68,57 +70,92 @@ function parseInitArgs(rest: string[]): { remote?: string; project?: string } {
   }
 }
 
-/**
- * Parse a GitHub Projects V2 web URL (users/ or orgs/).
- */
-export function parseProjectUrl(specifier: string): ParsedProjectUrl | null {
-  const trimmed = specifier.trim();
-  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-    return null;
-  }
+function projectPathFromUrl(specifier: string): string {
   let parsed: URL;
   try {
-    parsed = new URL(trimmed);
+    parsed = new URL(specifier);
   } catch {
-    throw usageError('Project URL is not valid.', 'Use a github.com users/.../projects/N or orgs/.../projects/N URL.');
+    throw usageError(
+      'Project URL is not valid.',
+      'Use a github.com users/.../projects/N or orgs/.../projects/N URL.',
+    );
   }
-  if (parsed.hostname !== 'github.com') {
+  const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+  if (host !== 'github.com') {
     throw usageError(
       'Project URL must be on github.com.',
       'Use a URL like https://github.com/users/owner/projects/4',
     );
   }
-  const path = `${parsed.pathname}${parsed.search}`;
-  const userMatch = USER_PROJECT_URL.exec(`https://github.com${path}`);
-  if (userMatch) {
-    const login = userMatch[1];
-    const number = Number.parseInt(userMatch[2] ?? '', 10);
+  return parsed.pathname;
+}
+
+function parsedFromProjectPath(pathname: string): ParsedProjectUrl | null {
+  const path = pathname.replace(/\/+$/, '');
+  const userOrOrg = USER_OR_ORG_PROJECT_PATH.exec(path);
+  if (userOrOrg) {
+    const kindRaw = userOrOrg[1]?.toLowerCase();
+    const login = userOrOrg[2];
+    const number = Number.parseInt(userOrOrg[3] ?? '', 10);
     if (!login || !Number.isInteger(number) || number < 1) {
       throw usageError('Project URL path is invalid.', 'Project number must be a positive integer.');
     }
-    return { kind: 'user', login, number };
+    const kind: 'user' | 'organization' = kindRaw === 'orgs' ? 'organization' : 'user';
+    return { kind, login, number };
   }
-  const orgMatch = ORG_PROJECT_URL.exec(`https://github.com${path}`);
-  if (orgMatch) {
-    const login = orgMatch[1];
-    const number = Number.parseInt(orgMatch[2] ?? '', 10);
+  const ownerPath = OWNER_PROJECT_PATH.exec(path);
+  if (ownerPath) {
+    const login = ownerPath[1];
+    const number = Number.parseInt(ownerPath[2] ?? '', 10);
     if (!login || !Number.isInteger(number) || number < 1) {
-      throw usageError('Project URL path is invalid.', 'Project number must be a positive integer.');
+      throw usageError('Project path is invalid.', 'Project number must be a positive integer.');
     }
-    return { kind: 'organization', login, number };
+    return { login, number };
   }
-  throw usageError(
-    'Project URL path is not a GitHub Project URL.',
-    'Expected .../users/<owner>/projects/<n> or .../orgs/<owner>/projects/<n>.',
-  );
+  return null;
+}
+
+/**
+ * Parse a GitHub Projects V2 specifier: board URL, users|orgs/.../projects/N, or owner/projects/N.
+ * Query strings and optional /views/N are ignored. Returns null for a bare project number.
+ */
+export function parseProjectUrl(specifier: string): ParsedProjectUrl | null {
+  const trimmed = specifier.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  let pathname: string;
+  let fromAbsoluteUrl = false;
+  if (/^https?:\/\//i.test(trimmed)) {
+    fromAbsoluteUrl = true;
+    pathname = projectPathFromUrl(trimmed);
+  } else {
+    const withoutHost = trimmed.replace(/^(?:www\.)?github\.com\//i, '');
+    pathname = withoutHost.startsWith('/') ? withoutHost : `/${withoutHost}`;
+  }
+
+  const parsed = parsedFromProjectPath(pathname);
+  if (parsed) {
+    return parsed;
+  }
+  if (fromAbsoluteUrl) {
+    throw usageError(
+      'Project URL path is not a GitHub Project URL.',
+      'Expected .../users/<owner>/projects/<n> or .../orgs/<owner>/projects/<n> (optional /views/<n>).',
+    );
+  }
+  return null;
 }
 
 function projectMatchesUrl(project: DiscoveredProject, parsed: ParsedProjectUrl): boolean {
-  return (
-    project.number === parsed.number &&
-    project.owner.login === parsed.login &&
-    project.owner.kind === parsed.kind
-  );
+  if (project.number !== parsed.number || project.owner.login !== parsed.login) {
+    return false;
+  }
+  if (parsed.kind !== undefined && project.owner.kind !== parsed.kind) {
+    return false;
+  }
+  return true;
 }
 
 function selectByNumber(
@@ -174,7 +211,7 @@ function selectBySpecifier(
   if (!Number.isFinite(asNumber) || String(asNumber) !== trimmed) {
     throw usageError(
       '--project must be a project number or a github.com project URL.',
-      'Example: --project 4 or --project https://github.com/users/you/projects/4',
+      'Example: --project 4, --project users/you/projects/4, or a github.com project URL (optional /views/N).',
     );
   }
   return selectByNumber(projects, asNumber);
