@@ -227,7 +227,7 @@ test('CLI stub: dry-run never edits; apply JSON writes once and rerun is unchang
     writeReportsProfile(home, 'PVT_attr_synthetic_project');
     installDatasetInHome(home, (ctx) => {
       linkSessionToIssue(ctx.db, {
-        provider: 'claude', source: 'codeburn',
+        provider: 'claude', source: 'agent-top',
         rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
         issueNodeId: 'I_attr_issue_alpha',
         linkedAt: '2026-06-01T10:00:00Z',
@@ -279,7 +279,7 @@ test('CLI stub: scope revoked after preflight is a partial item failure with san
     writeReportsProfile(home, 'PVT_attr_synthetic_project');
     installDatasetInHome(home, (ctx) => {
       linkSessionToIssue(ctx.db, {
-        provider: 'claude', source: 'codeburn',
+        provider: 'claude', source: 'agent-top',
         rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
         issueNodeId: 'I_attr_issue_alpha', linkedAt: '2026-06-01T10:00:00Z',
       });
@@ -314,7 +314,7 @@ test('F02: read:project permits preview but missing project rejects apply before
     writeReportsProfile(home, 'PVT_attr_synthetic_project');
     installDatasetInHome(home, (ctx) => {
       linkSessionToIssue(ctx.db, {
-        provider: 'claude', source: 'codeburn',
+        provider: 'claude', source: 'agent-top',
         rawSessionId: 'aaaaaaaa-claude-4ccc-8ddd-eeeeeeeeee01',
         issueNodeId: 'I_attr_issue_alpha', linkedAt: '2026-06-01T10:00:00Z',
       });

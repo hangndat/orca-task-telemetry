@@ -59,7 +59,7 @@ function session(rawId, provider, amount) {
         : {
             amountUsd: amount,
             kind: 'estimated_api_equivalent',
-            source: { tool: 'codeburn', version: '0.9.27' },
+            source: { tool: 'agent-top', version: '0.27.1' },
           },
   };
 }
@@ -91,7 +91,7 @@ function linkHierarchy(ctx) {
   ]) {
     linkSessionToIssue(ctx.db, {
       provider,
-      source: 'codeburn',
+      source: 'agent-top',
       rawSessionId,
       issueNodeId,
       linkedAt: '2026-06-01T10:00:00Z',
