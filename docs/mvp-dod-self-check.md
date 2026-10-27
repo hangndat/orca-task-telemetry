@@ -4,7 +4,8 @@
 
 | Meta | Giá trị |
 | --- | --- |
-| Base SHA (trước docs commit) | `2f58473fb81d9a234f2e057aadbc0cb92804d97f` |
+| Review candidate SHA | `a70ca751e0db62b61e9acd693776556fbe0d017f` |
+| Implementation base (pre-docs) | `2f58473fb81d9a234f2e057aadbc0cb92804d97f` |
 | SoT usage | agent-top 0.27.1 (ADR 0001) |
 | Live home | `/tmp/orca-telemetry-agent-top-home` |
 | Independent Codex | **PENDING** |

@@ -6,7 +6,8 @@
 
 | Trường | Giá trị |
 | --- | --- |
-| Evidence SHA (docs closeout base) | `2f58473fb81d9a234f2e057aadbc0cb92804d97f` (`main`) |
+| Evidence SHA (independent review candidate) | `a70ca751e0db62b61e9acd693776556fbe0d017f` (`main`) |
+| Implementation base (pre-docs) | `2f58473fb81d9a234f2e057aadbc0cb92804d97f` |
 | SoT usage | agent-top **0.27.1** — ADR [0001](adr/0001-agent-top-usage-sot.md); commit `5c41894` |
 | Orca pin | **1.4.241** — `caf5c73` |
 | Collect Orca runs | **run-list** mặc định (`4bb1d77`); pin tùy chọn `ORCA_TELEMETRY_COLLECT_RUN` |
