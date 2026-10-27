@@ -406,6 +406,18 @@ Trong cùng query `ProjectItems`, field `rateLimit` trên response GraphQL (khô
 | `REDACTED` content | Chưa quan sát |
 | `read:project` vs scope `project` trên token | Hiển thị OAuth khác message lỗi khi thiếu quyền |
 
+### V1.2 `writeback` — dry-run live (2026-10-24)
+
+Contract: [V1-PROJECT-WRITEBACK-SPEC.md](V1-PROJECT-WRITEBACK-SPEC.md). Apply path dùng `gh project item-edit` (scope **`project`**); **chưa** ghi live trong evidence docs slice — chỉ dry-run.
+
+| Mục | Giá trị (redacted) |
+| --- | --- |
+| Profile | `ORCA_TELEMETRY_HOME=/tmp/orca-telemetry-resume/live-v12`; `init` Project user **#4** |
+| `collect` (PATH) | Exit 5 partial; CodeBurn `codeburn_runtime_unavailable` → 0 sessions DB |
+| `collect` (`ORCA_TELEMETRY_CODEBURN` pin binary 0.9.27) | Exit 0; 103 memberships; **424** sessions DB |
+| Field NUMBER `Wave` | `PVTF_lAHOAGoDWs4BoZ5mzhm6Ld4` (roadmap — không field cost thử) |
+| `writeback --field Wave --issue hangndat/orca-task-telemetry#45 --json` | Exit 0; `writeback_preview` / `dry_run`; item `PVTI_lAHOAGoDWs4BoZ5mzhDBA3g`; skip `no_usage` (chưa link session → #45) |
+
 ## Orca CLI
 
 ### Cài đặt và phạm vi (AC1)

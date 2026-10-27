@@ -67,7 +67,17 @@ test('--help documents implemented vs planned commands', () => {
   assert.match(result.stdout, /collect.*implemented/i);
   assert.match(result.stdout, /link.*implemented/i);
   assert.match(result.stdout, /report.*implemented/i);
+  assert.match(result.stdout, /writeback.*implemented/i);
   assert.doesNotMatch(result.stdout, /__internal_test/);
+});
+
+test('writeback help describes opt-in apply and confirmation gate', () => {
+  const result = run('writeback', '--help');
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /--apply \[--yes\]/);
+  assert.match(result.stdout, /non-TTY apply requires --yes/);
+  assert.match(result.stdout, /Partial item failures exit 5/);
+  assert.doesNotMatch(result.stdout, /Live --apply is not available/);
 });
 
 test('--version prints the package version', () => {

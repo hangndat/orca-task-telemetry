@@ -8,6 +8,7 @@ const IMPLEMENTED = new Set([
   'link',
   'report',
   'trace',
+  'writeback',
 ]);
 
 const TOP_LEVEL = [
@@ -18,6 +19,7 @@ const TOP_LEVEL = [
   { name: 'link', summary: 'Link an agent-top session to a GitHub issue' },
   { name: 'report', summary: 'Usage reports for tasks, project, and unmapped sessions' },
   { name: 'trace', summary: 'Link and refresh verified PR or commit evidence' },
+  { name: 'writeback', summary: 'Preview or explicitly apply GitHub Project NUMBER field writeback' },
 ];
 
 const REPORT_SUBCOMMANDS = [
@@ -104,6 +106,25 @@ export function commandHelpText(command: string): string {
       'Resolves the Git repository, discovers Projects V2, and stores a profile in',
       'the local orca-task-telemetry config. Interactive selection requires a TTY',
       'unless --project is provided.',
+    ].join('\n') + '\n';
+  }
+  if (command === 'writeback') {
+    return [
+      'orca-telemetry writeback — Project NUMBER field cost writeback',
+      '',
+      'Usage:',
+      '  orca-telemetry writeback (--field <name> | --field-id <id>) [--rollup direct|inclusive]',
+      '    [--issue <selector>] [--force-overwrite] [--apply [--yes]] [--json]',
+      '',
+      'Computes estimated API equivalent usage from the local DB and compares to the',
+      'current GitHub Project field value. Default is read-only dry-run.',
+      '--apply re-reads each candidate and writes one NUMBER field per item with gh item-edit.',
+      'A TTY prompts for confirmation; non-TTY apply requires --yes. --yes requires --apply.',
+      'A changed remote value is skipped unless --force-overwrite is explicit.',
+      'Partial item failures exit 5; no automatic rollback. Apply requires gh project scope.',
+      '',
+      'Project and owner come from orca-telemetry init (no --project/--owner).',
+      '--rollup inclusive requires at least one --issue.',
     ].join('\n') + '\n';
   }
   if (command === 'doctor') {

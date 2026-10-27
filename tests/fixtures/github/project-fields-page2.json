@@ -1,0 +1,23 @@
+{
+  "data": {
+    "rateLimit": { "cost": 1, "remaining": 4998, "resetAt": "2026-10-24T00:00:00Z" },
+    "node": {
+      "id": "PVT_kwHOAGoDWs4BoZ5m",
+      "fields": {
+        "totalCount": 3,
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": "Y3Vyc29yOnYyOpK5MDAwMDAwMDAuMDAwMDAwMDE="
+        },
+        "nodes": [
+          {
+            "__typename": "ProjectV2Field",
+            "id": "PVTF_lAHOBqA1Ws4Bom2ZzgWave",
+            "name": "Wave",
+            "dataType": "NUMBER"
+          }
+        ]
+      }
+    }
+  }
+}

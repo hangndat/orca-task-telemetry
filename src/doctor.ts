@@ -11,6 +11,7 @@ import { SUPPORTED_SCHEMA_VERSION } from './db/migrate.js';
 import { CliError } from './errors.js';
 import type { ResolveRepositoryOptions } from './repo.js';
 import { resolveRepository } from './repo.js';
+import { readGhAuthStatus, type GhAuthStatus } from './github/auth-scopes.js';
 
 export type DoctorStatus = 'pass' | 'warn' | 'fail';
 
@@ -33,7 +34,7 @@ export type DoctorDeps = {
     gitRoot: string;
     github: { id: string };
   }>;
-  ghAuthStatus?: () => Promise<{ authenticated: boolean; scopes: string[] }>;
+  ghAuthStatus?: () => Promise<GhAuthStatus | { authenticated: boolean; scopes: string[] }>;
   orcaVersion?: () => Promise<string | null>;
   agentTopVersion?: () => Promise<string | null>;
   appHome?: string;
@@ -79,26 +80,40 @@ export async function runDoctorChecks(
         },
   );
 
-  let ghScopes: string[] = [];
   if (deps.ghAuthStatus) {
     try {
       const auth = await deps.ghAuthStatus();
-      if (!auth.authenticated) {
+      if ('known' in auth && !auth.known) {
+        checks.push({
+          id: 'gh_auth', status: 'warn',
+          message: 'Could not verify the active github.com account or its scopes.',
+          remedy: 'Run gh auth status --json hosts --no-refresh.',
+        });
+        checks.push({
+          id: 'gh_apply_scope', status: 'warn',
+          message: 'Cannot verify the project scope required for --apply.',
+          remedy: 'gh auth refresh -s project',
+        });
+      } else if (!auth.authenticated) {
         checks.push({
           id: 'gh_auth',
           status: 'warn',
           message: 'GitHub CLI is not authenticated.',
           remedy: 'Run gh auth login.',
         });
+        checks.push({
+          id: 'gh_apply_scope', status: 'warn',
+          message: 'Cannot use --apply until github.com authentication is available.',
+          remedy: 'gh auth login',
+        });
       } else {
-        ghScopes = auth.scopes;
         checks.push({
           id: 'gh_auth',
           status: 'pass',
           message: 'GitHub CLI is authenticated.',
         });
         const hasProject =
-          ghScopes.includes('read:project') || ghScopes.includes('project');
+          auth.scopes.includes('read:project') || auth.scopes.includes('project');
         checks.push(
           hasProject
             ? {
@@ -113,6 +128,13 @@ export async function runDoctorChecks(
                 remedy: 'gh auth refresh -s read:project',
               },
         );
+        checks.push(auth.scopes.includes('project')
+          ? { id: 'gh_apply_scope', status: 'pass', message: 'Token includes project scope for --apply.' }
+          : {
+              id: 'gh_apply_scope', status: 'warn',
+              message: 'Token is missing project scope required for --apply.',
+              remedy: 'gh auth refresh -s project',
+            });
       }
     } catch {
       checks.push({
@@ -120,6 +142,11 @@ export async function runDoctorChecks(
         status: 'warn',
         message: 'Could not verify GitHub CLI authentication.',
         remedy: 'Install gh and run gh auth login.',
+      });
+      checks.push({
+        id: 'gh_apply_scope', status: 'warn',
+        message: 'Cannot verify the project scope required for --apply.',
+        remedy: 'gh auth refresh -s project',
       });
     }
   }
@@ -316,7 +343,7 @@ export async function buildDefaultDoctorDeps(
       const resolved = await resolveRepository(cwd);
       return { gitRoot: resolved.gitRoot, github: resolved.github };
     },
-    ghAuthStatus: defaultGhAuthStatus,
+    ghAuthStatus: readGhAuthStatus,
     orcaVersion: defaultOrcaVersion,
     agentTopVersion: defaultAgentTopVersion,
     readDbUserVersion: readUserVersionReadOnly,
@@ -327,31 +354,6 @@ export async function runDoctorCommand(cwd?: string): Promise<number> {
   const report = await runDoctorWithDeps(await buildDefaultDoctorDeps(cwd));
   process.stdout.write(formatDoctorText(report));
   return report.exitCode;
-}
-
-async function defaultGhAuthStatus(): Promise<{
-  authenticated: boolean;
-  scopes: string[];
-}> {
-  const { spawnSync } = await import('node:child_process');
-  const gh = process.env['ORCA_TELEMETRY_GH'] ?? 'gh';
-  const result = spawnSync(gh, ['auth', 'status'], {
-    encoding: 'utf8',
-    timeout: 10_000,
-  });
-  const text = `${result.stdout}\n${result.stderr}`;
-  const authenticated = /Logged in to/i.test(text);
-  const scopes: string[] = [];
-  const scopeLine = text.match(/Token scopes: (.+)/i);
-  if (scopeLine?.[1]) {
-    for (const part of scopeLine[1].split(',')) {
-      const s = part.trim();
-      if (s.length > 0) {
-        scopes.push(s);
-      }
-    }
-  }
-  return { authenticated, scopes };
 }
 
 async function defaultOrcaVersion(): Promise<string | null> {
