@@ -22,8 +22,12 @@ import {
   resolveOverheadHost,
 } from '../reports/overhead.js';
 import { sanitizeDisplayText } from '../reports/render.js';
+import { buildRetriesReport, formatRetriesReportText } from '../reports/retries.js';
+import { buildDuplicatesReport, formatDuplicatesReportText } from '../reports/duplicates.js';
+import { buildWasteReport, formatWasteReportText } from '../reports/waste.js';
+import { buildBudgetReport, formatBudgetReportText } from '../reports/budget.js';
 
-export type ReportSubcommand = 'tasks' | 'task' | 'project' | 'hierarchy' | 'unmapped';
+export type ReportSubcommand = 'tasks' | 'task' | 'project' | 'hierarchy' | 'unmapped' | 'waste';
 
 export async function runReport(
   sub: ReportSubcommand,
@@ -194,6 +198,110 @@ export async function runReportOverhead(
       return { kind: 'text', write: () => process.stdout.write(`${JSON.stringify({ ok: true, data })}\n`) };
     }
     return { kind: 'text', write: () => process.stdout.write(formatOverheadReportText(data)) };
+  } finally {
+    ctx.close();
+  }
+}
+
+
+function parseRunHostArgs(rest: string[], command: string): { host?: string; run: string } {
+  let parsed: { values: Record<string, string | undefined> };
+  try {
+    parsed = parseArgs({
+      args: rest,
+      options: { host: { type: 'string' }, run: { type: 'string' } },
+      allowPositionals: false,
+      strict: true,
+    });
+  } catch {
+    throw usageError(
+      `Invalid options for report ${command}.`,
+      `Usage: orca-telemetry report ${command} --run <run-id> [--host <host-id>] [--json]`,
+    );
+  }
+  const host = parsed.values.host;
+  const run = parsed.values.run;
+  if (host !== undefined && host.length === 0) {
+    throw usageError('Empty --host.', 'Pass an exact host ID or omit --host.');
+  }
+  if (!run) {
+    throw usageError('Missing --run.', `Pass --run for report ${command}.`);
+  }
+  return { host, run };
+}
+
+export async function runReportRetries(
+  rest: string[],
+  options: { json: boolean; cwd: string },
+): Promise<RouteResult> {
+  const args = parseRunHostArgs(rest, 'retries');
+  const ctx = await openOverheadReportContext();
+  try {
+    const host = args.host ?? resolveOverheadHost(ctx, args.run);
+    const data = buildRetriesReport(ctx, host, args.run);
+    if (options.json) return { kind: 'ok', data };
+    return { kind: 'text', write: () => process.stdout.write(formatRetriesReportText(data)) };
+  } finally {
+    ctx.close();
+  }
+}
+
+export async function runReportDuplicates(
+  rest: string[],
+  options: { json: boolean; cwd: string },
+): Promise<RouteResult> {
+  const args = parseRunHostArgs(rest, 'duplicates');
+  const ctx = await openOverheadReportContext();
+  try {
+    const host = args.host ?? resolveOverheadHost(ctx, args.run);
+    const data = buildDuplicatesReport(ctx, host, args.run);
+    if (options.json) return { kind: 'ok', data };
+    return { kind: 'text', write: () => process.stdout.write(formatDuplicatesReportText(data)) };
+  } finally {
+    ctx.close();
+  }
+}
+
+export async function runReportBudget(
+  rest: string[],
+  options: { json: boolean; cwd: string },
+): Promise<RouteResult> {
+  let parsed: { values: Record<string, string | undefined> };
+  try {
+    parsed = parseArgs({
+      args: rest,
+      options: {
+        'limit-usd': { type: 'string' },
+        issue: { type: 'string' },
+        rollup: { type: 'string' },
+      },
+      allowPositionals: false,
+      strict: true,
+    });
+  } catch {
+    throw usageError(
+      'Invalid options for report budget.',
+      'Usage: orca-telemetry report budget --limit-usd <n> [--issue <sel>] [--rollup direct|inclusive] [--json]',
+    );
+  }
+  const limitRaw = parsed.values['limit-usd'];
+  if (!limitRaw) {
+    throw usageError('Missing --limit-usd.', 'Pass a positive USD limit.');
+  }
+  const limitUsd = Number(limitRaw);
+  const rollup = (parsed.values.rollup ?? 'direct') as 'direct' | 'inclusive';
+  if (rollup !== 'direct' && rollup !== 'inclusive') {
+    throw usageError('Invalid --rollup.', 'Use direct or inclusive.');
+  }
+  const ctx = await openReportContext(options.cwd);
+  try {
+    const data = buildBudgetReport(ctx, {
+      limitUsd,
+      issueArg: parsed.values.issue,
+      rollup,
+    });
+    if (options.json) return { kind: 'ok', data };
+    return { kind: 'text', write: () => process.stdout.write(formatBudgetReportText(data)) };
   } finally {
     ctx.close();
   }
