@@ -10,8 +10,10 @@ import {
 } from './migrations/v2.js';
 import { MIGRATION_V3_STATEMENTS, SCHEMA_VERSION_V3 } from './migrations/v3.js';
 import { MIGRATION_V4_STATEMENTS, SCHEMA_VERSION_V4 } from './migrations/v4.js';
+import { MIGRATION_V5_STATEMENTS, SCHEMA_VERSION_V5 } from './migrations/v5.js';
+import { MIGRATION_V6_STATEMENTS, SCHEMA_VERSION_V6 } from './migrations/v6.js';
 
-export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V4;
+export const SUPPORTED_SCHEMA_VERSION = SCHEMA_VERSION_V6;
 
 function readUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as
@@ -41,11 +43,23 @@ export function migrateDatabase(db: DatabaseSync): void {
     current !== 0 &&
     current !== SCHEMA_VERSION_V1 &&
     current !== SCHEMA_VERSION_V2 &&
-    current !== SCHEMA_VERSION_V3
+    current !== SCHEMA_VERSION_V3 &&
+    current !== SCHEMA_VERSION_V4 &&
+    current !== SCHEMA_VERSION_V5
   ) {
     throw dbSchemaError(
-      `Unsupported intermediate schema version ${current}; expected 0, ${SCHEMA_VERSION_V1}, ${SCHEMA_VERSION_V2}, ${SCHEMA_VERSION_V3} or ${SUPPORTED_SCHEMA_VERSION}.`,
+      `Unsupported intermediate schema version ${current}; expected 0, ${SCHEMA_VERSION_V1}, ` +
+        `${SCHEMA_VERSION_V2}, ${SCHEMA_VERSION_V3}, ${SCHEMA_VERSION_V4}, ${SCHEMA_VERSION_V5} or ${SUPPORTED_SCHEMA_VERSION}.`,
     );
+  }
+
+  // SQLite cannot enable foreign keys inside the migration transaction.
+  db.exec('PRAGMA foreign_keys = ON');
+  const foreignKeys = db.prepare('PRAGMA foreign_keys').get() as
+    | { foreign_keys: number }
+    | undefined;
+  if (foreignKeys?.foreign_keys !== 1) {
+    throw dbSchemaError('Foreign keys must be enabled before migration.');
   }
 
   db.exec('BEGIN IMMEDIATE');
@@ -74,6 +88,24 @@ export function migrateDatabase(db: DatabaseSync): void {
       }
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V4}`);
     }
+    if (current < SCHEMA_VERSION_V5) {
+      for (const sql of MIGRATION_V5_STATEMENTS) {
+        db.exec(sql);
+      }
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V5}`);
+    }
+    assertV5ProvenanceHardened(db);
+    if (current < SCHEMA_VERSION_V6) {
+      for (const sql of MIGRATION_V6_STATEMENTS) {
+        db.exec(sql);
+      }
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION_V6}`);
+    }
+    assertV6AuditHardened(db);
+    const invalid = db.prepare('PRAGMA foreign_key_check').get();
+    if (invalid) {
+      throw dbSchemaError('Existing database contains invalid foreign key references.');
+    }
     db.exec('COMMIT');
   } catch (err) {
     try {
@@ -82,6 +114,60 @@ export function migrateDatabase(db: DatabaseSync): void {
       // ignore rollback errors
     }
     throw err;
+  }
+}
+
+/**
+ * v5 provenance was hardened before release without changing its version. Refuse a
+ * database created by the earlier draft schema rather than silently opening
+ * it with weaker identity or privacy constraints.
+ */
+function assertV5ProvenanceHardened(db: DatabaseSync): void {
+  const requiredSql: readonly [string, string][] = [
+    ['scoped_executions', 'hex(host_id)'],
+    ['session_role_links', "evidence_kind = 'bounded_manual'"],
+    ['session_role_links', 'evidence_note IN'],
+    ['legacy_execution_rekeys', "evidence_kind = 'bounded_manual'"],
+    ['collection_attempts', 'length(counters_json) <= 512'],
+    ['collection_attempts_counters_insert', 'json_each(NEW.counters_json)'],
+    ['collection_attempts_counters_update', 'json_each(NEW.counters_json)'],
+  ];
+  const schema = new Map(
+    (db.prepare(`SELECT name, sql FROM sqlite_master WHERE name IN
+      ('scoped_executions', 'session_role_links', 'legacy_execution_rekeys',
+       'collection_attempts', 'collection_attempts_counters_insert',
+       'collection_attempts_counters_update')`).all() as { name: string; sql: string }[])
+      .map((row) => [row.name, row.sql]),
+  );
+  if (requiredSql.some(([name, marker]) => !schema.get(name)?.includes(marker))) {
+    throw dbSchemaError('Database v5 provenance constraints are missing or outdated.');
+  }
+}
+
+/**
+ * v6 adds the durable unlink audit trail. Refuse a database whose
+ * `session_role_link_audit` table is missing or missing its identity/role/
+ * verifier-hash constraints, rather than let `unlink-role` silently audit
+ * into an under-constrained table.
+ */
+function assertV6AuditHardened(db: DatabaseSync): void {
+  const row = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'session_role_link_audit'`)
+    .get() as { sql: string } | undefined;
+  const sql = row?.sql ?? '';
+  const requiredMarkers = [
+    "role IN ('coordinator', 'worker')",
+    'length(linked_by) = 71',
+    "substr(linked_by, 1, 7) = 'sha256:'",
+    "substr(linked_by, 8) NOT GLOB '*[^0-9a-f]*'",
+    'length(unlinked_by) = 71',
+    "substr(unlinked_by, 1, 7) = 'sha256:'",
+    "substr(unlinked_by, 8) NOT GLOB '*[^0-9a-f]*'",
+    "role = 'coordinator' AND dispatch_id IS NULL",
+    "role = 'worker' AND dispatch_id IS NOT NULL",
+  ];
+  if (!row || requiredMarkers.some((marker) => !sql.includes(marker))) {
+    throw dbSchemaError('Database v6 session_role_link_audit schema is missing or outdated.');
   }
 }
 
@@ -97,4 +183,6 @@ export function assertSchemaCurrent(db: DatabaseSync): void {
       `Database schema version ${current} is older than required ${SUPPORTED_SCHEMA_VERSION}.`,
     );
   }
+  assertV5ProvenanceHardened(db);
+  assertV6AuditHardened(db);
 }

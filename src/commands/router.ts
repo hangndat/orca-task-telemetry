@@ -10,11 +10,14 @@ import { runInit } from './init.js';
 import { runProjects } from './projects.js';
 import { runCollect } from './collect.js';
 import { runLink } from './link.js';
-import { runReport, runReportTask, runReportTrace } from './report.js';
+import { runReport, runReportTask, runReportTrace, runReportOverhead } from './report.js';
 import { runTrace } from './trace.js';
 import { runWriteback } from './writeback.js';
+import { runLinkRole } from './link-role.js';
+import { runUnlinkRole } from './unlink-role.js';
+import { runPreviewOverhead } from './preview-overhead.js';
 
-const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'trace', 'project', 'hierarchy', 'unmapped']);
+const REPORT_SUBCOMMANDS = new Set(['tasks', 'task', 'trace', 'project', 'hierarchy', 'overhead', 'unmapped']);
 
 export type RouteResult =
   | { kind: 'ok'; data?: unknown; exitCode?: number }
@@ -93,6 +96,32 @@ export async function routeCommand(
     });
   }
 
+
+  if (command === 'link-role') {
+    return runLinkRole(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
+  }
+
+  if (command === 'unlink-role') {
+    return runUnlinkRole(restPositionals, {
+      json,
+      cwd: options.cwd ?? process.cwd(),
+    });
+  }
+
+  if (command === 'preview') {
+    const [sub, ...subRest] = restPositionals;
+    if (sub === undefined) {
+      throw usageError('Missing preview subcommand.', 'Run orca-telemetry preview --help.');
+    }
+    if (sub !== 'overhead') {
+      throw usageError(`Unknown preview subcommand: ${sub}.`, 'Run orca-telemetry preview --help.');
+    }
+    return runPreviewOverhead(subRest, { json });
+  }
+
   if (command === 'report') {
     const [sub, ...subRest] = restPositionals;
     if (sub === undefined) {
@@ -104,7 +133,7 @@ export async function routeCommand(
     if (!REPORT_SUBCOMMANDS.has(sub)) {
       throw usageError(`Unknown report subcommand: ${sub}.`, 'Run orca-telemetry report --help.');
     }
-    if (subRest.length > 0 && sub !== 'task' && sub !== 'trace') {
+    if (subRest.length > 0 && sub !== 'task' && sub !== 'trace' && sub !== 'overhead') {
       throw usageError(
         `Unexpected arguments: ${subRest.join(' ')}`,
         `Usage: orca-telemetry report ${sub}`,
@@ -123,6 +152,9 @@ export async function routeCommand(
     }
     if (sub === 'trace') {
       return runReportTrace(subRest[0]!, subRest.slice(1), { json, cwd });
+    }
+    if (sub === 'overhead') {
+      return runReportOverhead(subRest, { json, cwd });
     }
     return runReport(sub as 'tasks' | 'project' | 'hierarchy' | 'unmapped', subRest, {
       json,

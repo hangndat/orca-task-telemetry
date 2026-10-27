@@ -8,8 +8,14 @@
   "bin": {
     "orca-telemetry": "./dist/cli.js"
   },
-  "files": ["dist", "README.md"],
-  "engines": { "node": ">=24.0.0" },
+  "files": [
+    "dist",
+    "README.md",
+    "docs/UAT-PREVIEW.md"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",

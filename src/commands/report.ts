@@ -14,6 +14,14 @@ import {
 } from '../reports/unmapped.js';
 import type { RouteResult } from './router.js';
 import { buildTraceReport, formatTraceReportText, openTraceReportContext } from '../reports/trace.js';
+import { parseArgs } from 'node:util';
+import {
+  buildOverheadReport,
+  formatOverheadReportText,
+  openOverheadReportContext,
+  resolveOverheadHost,
+} from '../reports/overhead.js';
+import { sanitizeDisplayText } from '../reports/render.js';
 
 export type ReportSubcommand = 'tasks' | 'task' | 'project' | 'hierarchy' | 'unmapped';
 
@@ -123,4 +131,70 @@ export async function runReportTrace(
     if (options.json) return { kind: 'ok', data };
     return { kind: 'text', write: () => process.stdout.write(formatTraceReportText(data)) };
   } finally { ctx.close(); }
+}
+
+export function peekOverheadJsonFormat(rest: string[]): boolean {
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    if (arg === '--format=json' || (arg === '--format' && rest[i + 1] === 'json')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function parseOverheadArgs(rest: string[]): { host: string | undefined; run: string; json: boolean } {
+  let parsed: { values: Record<string, string | boolean | undefined> };
+  try {
+    parsed = parseArgs({
+      args: rest,
+      options: {
+        host: { type: 'string' },
+        run: { type: 'string' },
+        format: { type: 'string' },
+      },
+      allowPositionals: false,
+      strict: true,
+    });
+  } catch {
+    throw usageError(
+      'Invalid options for report overhead.',
+      'Usage: orca-telemetry report overhead --run <run-id> [--host <host-id>] [--format json]',
+    );
+  }
+  const host = parsed.values.host as string | undefined;
+  const run = parsed.values.run as string | undefined;
+  const format = parsed.values.format as string | undefined;
+  if (host !== undefined && host.length === 0) {
+    throw usageError('Empty --host.', 'Pass an exact host ID or omit --host to resolve a unique Run.');
+  }
+  if (!run) {
+    throw usageError('Missing --run.', 'Pass the exact Orca Run id.');
+  }
+  if (format !== undefined && format !== 'json') {
+    throw usageError(`Invalid --format ${JSON.stringify(sanitizeDisplayText(format))}.`,
+      'The only supported --format value is json.');
+  }
+  return { host, run, json: format === 'json' };
+}
+
+export async function runReportOverhead(
+  rest: string[],
+  options: { json: boolean; cwd: string },
+): Promise<RouteResult> {
+  const args = parseOverheadArgs(rest);
+  const ctx = await openOverheadReportContext();
+  try {
+    const host = args.host ?? resolveOverheadHost(ctx, args.run);
+    const data = buildOverheadReport(ctx, host, args.run);
+    // --format json must render JSON even without the global --json flag, so this
+    // writes directly (matching writeJsonSuccess's shape) rather than returning
+    // 'ok', which finishRoute only prints when the global --json flag is set.
+    if (options.json || args.json) {
+      return { kind: 'text', write: () => process.stdout.write(`${JSON.stringify({ ok: true, data })}\n`) };
+    }
+    return { kind: 'text', write: () => process.stdout.write(formatOverheadReportText(data)) };
+  } finally {
+    ctx.close();
+  }
 }
