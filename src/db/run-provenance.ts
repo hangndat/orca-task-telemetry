@@ -131,7 +131,7 @@ export function insertCollectionAttempt(db: DatabaseSync, input: {
   source: 'orca' | 'agent-top';
   hostId?: string | null;
   runId?: string | null;
-  provider?: 'claude' | 'codex' | null;
+  provider?: 'claude' | 'codex' | 'cursor' | null;
   startedAt: string;
   completedAt?: string | null;
   status: 'running' | 'success' | 'failed' | 'partial';
@@ -156,7 +156,7 @@ export function insertCollectionAttempt(db: DatabaseSync, input: {
 
 export function finishAgentTopCollectionAttempt(db: DatabaseSync, input: {
   attemptId: number | bigint;
-  provider: 'claude' | 'codex';
+  provider: 'claude' | 'codex' | 'cursor';
   completedAt: string;
   status: 'success' | 'failed' | 'partial';
   errorCode?: CollectionErrorCode | null;

@@ -168,7 +168,7 @@ export function parseRolesFile(text: string, selectedRunId: string): RoleEntry[]
     }
     const provider = row['provider'];
     if (!(USAGE_PROVIDERS as readonly unknown[]).includes(provider)) {
-      throw previewError('preview_roles_invalid', `Roles file ${where}.provider must be claude or codex.`);
+      throw previewError('preview_roles_invalid', `Roles file ${where}.provider must be claude, codex, or cursor.`);
     }
     const sessionId = validId(row['sessionId'], `${where}.sessionId`);
     let dispatchId: string | null = null;

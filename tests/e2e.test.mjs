@@ -75,6 +75,7 @@ function baseStubEnv(appHome) {
     ORCA_TELEMETRY_COLLECT_RUN: 'run_e2e_synthetic',
     AGENT_TOP_STUB_CLAUDE_PATH: join(e2e, 'agent-top-claude.json'),
     AGENT_TOP_STUB_CODEX_PATH: join(e2e, 'agent-top-codex.json'),
+    AGENT_TOP_STUB_CURSOR_PATH: join(e2e, 'agent-top-cursor.json'),
   };
 }
 
@@ -245,6 +246,17 @@ describe.sequential('T38 E2E offline pipeline', () => {
     const claudeKey = sessionKey('claude', 'agent-top', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01');
     const subKey = sessionKey('claude', 'agent-top', 'agent-0000000000000001');
     assert.notEqual(claudeKey, subKey, 'subagent is separate session namespace');
+    const cursorKey = sessionKey('cursor', 'agent-top', 'cursor-e2e-zero-0001');
+    const cursorSnap = dbHandle.db
+      .prepare(
+        `SELECT cost_kind, cost_amount_usd, claude_token_allocation
+         FROM usage_snapshots WHERE session_key = ?`,
+      )
+      .get(cursorKey);
+    assert.ok(cursorSnap, 'cursor zero-token row must import');
+    assert.equal(cursorSnap.cost_kind, 'unknown');
+    assert.equal(cursorSnap.cost_amount_usd, null);
+    assert.equal(cursorSnap.claude_token_allocation, 'unknown');
     const sessionRows = dbHandle.db
       .prepare('SELECT COUNT(*) AS c FROM usage_sessions')
       .get().c;

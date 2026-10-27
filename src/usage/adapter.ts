@@ -12,7 +12,7 @@ export const DEFAULT_AGENT_TOP_MAX_BUFFER = 20 * 1024 * 1024;
 
 /** Allowlisted read-only query — documented counted_sessions columns only. */
 export const COUNTED_SESSIONS_QUERY =
-  "SELECT harness, session_id, model, project, input, output, cache_read, cache_write_5m, cache_write_1h, cache_write_unsplit, cost_usd, unpriced_tokens, parent_session_id FROM counted_sessions WHERE harness IN ('claude', 'codex')";
+  "SELECT harness, session_id, model, project, input, output, cache_read, cache_write_5m, cache_write_1h, cache_write_unsplit, cost_usd, unpriced_tokens, parent_session_id FROM counted_sessions WHERE harness IN ('claude', 'codex', 'cursor')";
 
 const DENIED_SUBCOMMANDS = new Set([
   'sync',

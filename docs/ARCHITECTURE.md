@@ -3,7 +3,7 @@
 ```text
 GitHub Projects V2 --(chỉ đọc)--> Collector GitHub
 Luồng Orca được giám sát/thủ công --> Collector Orca
-Session Claude/Codex từ agent-top --> Collector mức sử dụng
+Session Claude/Codex/Cursor từ agent-top --> Collector mức sử dụng
                  \                |                /
                  Bản ghi đã chuẩn hóa
                           |

@@ -15,7 +15,7 @@ import type { RouteResult } from './router.js';
 
 const LIST_USAGE = 'Usage: orca-telemetry suggest-links [--json]';
 const APPLY_USAGE =
-  'Usage: orca-telemetry suggest-links apply --issue <sel> --provider claude|codex --session <id> --yes [--json]';
+  'Usage: orca-telemetry suggest-links apply --issue <sel> --provider claude|codex|cursor --session <id> --yes [--json]';
 
 export async function runSuggestLinks(
   rest: string[],

@@ -14,7 +14,11 @@ import {
   readAgentTopVersion,
   schemaDrift,
 } from '../usage/adapter.js';
-import { parseClaudeSessions, parseCodexSessions } from '../usage/sessions.js';
+import {
+  parseClaudeSessions,
+  parseCodexSessions,
+  parseCursorSessions,
+} from '../usage/sessions.js';
 import { CliError, EXIT_SOURCE_UNAVAILABLE, EXIT_USAGE, usageError } from '../errors.js';
 import { assertRuntimeReachable, invokeOrcaReadOnly, readOrcaVersion } from '../orca/adapter.js';
 import { collectOrcaRunProvenance } from '../orca/run-provenance.js';
@@ -128,9 +132,13 @@ async function readProviders(
     try {
       out[provider] = {
         status: 'ok',
-        sessions: provider === 'claude'
-          ? parseClaudeSessions(rows, observedAt, version)
-          : parseCodexSessions(rows, observedAt, version),
+        sessions:
+          provider === 'claude'
+            ? parseClaudeSessions(rows, observedAt, version)
+            : provider === 'codex'
+              ? parseCodexSessions(rows, observedAt, version)
+              : parseCursorSessions(rows, observedAt, version),
+
       };
     } catch (err) {
       out[provider] = { status: 'error', errorCode: sourceErrorCode(err) };

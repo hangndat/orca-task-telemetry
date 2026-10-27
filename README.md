@@ -1,6 +1,6 @@
 # Orca Task Telemetry
 
-**CLI Node.js đọc GitHub Projects V2, metadata Orca và mức sử dụng Claude Code / Codex (qua agent-top), lưu SQLite cục bộ và báo cáo theo Issue/Project — không sửa repository ứng dụng.**
+**CLI Node.js đọc GitHub Projects V2, metadata Orca và mức sử dụng Claude Code / Codex / Cursor (qua agent-top), lưu SQLite cục bộ và báo cáo theo Issue/Project — không sửa repository ứng dụng.**
 
 ```text
 GitHub Project → GitHub Issue → Orca (read-only) → agent-top sessions → SQLite → báo cáo CLI
@@ -16,7 +16,7 @@ Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, 
 | pnpm | 10.x (khuyến nghị) | `packageManager` trong `package.json`. |
 | GitHub CLI | `gh` đã đăng nhập | **`read:project`** cho `collect` / `writeback` dry-run; scope **`project`** chỉ khi `writeback --apply` (`gh auth refresh -s project`). `doctor` cảnh báo nếu thiếu `read:project`. |
 | Orca | CLI đọc-only **1.4.241** (đã verify) | `doctor` kiểm tra `--version`. `collect` enumerates runs qua **`run-list`** rồi `worker-list` (mặc định). Pin một run (tùy chọn): `ORCA_TELEMETRY_COLLECT_RUN=<run_id>`. |
-| agent-top | **0.27.1** (tùy chọn cho usage) | `collect` đọc `sql --json` trên view `counted_sessions` (ADR 0001). Pin binary: `ORCA_TELEMETRY_AGENT_TOP`. **Không** gọi `sync`. Thiếu binary → collect **partial** (exit 5), không import session. |
+| agent-top | **0.27.1** (tùy chọn cho usage) | `collect` đọc `sql --json` trên view `counted_sessions` harness `claude`/`codex`/`cursor` (ADR 0001). Pin binary: `ORCA_TELEMETRY_AGENT_TOP`. **Không** gọi `sync`. Thiếu binary → collect **partial** (exit 5), không import session. Live 0.27.1 thường **0 hàng cursor** (process table only). |
 
 Chi tiết lệnh và schema: [docs/discovery.md](docs/discovery.md).
 
@@ -60,6 +60,7 @@ orca-telemetry init --project https://github.com/users/OWNER/projects/4 --json
 orca-telemetry collect --json
 # (tùy chọn) ORCA_TELEMETRY_COLLECT_RUN=run_<hex> orca-telemetry collect --json
 orca-telemetry link --issue OWNER/REPO#123 --provider claude --session '<session-uuid>' --json
+# provider cũng chấp nhận: codex | cursor
 orca-telemetry report tasks --json
 orca-telemetry report task OWNER/REPO#123 --json
 orca-telemetry report project --json
@@ -137,7 +138,8 @@ Live CodeBurn trước ADR 0001 **đã superseded** — identity không chuyển
 
 - Token cache Claude (`cacheRead` / `cacheWrite`) và reasoning Codex được lưu trong snapshot; báo cáo tách provider/model.
 - Subagent Claude là **session riêng** (`agent-…`), không gộp vào parent.
-- Cost: `estimated_api_equivalent` hoặc `unknown`; báo cáo project/tasks/unmapped phải khớp phân hoạch known/unknown (xem `assertUsageIntegrity` / E2E).
+- Cursor: cùng cột token agent-top đã verify; hàng tokens=0 → cost/`tokenAllocation` **unknown** (không coi zeros là free usage đo được). Live agent-top 0.27.1 thường chưa sync cursor vào SQL — xem [docs/discovery.md](docs/discovery.md).
+- Cost: `estimated_api_equivalent` hoặc `unknown`; báo cáo project/tasks/unmapped phải khớp phân hoạch known/unknown (xem `assertUsageIntegrity` / E2E). `unknown` ≠ `0`.
 
 ## Kiểm thử
 
@@ -152,7 +154,8 @@ Bằng chứng fixture vs live: [docs/mvp-validation.md](docs/mvp-validation.md)
 
 - `writeback` không `--apply` thì không ghi Project; `--apply` chỉ ghi NUMBER field đã chọn (opt-in). Không cài agent config trong repo người dùng (xem [BACKLOG.md](BACKLOG.md)).
 - Thiếu `read:project` → GitHub collector lỗi; có thể vẫn partial nếu Orca/agent-top ok.
-- agent-top không có trên PATH → dùng `ORCA_TELEMETRY_AGENT_TOP` hoặc cài 0.27.1; nếu vẫn thiếu → không import session. Schema v4 xóa snapshot CodeBurn cũ.
+- agent-top không có trên PATH → dùng `ORCA_TELEMETRY_AGENT_TOP` hoặc cài 0.27.1; nếu vẫn thiếu → không import session. Schema v4 xóa snapshot CodeBurn cũ; v7 nới provider CHECK thêm `cursor`.
+- Cursor usage phụ thuộc agent-top sync vào `counted_sessions`; 0.27.1: process table only → OTT import 0 session live cho đến khi agent-top có hàng.
 - Bằng chứng tích hợp live trên máy dev có thể nằm ngoài repo (ví dụ `/tmp/…`); không thay thế CI — xem matrix trong `docs/mvp-validation.md`.
 - Evidence CodeBurn @ `818ca30` / Issue #3 **superseded** sau ADR 0001. Live agent-top: Issue **#71** ↔ session `3a8a1086-…` (DB `/tmp/orca-telemetry-agent-top-home`). Independent acceptance **PASS** @ `5b464e3` ([docs/reviews/mvp-5b464e3.md](docs/reviews/mvp-5b464e3.md)); live `/tmp` không thay CI chain-of-custody.
 - Chưa publish npm công khai.

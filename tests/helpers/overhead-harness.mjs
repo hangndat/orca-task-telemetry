@@ -29,9 +29,12 @@ export function insertRunGraph(db, host, run, dispatchIds) {
 }
 
 function tokensJsonFor(provider, overrides = {}) {
-  const base = provider === 'codex'
-    ? { provider: 'codex', input: 10, output: 5, cacheRead: 1, cacheWrite: 0, reasoning: null }
-    : { provider: 'claude', input: 8, output: 4, cacheRead: 2, cacheWrite: 1 };
+  const base =
+    provider === 'codex'
+      ? { provider: 'codex', input: 10, output: 5, cacheRead: 1, cacheWrite: 0, reasoning: null }
+      : provider === 'cursor'
+        ? { provider: 'cursor', input: 8, output: 4, cacheRead: 2, cacheWrite: 1 }
+        : { provider: 'claude', input: 8, output: 4, cacheRead: 2, cacheWrite: 1 };
   return JSON.stringify({ ...base, ...overrides });
 }
 

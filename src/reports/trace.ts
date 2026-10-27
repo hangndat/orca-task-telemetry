@@ -107,7 +107,7 @@ function sessionsForIssue(db: DatabaseSync, issueNodeId: string): TraceSession[]
     WHERE sl.issue_node_id = ? ORDER BY sl.session_key`).all(issueNodeId) as SessionRow[];
   return rows.map(row => {
     if (row.method !== 'manual') throw dbSchemaError('Unexpected session link method.');
-    if (!['claude', 'codex'].includes(row.provider) || row.source !== 'agent-top') {
+    if (!['claude', 'codex', 'cursor'].includes(row.provider) || row.source !== 'agent-top') {
       throw dbSchemaError('Invalid usage session provenance.');
     }
     let tokens: TokenUsage | null = null;

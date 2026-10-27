@@ -21,7 +21,7 @@ const DISPATCH_ID = 'ctx_005f2513ac06';
 const WORKTREE_ID =
   '161803f0-8d29-4bf2-90d8-b774907ef80d::/Users/admin/orca/workspaces/orca-task-telemetry/Foundation';
 
-test('sessionKey round-trip for claude and codex', () => {
+test('sessionKey round-trip for claude, codex, and cursor', () => {
   const claudeKey = sessionKey('claude', 'agent-top', CLAUDE_UUID);
   assert.equal(claudeKey, `claude:agent-top:${CLAUDE_UUID}`);
   assert.deepEqual(parseSessionKey(claudeKey), {
@@ -36,6 +36,15 @@ test('sessionKey round-trip for claude and codex', () => {
     provider: 'codex',
     source: 'agent-top',
     rawId: CODEX_UUID,
+  });
+
+  const cursorId = 'cursor-session-0001';
+  const cursorKey = sessionKey('cursor', 'agent-top', cursorId);
+  assert.equal(cursorKey, `cursor:agent-top:${cursorId}`);
+  assert.deepEqual(parseSessionKey(cursorKey), {
+    provider: 'cursor',
+    source: 'agent-top',
+    rawId: cursorId,
   });
 });
 
@@ -83,7 +92,7 @@ test('orcaExecutionKey round-trip with dispatch and worktree rawId containing co
 });
 
 test('contract constants are frozen vocabulary', () => {
-  assert.deepEqual([...USAGE_PROVIDERS], ['claude', 'codex']);
+  assert.deepEqual([...USAGE_PROVIDERS], ['claude', 'codex', 'cursor']);
   assert.deepEqual([...USAGE_SOURCES], ['agent-top']);
   assert.equal(ORCA_EXECUTION_PREFIX, 'orca');
   assert.equal(CLAUDE_SUBAGENT_POLICY, 'separate_session_per_row');

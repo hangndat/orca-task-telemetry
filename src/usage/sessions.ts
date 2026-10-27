@@ -60,8 +60,8 @@ function parseRow(
   agentTopVersion: string,
 ): ParsedUsage {
   const harness = row['harness'];
-  if (harness !== 'claude' && harness !== 'codex') {
-    throw schemaDrift(`${pathPrefix}.harness`, 'expected claude or codex');
+  if (harness !== 'claude' && harness !== 'codex' && harness !== 'cursor') {
+    throw schemaDrift(`${pathPrefix}.harness`, 'expected claude, codex, or cursor');
   }
   const sessionId = row['session_id'];
   if (typeof sessionId !== 'string' || sessionId.length === 0) {
@@ -88,6 +88,9 @@ function parseRow(
   const output = parseNonNegativeInt(row['output'], `${pathPrefix}.output`);
   const cacheRead = parseNonNegativeInt(row['cache_read'], `${pathPrefix}.cache_read`);
   const cacheWrite = cacheWriteTotal(row, pathPrefix);
+  const tokenSum = input + output + cacheRead + cacheWrite;
+  /** Cursor process-table rows often show honest zeros — not measured free usage. */
+  const cursorZeroTokens = harness === 'cursor' && tokenSum === 0;
 
   const tokens =
     harness === 'claude'
@@ -98,34 +101,51 @@ function parseRow(
           cacheRead,
           cacheWrite,
         }
-      : {
-          provider: 'codex' as const,
-          input,
-          output,
-          cacheRead,
-          cacheWrite,
-          reasoning: null,
-        };
+      : harness === 'codex'
+        ? {
+            provider: 'codex' as const,
+            input,
+            output,
+            cacheRead,
+            cacheWrite,
+            reasoning: null,
+          }
+        : {
+            provider: 'cursor' as const,
+            input,
+            output,
+            cacheRead,
+            cacheWrite,
+          };
+
+  const cost = cursorZeroTokens
+    ? {
+        amountUsd: null,
+        kind: 'unknown' as const,
+        source: { tool: 'agent-top' as const, version: agentTopVersion },
+      }
+    : mapAgentTopCost(
+        row['cost_usd'],
+        row['unpriced_tokens'],
+        agentTopVersion,
+        `${pathPrefix}.cost_usd`,
+      );
 
   const snapshot: UsageSnapshot = {
     sessionKey: key,
     observedAt,
     tokens,
-    cost: mapAgentTopCost(
-      row['cost_usd'],
-      row['unpriced_tokens'],
-      agentTopVersion,
-      `${pathPrefix}.cost_usd`,
-    ),
+    cost,
   };
 
+  const modelKnown = models !== null && models.length === 1;
   return {
     session,
     snapshot,
     metadata: {
       models,
       projectHint,
-      tokenAllocation: models === null || models.length !== 1 ? 'unknown' : 'known',
+      tokenAllocation: cursorZeroTokens || !modelKnown ? 'unknown' : 'known',
       parentSessionId,
     },
   };
@@ -169,6 +189,16 @@ export function parseCodexSessions(
 ): ParsedUsage[] {
   return parseCountedSessions(rows, observedAt, agentTopVersion).filter(
     (row) => row.session.provider === 'codex',
+  );
+}
+
+export function parseCursorSessions(
+  rows: unknown[],
+  observedAt: string,
+  agentTopVersion: string,
+): ParsedUsage[] {
+  return parseCountedSessions(rows, observedAt, agentTopVersion).filter(
+    (row) => row.session.provider === 'cursor',
   );
 }
 

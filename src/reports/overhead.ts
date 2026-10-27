@@ -19,7 +19,7 @@ const ATTEMPT_FRESHNESS_SECONDS = 24 * 60 * 60;
 
 export type OverheadRole = 'coordinator' | 'worker';
 
-export type OverheadSourceScope = 'orca' | 'claude' | 'codex';
+export type OverheadSourceScope = 'orca' | 'claude' | 'codex' | 'cursor';
 
 export type OverheadSourceStatus = {
   status: 'running' | 'success' | 'failed' | 'partial' | 'missing';
@@ -338,7 +338,7 @@ function firstUnknownReason(
   coordinator: OverheadRoleUsage,
   workers: OverheadRoleUsage,
 ): OverheadUnknownReason | null {
-  const scopes: OverheadSourceScope[] = ['orca', 'claude', 'codex'];
+  const scopes: OverheadSourceScope[] = ['orca', 'claude', 'codex', 'cursor'];
   if (scopes.some((scope) => sourceStatus[scope].status !== 'success')) {
     return 'partial_source';
   }
@@ -421,6 +421,7 @@ export function buildOverheadReport(
     orca: loadOrcaSourceStatus(ctx.db, hostId, runId, nowMs),
     claude: loadProviderSourceStatus(ctx.db, 'claude', nowMs),
     codex: loadProviderSourceStatus(ctx.db, 'codex', nowMs),
+    cursor: loadProviderSourceStatus(ctx.db, 'cursor', nowMs),
   };
 
   const rows = loadRoleRows(ctx.db, hostId, runId);
@@ -493,6 +494,7 @@ export function formatOverheadReportText(report: OverheadReport): string {
     `Source status: orca=${formatSourceStatus(report.sourceStatus.orca)}`,
     `               claude=${formatSourceStatus(report.sourceStatus.claude)}`,
     `               codex=${formatSourceStatus(report.sourceStatus.codex)}`,
+    `               cursor=${formatSourceStatus(report.sourceStatus.cursor)}`,
     `Coverage: ${report.coverage}; classifiedSessionCount=${report.classifiedSessionCount}; ` +
       `unclassifiedSessionCount=${report.unclassifiedSessionCount ?? 'null'}`,
     '',

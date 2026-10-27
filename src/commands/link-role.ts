@@ -67,7 +67,7 @@ function parseLinkRoleArgs(rest: string[]): LinkRoleArgs {
     throw usageError('Missing --run.', 'Coordinator role links require --run.');
   }
   if (!provider || !(USAGE_PROVIDERS as readonly string[]).includes(provider)) {
-    throw usageError('Missing or invalid --provider.', 'Use --provider claude or codex.');
+    throw usageError('Missing or invalid --provider.', 'Use --provider claude, codex, or cursor.');
   }
   if (!session) {
     throw usageError('Missing --session.', 'Pass the raw provider session id.');

@@ -53,7 +53,7 @@ function parseUnlinkRoleArgs(rest: string[]): UnlinkRoleArgs {
     throw usageError('Missing or invalid --role.', 'Use --role coordinator or worker.');
   }
   if (!provider || !(USAGE_PROVIDERS as readonly string[]).includes(provider)) {
-    throw usageError('Missing or invalid --provider.', 'Use --provider claude or codex.');
+    throw usageError('Missing or invalid --provider.', 'Use --provider claude, codex, or cursor.');
   }
   if (!session) {
     throw usageError('Missing --session.', 'Pass the raw provider session id.');

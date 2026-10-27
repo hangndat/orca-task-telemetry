@@ -280,7 +280,7 @@ test('schema migrates from v1 and v2 through agent-top+V1.4; issues remain, Code
     db.close();
     const migrated = openTelemetryDatabase({ dbPath });
     try {
-      assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version, 6);
+      assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version, 7);
       assert.equal(migrated.db.prepare('SELECT COUNT(*) AS n FROM session_links').get().n, 0);
       assert.equal(migrated.db.prepare('SELECT COUNT(*) AS n FROM issues').get().n, 1);
       assert.equal(migrated.db.prepare('PRAGMA foreign_key_check').all().length, 0);
