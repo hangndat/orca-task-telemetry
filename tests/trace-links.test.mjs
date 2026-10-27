@@ -263,7 +263,7 @@ test('a later successful link read refreshes other stored relations without remo
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
-test('schema v4 migrates from v1 and v2; issues remain, CodeBurn usage links dropped', () => {
+test('schema migrates from v1 and v2 through agent-top+V1.4; issues remain, CodeBurn usage links dropped', () => {
   for (const version of [1, 2]) {
     const root = mkdtempSync(join(tmpdir(), `orca-trace-v${version}-`));
     const dbPath = join(root, 'legacy.sqlite');
@@ -280,7 +280,7 @@ test('schema v4 migrates from v1 and v2; issues remain, CodeBurn usage links dro
     db.close();
     const migrated = openTelemetryDatabase({ dbPath });
     try {
-      assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version, 4);
+      assert.equal(migrated.db.prepare('PRAGMA user_version').get().user_version, 6);
       assert.equal(migrated.db.prepare('SELECT COUNT(*) AS n FROM session_links').get().n, 0);
       assert.equal(migrated.db.prepare('SELECT COUNT(*) AS n FROM issues').get().n, 1);
       assert.equal(migrated.db.prepare('PRAGMA foreign_key_check').all().length, 0);

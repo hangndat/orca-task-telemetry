@@ -20,18 +20,29 @@ if (argv.length === 1 && argv[0] === '--version') {
     process.exit(0),
   );
 } else if (argv[0] === 'sql' && argv[1] === '--json') {
-  const combined = [
-    ...loadRows(process.env.AGENT_TOP_STUB_CLAUDE_PATH),
-    ...loadRows(process.env.AGENT_TOP_STUB_CODEX_PATH),
-  ];
-  const body = `${JSON.stringify(combined)}\n`;
-  const stderr = process.env.AGENT_TOP_STUB_STDERR ?? '';
-  const code = Number.parseInt(process.env.AGENT_TOP_STUB_EXIT_CODE ?? '0', 10);
-  const done = () => process.exit(Number.isFinite(code) ? code : 0);
-  if (stderr.length > 0) {
-    process.stderr.write(stderr, () => process.stdout.write(body, done));
+  if (process.env.AGENT_TOP_STUB_CLAUDE_INVALID_JSON === '1'
+    || process.env.AGENT_TOP_STUB_INVALID_JSON === '1') {
+    process.stdout.write('SECRET_INVALID_JSON{not-json\n', () => process.exit(0));
   } else {
-    process.stdout.write(body, done);
+    const combined = [
+      ...loadRows(process.env.AGENT_TOP_STUB_CLAUDE_PATH),
+      ...loadRows(process.env.AGENT_TOP_STUB_CODEX_PATH),
+    ];
+    const body = `${JSON.stringify(combined)}\n`;
+    const stderr = process.env.AGENT_TOP_STUB_STDERR ?? '';
+    const code = Number.parseInt(
+      process.env.AGENT_TOP_STUB_EXIT_CODE
+        ?? process.env.AGENT_TOP_STUB_CLAUDE_EXIT_CODE
+        ?? process.env.AGENT_TOP_STUB_CODEX_EXIT_CODE
+        ?? '0',
+      10,
+    );
+    const done = () => process.exit(Number.isFinite(code) ? code : 0);
+    if (stderr.length > 0) {
+      process.stderr.write(stderr, () => process.stdout.write(body, done));
+    } else {
+      process.stdout.write(body, done);
+    }
   }
 } else {
   process.stderr.write(`agent-top-router: unhandled ${JSON.stringify(argv)}\n`);

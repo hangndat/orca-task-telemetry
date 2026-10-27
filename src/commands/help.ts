@@ -6,9 +6,12 @@ const IMPLEMENTED = new Set([
   'init',
   'collect',
   'link',
+  'link-role',
+  'unlink-role',
   'report',
   'trace',
   'writeback',
+  'preview',
 ]);
 
 const TOP_LEVEL = [
@@ -28,6 +31,7 @@ const REPORT_SUBCOMMANDS = [
   { name: 'trace <issue-id>', summary: 'Issue→session→PR→commit evidence and usage' },
   { name: 'project', summary: 'Project-level totals with deduped linked sessions' },
   { name: 'hierarchy', summary: 'Direct and inclusive cost through native Issue parents' },
+  { name: 'overhead', summary: 'Coordinator vs worker usage for one Orca Run' },
   { name: 'unmapped', summary: 'Sessions without an Issue link and link suggestions' },
 ];
 
@@ -127,6 +131,64 @@ export function commandHelpText(command: string): string {
       '--rollup inclusive requires at least one --issue.',
     ].join('\n') + '\n';
   }
+if (command === 'link-role') {
+    return [
+      'orca-task-telemetry link-role — link an agent-top session to a Run role',
+      '',
+      'Usage:',
+      '  orca-telemetry link-role --run <run-id> [--host <host-id>] --role coordinator \\',
+      '    --provider claude|codex --session <raw-id> --verifier <operator-id> \\',
+      '    [--evidence-note ids_visible_same_session|operator_observed_same_session] \\',
+      '    --confirm-same-session [--json]',
+      '  orca-telemetry link-role --dispatch <dispatch-id> [--host <host-id>] [--run <run-id>] \\',
+      '    --role worker --provider claude|codex --session <raw-id> \\',
+      '    --verifier <operator-id> [--evidence-note ...] --confirm-same-session [--json]',
+      '',
+      'Requires an already-collected usage session, Orca Run, and (for worker) Dispatch',
+      'in the exact host/run. No fuzzy matching and no Issue auto-link. A session already',
+      'linked to a different role/Run/Dispatch is a conflict; an exact repeat is idempotent.',
+      '',
+      'Coordinator links require --run; --host may be omitted only when exactly one stored',
+      'Run matches that run ID. Worker links require --dispatch; --host and/or --run may be',
+      'omitted only when the supplied selectors narrow stored Dispatches to exactly one',
+      '(host,run,dispatch) tuple. Any selector you do pass is an exact filter, never a hint:',
+      '0 or multiple matches is a safe-candidate error, never a first/default pick.',
+      '--confirm-same-session asserts both IDs were identified in one observed session.',
+    ].join('\n') + '\n';
+  }
+if (command === 'unlink-role') {
+    return [
+      'orca-task-telemetry unlink-role — remove an explicit session role link',
+      '',
+      'Usage:',
+      '  orca-telemetry unlink-role --host <host-id> --run <run-id> --role coordinator \\',
+      '    --provider claude|codex --session <raw-id> --verifier <operator-id> [--json]',
+      '  orca-telemetry unlink-role --host <host-id> --run <run-id> --role worker \\',
+      '    --dispatch <dispatch-id> --provider claude|codex --session <raw-id> \\',
+      '    --verifier <operator-id> [--json]',
+      '',
+      'Selectors must match the existing link exactly. Writes a durable audit of the',
+      'removed link and both verifiers (no raw evidence/prompt); delete+audit is atomic.',
+      'Unrelated Issue links are unaffected.',
+    ].join('\n') + '\n';
+  }
+if (command === 'preview') {
+    return [
+      'orca-task-telemetry preview — read-only, in-memory UAT previews',
+      '',
+      'Usage:',
+      '  orca-telemetry preview overhead --run <run-id> --roles <roles.json> [--json]',
+      '',
+      'Reads the Orca Run and agent-top sessions (read-only) and sums only the sessions',
+      'listed in the roles file: {"schemaVersion":1,"runId":"<exact --run>","entries":[{"role":"coordinator|worker",',
+      '"provider":"claude|codex","sessionId":"<raw-id>","dispatchId":"<worker only>"}]}.',
+      'Mappings are operator-supplied and unverified; session matching uses exact IDs.',
+      'Raw session IDs stay input-side and are omitted from output. Writes nothing',
+      '(no telemetry DB). Coverage is unknown; Run-wide ratios are always null.',
+      'See docs/UAT-PREVIEW.md.',
+    ].join('\n') + '\n';
+  }
+
   if (command === 'doctor') {
     return [
       'orca-telemetry doctor — check local toolchain',

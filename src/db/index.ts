@@ -26,3 +26,15 @@ export {
   type UsageImportRow,
   type CollectionSource,
 } from './repository.js';
+
+export {
+  scopedExecutionKey,
+  insertScopedExecution,
+  insertManualRoleLink,
+  insertRoleLinkAudit,
+  insertCollectionAttempt,
+  finishAgentTopCollectionAttempt,
+  verifierIdentityHash,
+  VERIFIER_PATTERN,
+  type ManualEvidenceNote,
+} from './run-provenance.js';

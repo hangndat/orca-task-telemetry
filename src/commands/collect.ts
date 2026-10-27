@@ -15,10 +15,17 @@ import {
   EXIT_PARTIAL,
   EXIT_SOURCE_UNAVAILABLE,
   EXIT_SUCCESS,
+  usageError,
 } from '../errors.js';
 import { normalizeProjectMemberships } from '../github/memberships.js';
 import { readProjectItems } from '../github/items.js';
 import { openTelemetryDatabase } from '../db/index.js';
+import {
+  finishAgentTopCollectionAttempt,
+  insertCollectionAttempt,
+  type CollectionErrorCode,
+} from '../db/run-provenance.js';
+import { collectOrcaRunProvenance } from '../orca/run-provenance.js';
 import {
   countRows,
   importUsageSnapshots,
@@ -43,7 +50,7 @@ export type CollectSourceName = 'github' | 'orca' | 'agent-top';
 
 export type CollectSourceResult = {
   source: CollectSourceName;
-  status: 'ok' | 'error';
+  status: 'ok' | 'error' | 'partial';
   counts?: Record<string, number>;
   error?: { code: string; message: string };
 };
@@ -195,9 +202,37 @@ async function collectOrca(
 async function collectAgentTop(
   db: import('node:sqlite').DatabaseSync,
   observedAt: string,
+  now: () => string,
 ): Promise<CollectSourceResult> {
+  const providers = ['claude', 'codex'] as const;
+  const attempts = new Map<(typeof providers)[number], number | bigint>();
+  db.exec('BEGIN IMMEDIATE');
   try {
-    const version = await readAgentTopVersion();
+    for (const provider of providers) {
+      attempts.set(provider, insertCollectionAttempt(db, {
+        source: 'agent-top', provider, startedAt: now(), status: 'running',
+      }));
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+
+  function errorCode(err: unknown, phase: 'source' | 'import'): CollectionErrorCode {
+    if (phase === 'import') return 'storage_error';
+    if (err instanceof CliError) {
+      if (err.code === 'agent_top_version_unsupported') return 'source_version_unsupported';
+      if (err.code === 'agent_top_schema_drift') return 'source_invalid_json';
+      if (err.code === 'agent_top_runtime_unavailable') return 'source_unavailable';
+    }
+    return 'source_error';
+  }
+
+  let version: string;
+  let rows: UsageImportRow[];
+  try {
+    version = await readAgentTopVersion();
     if (version !== AGENT_TOP_VERIFIED_VERSION) {
       throw new CliError({
         code: 'agent_top_version_unsupported',
@@ -213,8 +248,15 @@ async function collectAgentTop(
         exitCode: EXIT_SOURCE_UNAVAILABLE,
       });
     }
+    if (result.stdout.trim().length === 0) {
+      throw new CliError({
+        code: 'agent_top_schema_drift',
+        message: 'agent-top sql returned empty stdout.',
+        exitCode: EXIT_SOURCE_UNAVAILABLE,
+      });
+    }
     const array = parseSessionsJsonArray(result.stdout);
-    const rows: UsageImportRow[] = parseCountedSessions(array, observedAt, version).map(
+    rows = parseCountedSessions(array, observedAt, version).map(
       (parsed) =>
         toImportRow({
           ...parsed,
@@ -225,19 +267,97 @@ async function collectAgentTop(
           },
         }),
     );
+  } catch (err) {
+    for (const provider of providers) {
+      finishAgentTopCollectionAttempt(db, {
+        attemptId: attempts.get(provider)!, provider, completedAt: now(),
+        status: 'failed', errorCode: errorCode(err, 'source'),
+      });
+    }
+    return { source: 'agent-top', status: 'error', error: mapSourceError(err) };
+  }
+
+  try {
     importUsageSnapshots(db, rows);
+  } catch (err) {
+    for (const provider of providers) {
+      finishAgentTopCollectionAttempt(db, {
+        attemptId: attempts.get(provider)!, provider, completedAt: now(),
+        status: 'failed', errorCode: errorCode(err, 'import'),
+      });
+    }
+    return { source: 'agent-top', status: 'error', error: mapSourceError(err) };
+  }
+
+  for (const provider of providers) {
+    const providerRows = rows.filter((row) => row.session.provider === provider);
+    finishAgentTopCollectionAttempt(db, {
+      attemptId: attempts.get(provider)!, provider, completedAt: now(),
+      status: 'success',
+      counters: { sessions: providerRows.length },
+    });
+  }
+  return {
+    source: 'agent-top',
+    status: 'ok',
+    counts: { sessions: rows.length },
+  };
+}
+
+async function collectOrcaRun(runId: string): Promise<CollectSourceResult> {
+  const sourceHostId = 'local';
+  let counters = { runs: 0, tasks: 0, dispatches: 0, workers: 0, pages: 0 };
+  try {
+    const version = await readOrcaVersion();
+    const statusResult = await invokeOrcaReadOnly(['status', '--json']);
+    if (statusResult.exitCode !== 0) throw new Error('Orca status failed.');
+    let statusJson: unknown;
+    try {
+      statusJson = JSON.parse(statusResult.stdout) as unknown;
+    } catch {
+      throw new Error('Orca status returned invalid JSON.');
+    }
+    assertRuntimeReachable(statusJson);
+    const root = statusJson as Record<string, unknown>;
+    const source = root['result'] as Record<string, unknown>;
+    const target = source['target'] as Record<string, unknown> | null;
+    if (target?.['kind'] !== 'local') {
+      throw new Error('Orca source host is not verified as local.');
+    }
+    const provenance = await collectOrcaRunProvenance(runId, {
+      sourceHostId, readVersion: async () => version,
+    });
+    counters = {
+      runs: provenance.complete ? 1 : 0,
+      tasks: provenance.tasks.length,
+      dispatches: provenance.dispatches.length,
+      workers: provenance.workers.length,
+      pages: provenance.pagesRead,
+    };
+    if (!provenance.complete) {
+      const errorCode = provenance.errors.some((e) => e.code.endsWith('_limit') ||
+        e.code === 'unprovable_completeness' || e.code === 'cursor_loop')
+        ? 'collection_limit' : 'source_error';
+      return {
+        source: 'orca', status: 'partial', counts: counters,
+        error: { code: errorCode, message: 'Orca Run provenance is incomplete.' },
+      };
+    }
     return {
-      source: 'agent-top',
-      status: 'ok',
-      counts: { sessions: rows.length },
+      source: 'orca', status: 'partial', counts: counters,
+      error: {
+        code: 'orca_source_host_unverified',
+        message: 'Orca local host has no verified durable source identity.',
+      },
     };
   } catch (err) {
-    return { source: 'agent-top', status: 'error', error: mapSourceError(err) };
+    return { source: 'orca', status: 'partial', error: mapSourceError(err), counts: counters };
   }
 }
 
 function computeExitCode(sources: CollectSourceResult[]): number {
   const errors = sources.filter((s) => s.status === 'error').length;
+  if (sources.some((source) => source.status === 'partial')) return EXIT_PARTIAL;
   if (errors === 0) {
     return EXIT_SUCCESS;
   }
@@ -250,6 +370,7 @@ function computeExitCode(sources: CollectSourceResult[]): number {
 export type RunCollectOptions = {
   cwd: string;
   now?: () => string;
+  runId?: string;
 };
 
 export async function runCollectCommand(
@@ -269,28 +390,40 @@ export async function runCollectCommand(
   });
   const observedAt = (options.now ?? (() => new Date().toISOString()))();
 
-  const sources: CollectSourceResult[] = [];
-  sources.push(await collectGithub(profile.project.id, handle.db));
-  sources.push(await collectOrca(handle.db));
-  sources.push(await collectAgentTop(handle.db, observedAt));
+  try {
+    const now = options.now ?? (() => new Date().toISOString());
+    const sources: CollectSourceResult[] = [];
+    sources.push(await collectGithub(profile.project.id, handle.db));
+    sources.push(options.runId === undefined
+      ? await collectOrca(handle.db)
+      : await collectOrcaRun(options.runId));
+    sources.push(await collectAgentTop(handle.db, observedAt, now));
 
-  const exitCode = computeExitCode(sources);
-  const counts = {
-    issues: countRows(handle.db, 'issues'),
-    sessions: countRows(handle.db, 'usage_sessions'),
-    executions: countRows(handle.db, 'executions'),
-    collectionLogs: countRows(handle.db, 'collection_logs'),
-  };
-  handle.close();
-
-  return { sources, exitCode, counts };
+    const exitCode = computeExitCode(sources);
+    const counts = {
+      issues: countRows(handle.db, 'issues'),
+      sessions: countRows(handle.db, 'usage_sessions'),
+      executions: countRows(handle.db, 'executions'),
+      collectionLogs: countRows(handle.db, 'collection_logs'),
+    };
+    return { sources, exitCode, counts };
+  } finally {
+    handle.close();
+  }
 }
 
 export async function runCollect(
-  _rest: string[],
+  rest: string[],
   options: { json: boolean; cwd: string },
 ): Promise<RouteResult> {
-  const payload = await runCollectCommand({ cwd: options.cwd });
+  let runId: string | undefined;
+  if (rest.length > 0) {
+    if (rest.length !== 2 || rest[0] !== '--run' || !rest[1] || rest[1].startsWith('-')) {
+      throw usageError('Expected --run <run-id>.', 'Usage: orca-telemetry collect [--run <run-id>] [--json]');
+    }
+    runId = rest[1];
+  }
+  const payload = await runCollectCommand({ cwd: options.cwd, runId });
   const data = {
     sources: payload.sources,
     database: payload.counts,
@@ -307,7 +440,7 @@ export async function runCollect(
       );
     } else {
       lines.push(
-        `${source.source}: error ${source.error?.code ?? ''} — ${source.error?.message ?? ''}`,
+        `${source.source}: ${source.status} ${source.error?.code ?? ''} — ${source.error?.message ?? ''}`,
       );
     }
   }
