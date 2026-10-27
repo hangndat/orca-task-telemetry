@@ -17,6 +17,15 @@
 
 Fixture: `tests/fixtures/agent-top/`.
 
+### Tip — Orca collect run scope
+
+`collect` enumerates supervised workers qua **`orca orchestration run-list`** (phân trang, giới hạn bounded) trừ khi pin một run:
+
+- **Mặc định:** không set env → mọi run id từ run-list (xem `src/orca/enumerate.ts`, commit `4bb1d77`).
+- **Tùy chọn:** `ORCA_TELEMETRY_COLLECT_RUN=<run_id>` (alias `ORCA_COLLECT_RUN_ID`) → chỉ worker-list cho run đó.
+
+Không cần pin để đạt MVP-04 khi Orca reachable; pin chỉ khi muốn thu hẹp evidence.
+
 
 
 ## V1.3 — GitHub PR/commit trace (2026-10-24 Asia/Manila)
@@ -501,13 +510,15 @@ Chỉ các argv sau (cùng binary `orca`, tùy chọn `--json`, `--pairing-code`
 10. `orca project list` `[--json]`
 11. `orca reference list --worktree <selector>` `[--json]`
 12. `orca reference find --query <https-url>` `[--json]` `[--worktree|--repo …]` `[--limit …]`
-13. `orca orchestration run-list` `[--json]` `[--limit …]` `[--cursor …]`
+13. `orca orchestration run-list` `[--json]` `[--limit …]` `[--cursor …]` — **mặc định** collector dùng lệnh này để lấy danh sách run
 14. `orca orchestration run-show --id <run_id>` `[--json]`
 15. `orca orchestration run-current` `[--json]`
 16. `orca orchestration task-list --run <run_id>` `[--json]` `[--brief]` `[--status …]`
 17. `orca orchestration worker-list` `[--json]` `[--run <run_id>]` `[--terminal-state …]` `[--limit …]`
 18. `orca orchestration worker-show --dispatch <dispatch_id>` `[--json]`
 19. `orca orchestration dispatch-show --task <task_id>` `[--json]` (không `--preamble`)
+
+**Tip collector:** bỏ trống `ORCA_TELEMETRY_COLLECT_RUN` → run-list; set `ORCA_TELEMETRY_COLLECT_RUN=run_<hex>` chỉ khi cần một run (xem mục agent-top tip phía trên / `pinnedCollectRunId`).
 
 **Cấm tuyệt đối:** mọi subcommand không có trong danh sách; đặc biệt `orchestration send|check|reply|ask`, `worker-start|stop|…`, `task-create|update`, `dispatch`, `run-create|run-use|reset`, `worktree create|set|rm`, `reference add|remove`, `repo add|set`, `gate-*`, `inbox`, `terminal *`, `agent launch`, v.v.
 

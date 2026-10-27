@@ -15,8 +15,8 @@ Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, 
 | Node.js | **≥ 24.0.0** (bắt buộc) | CLI thoát mã 3 khi phiên bản không đạt (`checkNodeVersion`). Trên Node &lt; 24, import `node:sqlite` cũng thất bại trước khi chạy lệnh. |
 | pnpm | 10.x (khuyến nghị) | `packageManager` trong `package.json`. |
 | GitHub CLI | `gh` đã đăng nhập | Scope **`read:project`** cần cho Project/items; `doctor` cảnh báo nếu thiếu (`gh auth refresh -s read:project`). |
-| Orca | CLI đọc-only | `doctor` kiểm tra `--version` (ví dụ 1.4.241 trên môi trường thử). |
-| agent-top | **0.27.1** (tùy chọn) | `collect` đọc `sql --json` trên view `counted_sessions` (ADR 0001). Pin binary qua `ORCA_TELEMETRY_AGENT_TOP`. Không gọi `sync`. Không có binary → collect **partial** (exit 5). |
+| Orca | CLI đọc-only **1.4.241** (đã verify) | `doctor` kiểm tra `--version`. `collect` enumerates runs qua **`run-list`** rồi `worker-list` (mặc định). Pin một run (tùy chọn): `ORCA_TELEMETRY_COLLECT_RUN=<run_id>`. |
+| agent-top | **0.27.1** (tùy chọn cho usage) | `collect` đọc `sql --json` trên view `counted_sessions` (ADR 0001). Pin binary: `ORCA_TELEMETRY_AGENT_TOP`. **Không** gọi `sync`. Thiếu binary → collect **partial** (exit 5), không import session. |
 
 Chi tiết lệnh và schema: [docs/discovery.md](docs/discovery.md).
 
@@ -43,7 +43,7 @@ Sau `pnpm pack`, cài tarball vào prefix sạch (xem `scripts/test-pack.mjs`). 
 | `config.json` | Profile repository ↔ GitHub Project. |
 | `telemetry.sqlite` | DB telemetry (schema có version; đọc báo cáo qua kết nối read-only). |
 
-Override binary (test/integration): `ORCA_TELEMETRY_GH`, `ORCA_TELEMETRY_ORCA`, `ORCA_TELEMETRY_AGENT_TOP` — chỉ dùng khi kiểm thử; không bắt buộc trong vận hành thường.
+Override binary (test/integration): `ORCA_TELEMETRY_GH`, `ORCA_TELEMETRY_ORCA`, `ORCA_TELEMETRY_AGENT_TOP`. Thu hẹp Orca collect (tùy chọn): `ORCA_TELEMETRY_COLLECT_RUN` — mặc định **không** set (dùng run-list).
 
 ## Quy trình MVP (repository ứng dụng)
 
@@ -54,9 +54,12 @@ export ORCA_TELEMETRY_HOME=/path/to/telemetry-home-outside-repo
 
 orca-telemetry doctor
 orca-telemetry projects --json
+# init --project chấp nhận: số (4), users|orgs/OWNER/projects/N, hoặc URL github.com
+#   …/users|orgs/OWNER/projects/N[/views/N] (query string bị bỏ qua)
 orca-telemetry init --project https://github.com/users/OWNER/projects/4 --json
 orca-telemetry collect --json
-orca-telemetry link --issue OWNER/REPO#123 --provider codex --session '<session-uuid>' --json
+# (tùy chọn) ORCA_TELEMETRY_COLLECT_RUN=run_<hex> orca-telemetry collect --json
+orca-telemetry link --issue OWNER/REPO#123 --provider claude --session '<session-uuid>' --json
 orca-telemetry report tasks --json
 orca-telemetry report task OWNER/REPO#123 --json
 orca-telemetry report project --json
@@ -101,7 +104,7 @@ Chỉ liên kết khi bạn **chủ đích** chọn cặp Issue + `provider` + `
 
 Một phiên agent-top có thể gồm nhiều task hoặc repo trong lịch sử chat. Khi bạn map **toàn bộ** session vào một Issue, `report task` phản ánh **tổng** token/cost của session đó cho Issue — CLI **không** chia nhỏ usage trong cùng session giữa nhiều Issue. Cost trong báo cáo là `estimated_api_equivalent`, **không** phải hóa đơn billing.
 
-Live CodeBurn trước ADR 0001 không chuyển identity. Phải `collect` + `link` lại trên agent-top. Chi tiết lịch sử: [docs/mvp-validation.md](docs/mvp-validation.md).
+Live CodeBurn trước ADR 0001 **đã superseded** — identity không chuyển. Phải `collect` + `link` lại trên agent-top. Self-check + giới hạn: [docs/mvp-validation.md](docs/mvp-validation.md); DoD map: [docs/mvp-dod-self-check.md](docs/mvp-dod-self-check.md). **Independent Codex re-review vẫn PENDING** — không tuyên bố MVP complete từ self-check.
 
 ### Cache, subagent, cost
 
@@ -124,12 +127,12 @@ Bằng chứng fixture vs live: [docs/mvp-validation.md](docs/mvp-validation.md)
 - Thiếu `read:project` → GitHub collector lỗi; có thể vẫn partial nếu Orca/agent-top ok.
 - agent-top không có trên PATH → dùng `ORCA_TELEMETRY_AGENT_TOP` hoặc cài 0.27.1; nếu vẫn thiếu → không import session. Schema v4 xóa snapshot CodeBurn cũ.
 - Bằng chứng tích hợp live trên máy dev có thể nằm ngoài repo (ví dụ `/tmp/…`); không thay thế CI — xem matrix trong `docs/mvp-validation.md`.
-- Review độc lập @ `818ca30` ghi T41 blocked **trước** link manual; evidence link mới cần **re-review** trên SHA sau docs — không tự gọi MVP hoàn tất.
-- Chưa publish npm; không push/PR trong phạm vi worker docs.
+- Evidence CodeBurn @ `818ca30` / Issue #3 **superseded** sau ADR 0001. Live agent-top self-check: Issue **#71** ↔ session `3a8a1086-…` (DB `/tmp/orca-telemetry-agent-top-home`). Cần **independent re-review** trên exact SHA docs — không tự gọi MVP hoàn tất.
+- Chưa publish npm công khai.
 
 ## Tài liệu
 
-- [Đặc tả MVP](docs/MVP-SPEC.md) · [V1.1 hierarchy (#44)](docs/V1-HIERARCHY-SPEC.md) · [Kiến trúc](docs/ARCHITECTURE.md) · [Báo cáo validation](docs/mvp-validation.md)
+- [Đặc tả MVP](docs/MVP-SPEC.md) · [V1.1 hierarchy (#44)](docs/V1-HIERARCHY-SPEC.md) · [Kiến trúc](docs/ARCHITECTURE.md) · [Validation self-check](docs/mvp-validation.md) · [DoD self-check](docs/mvp-dod-self-check.md) · [ADR 0001 agent-top](docs/adr/0001-agent-top-usage-sot.md)
 - Contributor agents: [AGENTS.md](AGENTS.md)
 
 ## Giấy phép
