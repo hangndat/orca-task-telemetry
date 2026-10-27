@@ -4,8 +4,8 @@ Nguồn live (chỉ lệnh read-only), thu **2026-10-23** (UTC+8).
 
 | Thuộc tính | Giá trị |
 | --- | --- |
-| Orca CLI | `/Applications/Orca.app/Contents/Resources/bin/orca` **1.4.237** |
-| Runtime | `reachable: true`, `appVersion: 1.4.237` (xem `status-trimmed.json`) |
+| Orca CLI | `/Applications/Orca.app/Contents/Resources/bin/orca` **1.4.241** |
+| Runtime | `reachable: true`, `appVersion: 1.4.241` (xem `status-trimmed.json`) |
 | Run mẫu supervised | `run_1a060327fe49` |
 | Dispatch settled mẫu | `ctx_005f2513ac06` / `task_6be81dd44e83` |
 | Worktree thủ công mẫu | `github:<OTHER_OWNER>/<OTHER_REPO>` (`00000000-0000-4000-8000-0000000000aa::<HOME>/<OTHER_REPO_PATH>`) |

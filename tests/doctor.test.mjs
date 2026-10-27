@@ -19,7 +19,7 @@ test('T32: doctor pass when core checks healthy', async () => {
       authenticated: true,
       scopes: ['read:project', 'repo'],
     }),
-    orcaVersion: async () => '1.4.237',
+    orcaVersion: async () => '1.4.241',
     agentTopVersion: async () => '0.27.1',
     readDbUserVersion: () => SUPPORTED_SCHEMA_VERSION,
   });

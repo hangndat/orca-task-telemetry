@@ -7,7 +7,7 @@ import {
 } from '../errors.js';
 
 /** Only build with live evidence in docs/discovery.md (not a semver range). */
-export const ORCA_VERIFIED_VERSION = '1.4.237';
+export const ORCA_VERIFIED_VERSION = '1.4.241';
 export const DEFAULT_ORCA_TIMEOUT_MS = 60_000;
 export const DEFAULT_ORCA_MAX_BUFFER = 10 * 1024 * 1024;
 

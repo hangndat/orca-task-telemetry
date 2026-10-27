@@ -15,7 +15,7 @@ Trạng thái: **MVP chức năng P0 đã triển khai** (`doctor`, `projects`, 
 | Node.js | **≥ 24.0.0** (bắt buộc) | CLI thoát mã 3 khi phiên bản không đạt (`checkNodeVersion`). Trên Node &lt; 24, import `node:sqlite` cũng thất bại trước khi chạy lệnh. |
 | pnpm | 10.x (khuyến nghị) | `packageManager` trong `package.json`. |
 | GitHub CLI | `gh` đã đăng nhập | Scope **`read:project`** cần cho Project/items; `doctor` cảnh báo nếu thiếu (`gh auth refresh -s read:project`). |
-| Orca | CLI đọc-only | `doctor` kiểm tra `--version` (ví dụ 1.4.237 trên môi trường thử). |
+| Orca | CLI đọc-only | `doctor` kiểm tra `--version` (ví dụ 1.4.241 trên môi trường thử). |
 | agent-top | **0.27.1** (tùy chọn) | `collect` đọc `sql --json` trên view `counted_sessions` (ADR 0001). Pin binary qua `ORCA_TELEMETRY_AGENT_TOP`. Không gọi `sync`. Không có binary → collect **partial** (exit 5). |
 
 Chi tiết lệnh và schema: [docs/discovery.md](docs/discovery.md).

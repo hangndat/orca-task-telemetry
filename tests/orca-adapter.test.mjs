@@ -65,8 +65,8 @@ test('stub invocation log records argv for allowlisted call', async () => {
   delete process.env.ORCA_STUB_STDOUT;
 });
 
-test('only verified Orca build 1.4.237 is accepted', () => {
-  assert.equal(parseOrcaVersionText('1.4.237\n'), '1.4.237');
+test('only verified Orca build 1.4.241 is accepted', () => {
+  assert.equal(parseOrcaVersionText('1.4.241\n'), '1.4.241');
   assert.throws(
     () => assertSupportedOrcaVersion('1.3.0'),
     (err) => err.code === 'orca_version_unsupported',
@@ -79,7 +79,7 @@ test('only verified Orca build 1.4.237 is accepted', () => {
     () => assertSupportedOrcaVersion('1.4.238'),
     (err) => err.code === 'orca_version_unsupported',
   );
-  assert.doesNotThrow(() => assertSupportedOrcaVersion('1.4.237'));
+  assert.doesNotThrow(() => assertSupportedOrcaVersion('1.4.241'));
 });
 
 test('required selectors validated before spawn', () => {
@@ -139,9 +139,9 @@ test('stub stderr secrets are not exposed on result', async () => {
 });
 
 test('readOrcaVersion uses stub stdout', async () => {
-  process.env.ORCA_STUB_STDOUT = '1.4.237\n';
+  process.env.ORCA_STUB_STDOUT = '1.4.241\n';
   const version = await readOrcaVersion({ orcaPath: stub });
-  assert.equal(version, '1.4.237');
+  assert.equal(version, '1.4.241');
   delete process.env.ORCA_STUB_STDOUT;
 });
 
@@ -173,7 +173,7 @@ test('optional live orca --version when binary available', async () => {
   const binary = process.env.ORCA_TELEMETRY_ORCA ?? 'orca';
   try {
     const version = await readOrcaVersion({ orcaPath: binary, timeoutMs: 10_000 });
-    assert.equal(version, '1.4.237');
+    assert.equal(version, '1.4.241');
   } catch (err) {
     if (err.code !== 'orca_runtime_unavailable' && err.code !== 'orca_version_unsupported') {
       throw err;

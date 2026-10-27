@@ -9,7 +9,7 @@ function respond(stdout, code = 0) {
 }
 
 if (argv.length === 1 && argv[0] === '--version') {
-  respond(`${process.env.ORCA_STUB_VERSION ?? '1.4.237'}\n`);
+  respond(`${process.env.ORCA_STUB_VERSION ?? '1.4.241'}\n`);
 } else if (key === 'status --json') {
   const path = process.env.ORCA_STUB_STATUS_PATH;
   if (!path) {

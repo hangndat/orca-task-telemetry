@@ -404,7 +404,7 @@ Trong cùng query `ProjectItems`, field `rateLimit` trên response GraphQL (khô
 | Mục | Giá trị |
 | --- | --- |
 | Binary | `/Applications/Orca.app/Contents/Resources/bin/orca` |
-| Phiên bản live | **1.4.237** (`orca --version`, `status --json` → `runtime.appVersion`) |
+| Phiên bản live | **1.4.241** (`orca --version`, `status --json` → `runtime.appVersion`; pin 2026-10-27, thay 1.4.237) |
 | Mục tiêu MVP | Metadata **chỉ-đọc** cho Run / Task / Dispatch / supervised worker / worktree / reference |
 
 Fixture: `tests/fixtures/orca/` (README + JSON đã redact).
