@@ -34,6 +34,8 @@ export {
   insertRoleLinkAudit,
   insertCollectionAttempt,
   finishAgentTopCollectionAttempt,
+  finishOrcaCollectionAttempt,
+  persistOrcaRunProvenance,
   verifierIdentityHash,
   VERIFIER_PATTERN,
   type ManualEvidenceNote,

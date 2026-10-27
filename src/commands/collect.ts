@@ -22,10 +22,16 @@ import { readProjectItems } from '../github/items.js';
 import { openTelemetryDatabase } from '../db/index.js';
 import {
   finishAgentTopCollectionAttempt,
+  finishOrcaCollectionAttempt,
   insertCollectionAttempt,
+  persistOrcaRunProvenance,
   type CollectionErrorCode,
 } from '../db/run-provenance.js';
 import { collectOrcaRunProvenance } from '../orca/run-provenance.js';
+import {
+  assertLocalHostListRow,
+  resolveLocalSourceHostIdentity,
+} from '../orca/source-host.js';
 import {
   countRows,
   importUsageSnapshots,
@@ -52,6 +58,8 @@ export type CollectSourceResult = {
   source: CollectSourceName;
   status: 'ok' | 'error' | 'partial';
   counts?: Record<string, number>;
+  /** Present when an Orca Run was persisted under a verified storage host id. */
+  hostId?: string;
   error?: { code: string; message: string };
 };
 
@@ -304,9 +312,14 @@ async function collectAgentTop(
   };
 }
 
-async function collectOrcaRun(runId: string): Promise<CollectSourceResult> {
-  const sourceHostId = 'local';
+async function collectOrcaRun(
+  db: import('node:sqlite').DatabaseSync,
+  runId: string,
+  now: () => string,
+): Promise<CollectSourceResult> {
   let counters = { runs: 0, tasks: 0, dispatches: 0, workers: 0, pages: 0 };
+  let attemptId: number | bigint | null = null;
+  let storageHostId: string | null = null;
   try {
     const version = await readOrcaVersion();
     const statusResult = await invokeOrcaReadOnly(['status', '--json']);
@@ -318,14 +331,49 @@ async function collectOrcaRun(runId: string): Promise<CollectSourceResult> {
       throw new Error('Orca status returned invalid JSON.');
     }
     assertRuntimeReachable(statusJson);
-    const root = statusJson as Record<string, unknown>;
-    const source = root['result'] as Record<string, unknown>;
-    const target = source['target'] as Record<string, unknown> | null;
-    if (target?.['kind'] !== 'local') {
-      throw new Error('Orca source host is not verified as local.');
+    const identity = resolveLocalSourceHostIdentity(statusJson);
+    if ('code' in identity) {
+      insertCollectionAttempt(db, {
+        source: 'orca', runId, startedAt: now(), completedAt: now(),
+        status: 'partial', errorCode: 'source_error',
+      });
+      return {
+        source: 'orca', status: 'partial', counts: counters,
+        error: { code: identity.code, message: identity.message },
+      };
     }
+    storageHostId = identity.storageHostId;
+    attemptId = insertCollectionAttempt(db, {
+      source: 'orca', hostId: storageHostId, runId,
+      startedAt: now(), status: 'running',
+    });
+
+    const hostListResult = await invokeOrcaReadOnly(['host', 'list', '--json']);
+    if (hostListResult.exitCode !== 0) {
+      throw new Error('Orca host list failed.');
+    }
+    let hostListJson: unknown;
+    try {
+      hostListJson = JSON.parse(hostListResult.stdout) as unknown;
+    } catch {
+      throw new Error('Orca host list returned invalid JSON.');
+    }
+    const hostListFailure = assertLocalHostListRow(hostListJson);
+    if (hostListFailure) {
+      finishOrcaCollectionAttempt(db, {
+        attemptId, completedAt: now(), status: 'partial', errorCode: 'source_error',
+        counters,
+      });
+      return {
+        source: 'orca', status: 'partial', counts: counters,
+        error: { code: hostListFailure.code, message: hostListFailure.message },
+      };
+    }
+
     const provenance = await collectOrcaRunProvenance(runId, {
-      sourceHostId, readVersion: async () => version,
+      sourceHostId: identity.orcaHostLabel,
+      expectedRuntimeId: identity.runtimeId,
+      readVersion: async () => version,
     });
     counters = {
       runs: provenance.complete ? 1 : 0,
@@ -338,19 +386,52 @@ async function collectOrcaRun(runId: string): Promise<CollectSourceResult> {
       const errorCode = provenance.errors.some((e) => e.code.endsWith('_limit') ||
         e.code === 'unprovable_completeness' || e.code === 'cursor_loop')
         ? 'collection_limit' : 'source_error';
+      finishOrcaCollectionAttempt(db, {
+        attemptId, completedAt: now(), status: 'partial', errorCode, counters,
+      });
       return {
         source: 'orca', status: 'partial', counts: counters,
         error: { code: errorCode, message: 'Orca Run provenance is incomplete.' },
       };
     }
+
+    persistOrcaRunProvenance(db, {
+      hostId: storageHostId,
+      runId,
+      observedAt: now(),
+      sourceVersion: version,
+      tasks: provenance.tasks,
+      dispatches: provenance.dispatches,
+    });
+    finishOrcaCollectionAttempt(db, {
+      attemptId, completedAt: now(), status: 'success', counters,
+    });
     return {
-      source: 'orca', status: 'partial', counts: counters,
-      error: {
-        code: 'orca_source_host_unverified',
-        message: 'Orca local host has no verified durable source identity.',
-      },
+      source: 'orca',
+      status: 'ok',
+      hostId: storageHostId,
+      counts: counters,
     };
   } catch (err) {
+    if (attemptId !== null) {
+      try {
+        finishOrcaCollectionAttempt(db, {
+          attemptId, completedAt: now(), status: 'partial',
+          errorCode: 'source_error', counters,
+        });
+      } catch {
+        // Attempt may already be finished; surface the original error.
+      }
+    } else if (storageHostId === null) {
+      try {
+        insertCollectionAttempt(db, {
+          source: 'orca', runId, startedAt: now(), completedAt: now(),
+          status: 'partial', errorCode: 'source_error',
+        });
+      } catch {
+        // Best-effort journal.
+      }
+    }
     return { source: 'orca', status: 'partial', error: mapSourceError(err), counts: counters };
   }
 }
@@ -396,7 +477,7 @@ export async function runCollectCommand(
     sources.push(await collectGithub(profile.project.id, handle.db));
     sources.push(options.runId === undefined
       ? await collectOrca(handle.db)
-      : await collectOrcaRun(options.runId));
+      : await collectOrcaRun(handle.db, options.runId, now));
     sources.push(await collectAgentTop(handle.db, observedAt, now));
 
     const exitCode = computeExitCode(sources);

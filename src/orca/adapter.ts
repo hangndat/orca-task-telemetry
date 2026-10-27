@@ -40,6 +40,7 @@ const ALLOWED_COMMAND_KEYS = new Set([
   'version',
   'status',
   'agent-context',
+  'host:list',
   'worktree:list',
   'worktree:show',
   'worktree:current',

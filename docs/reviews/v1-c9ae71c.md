@@ -52,6 +52,12 @@
 | **F01 / contract+code** | **blocker; Có** — không có durable endpoint identity nên V1.4 và live input V1.5–V1.6 không thể acceptance complete | V1.4 AC3/gate; `docs/V1-COORDINATOR-OVERHEAD-SPEC.md:3-5,111,138`; `src/commands/collect.ts:308,327,349`; `tests/collect-run.test.mjs` xác nhận `orca_source_host_unverified` và 0 rows ở `orca_runs`, `orca_tasks`, `orca_dispatches`, `scoped_executions` | Giữ stable ID từ review/spec trước. Cần source identity đáp ứng AC3, fixture collision/clone, persist+journal đúng scope, live Run evidence và independent re-review exact SHA. **Mở tại `c9ae71c`.** |
 | **F02 / evidence+security** | **blocker; Có** — V1.9 ghi `session_links`; thiếu test khiến opt-in/ambiguity/exact-selector/idempotency chưa có regression gate | V1.9 command contract trong `docs/V1-DIAGNOSTICS-SPEC.md`; `src/commands/suggest-links.ts`; `tests/v1-diagnostics.test.mjs` chỉ test suggestion generation; search tests không có `suggest-links apply`, `suggest_apply_requires_yes` hoặc `suggest_apply_not_ready` | Thêm CLI/integration tests chứng minh: thiếu `--yes` không ghi; ambiguous/not-ready bị từ chối; exact ready pair mới ghi; rerun idempotent; không mutation GitHub. Re-run full suite và independent revalidate exact SHA. **Mới, bỏ sót test tại `c9ae71c`.** |
 
+## Author self-check (không phải independent PASS)
+
+- **Fix SHA:** _(điền sau commit)_ — author self-check only; không tuyên bố DoD/V1 acceptance PASS.
+- **F01 addressed (code/fixture):** `collect --run` resolve endpoint identity từ verified CLI JSON (`status.runtime.runtimeId` + `_meta.runtimeId`, xác nhận `host list` local `id=local`), lưu `host_id=orca:runtime:v1:<runtimeId>`, persist `orca_runs`/`orca_tasks`/`orca_dispatches`/`scoped_executions` + Orca attempt journal khi provenance complete; fixture collision hai runtimeId không merge. **Residual AC3:** runtimeId đổi sau restart Orca → namespace mới; chưa có live Run evidence / independent re-review.
+- **F02 addressed (tests + apply idempotency):** `tests/suggest-links-apply.test.mjs` — thiếu `--yes` không ghi; ambiguous/wrong pair → `suggest_apply_not_ready`; ready pair ghi `session_links`; rerun `unchanged`; chỉ dùng gh stub read-only. Apply cho phép idempotent khi pair đã link đúng.
+
 ## Limitations và bước tiếp
 
 - Không chạy live `writeback --apply`: Project #4 không có field NUMBER thử được dành riêng; contract cấm dùng field roadmap `Wave`.

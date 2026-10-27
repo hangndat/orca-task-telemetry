@@ -5,6 +5,7 @@ import {
   type OrcaAdapterOptions,
   type OrcaInvocationResult,
 } from './adapter.js';
+import { runtimeIdFromStdout } from './source-host.js';
 
 /** This boundary contains source metadata only. It never carries CLI receipts, specs or previews. */
 export type OrcaRunProvenance = {
@@ -34,8 +35,16 @@ export type OrcaRunProvenance = {
 };
 
 export type RunProvenanceOptions = OrcaAdapterOptions & {
-  /** Explicit host selected by the caller from the Orca endpoint being queried. */
+  /**
+   * Orca host label matched against Dispatch/worker JSON (typically `local`).
+   * This is not necessarily the SQLite storage `host_id`.
+   */
   sourceHostId: string;
+  /**
+   * When set, every successful CLI envelope must carry the same `_meta.runtimeId`
+   * so the collect stays pinned to one endpoint.
+   */
+  expectedRuntimeId?: string;
   /** Test seam. Production uses the existing read-only, version-checked adapter. */
   invoke?: (argv: string[]) => Promise<OrcaInvocationResult>;
   readVersion?: () => Promise<string>;
@@ -109,6 +118,13 @@ export async function collectOrcaRunProvenance(
       if (invocation.exitCode !== 0) {
         fail(source, 'source_failure');
         return null;
+      }
+      if (options.expectedRuntimeId) {
+        const runtimeId = runtimeIdFromStdout(invocation.stdout);
+        if (runtimeId !== options.expectedRuntimeId) {
+          fail(source, 'endpoint_changed');
+          return null;
+        }
       }
       const result = receipt(invocation.stdout);
       if (!result) fail(source, 'invalid_receipt');

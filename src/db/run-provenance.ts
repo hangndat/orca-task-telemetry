@@ -179,6 +179,108 @@ export function finishAgentTopCollectionAttempt(db: DatabaseSync, input: {
   }
 }
 
+export function finishOrcaCollectionAttempt(db: DatabaseSync, input: {
+  attemptId: number | bigint;
+  completedAt: string;
+  status: 'success' | 'failed' | 'partial';
+  errorCode?: CollectionErrorCode | null;
+  counters?: Partial<Record<CollectionCounter, number>> | null;
+}): void {
+  const code = input.errorCode ?? null;
+  if (code !== null && !ERROR_CODES.includes(code)) {
+    throw new TypeError('Collection error code is not allowlisted.');
+  }
+  const countersJson = serializeCounters(input.counters);
+  const result = db.prepare(`UPDATE collection_attempts
+    SET completed_at = ?, status = ?, error_code = ?, counters_json = ?
+    WHERE attempt_id = ? AND source = 'orca' AND status = 'running'`).run(
+    input.completedAt, input.status, code, countersJson, input.attemptId,
+  );
+  if (result.changes !== 1) {
+    throw new Error('orca collection attempt is not running.');
+  }
+}
+
+export type PersistOrcaRunProvenanceInput = {
+  hostId: string;
+  runId: string;
+  observedAt: string;
+  sourceVersion: string;
+  tasks: Array<{ taskId: string; parentTaskId: string | null; status: string | null }>;
+  dispatches: Array<{
+    dispatchId: string;
+    taskId: string;
+    creatorOrcaSessionId: string | null;
+    creatorDispatchId: string | null;
+    retryOfDispatchId: string | null;
+    assigneeOrcaSessionId: string | null;
+    status: string | null;
+  }>;
+};
+
+/**
+ * Persist a complete Run provenance snapshot under an already-verified storage host id.
+ * Idempotent on re-collect of the same `(host_id, run_id)` tuple.
+ */
+export function persistOrcaRunProvenance(
+  db: DatabaseSync,
+  input: PersistOrcaRunProvenanceInput,
+): void {
+  if (!input.hostId || !input.runId || !input.observedAt || !input.sourceVersion) {
+    throw new TypeError('persistOrcaRunProvenance requires hostId, runId, observedAt, sourceVersion.');
+  }
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare(`INSERT INTO orca_runs (host_id, run_id, observed_at, source_version)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(host_id, run_id) DO UPDATE SET
+        observed_at = excluded.observed_at,
+        source_version = excluded.source_version`).run(
+      input.hostId, input.runId, input.observedAt, input.sourceVersion,
+    );
+    const insertTask = db.prepare(`INSERT INTO orca_tasks
+      (host_id, run_id, task_id, parent_task_id)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(host_id, run_id, task_id) DO UPDATE SET
+        parent_task_id = excluded.parent_task_id`);
+    for (const task of input.tasks) {
+      insertTask.run(
+        input.hostId, input.runId, task.taskId, task.parentTaskId,
+      );
+    }
+    const insertDispatch = db.prepare(`INSERT INTO orca_dispatches (
+        host_id, run_id, task_id, dispatch_id,
+        creator_orca_session_id, creator_dispatch_id, retry_of_dispatch_id,
+        assignee_orca_session_id, depth
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      ON CONFLICT(host_id, run_id, dispatch_id) DO UPDATE SET
+        task_id = excluded.task_id,
+        creator_orca_session_id = excluded.creator_orca_session_id,
+        creator_dispatch_id = excluded.creator_dispatch_id,
+        retry_of_dispatch_id = excluded.retry_of_dispatch_id,
+        assignee_orca_session_id = excluded.assignee_orca_session_id`);
+    for (const dispatch of input.dispatches) {
+      insertDispatch.run(
+        input.hostId, input.runId, dispatch.taskId, dispatch.dispatchId,
+        dispatch.creatorOrcaSessionId, dispatch.creatorDispatchId,
+        dispatch.retryOfDispatchId, dispatch.assigneeOrcaSessionId,
+      );
+      const key = scopedExecutionKey(input.hostId, input.runId, dispatch.dispatchId);
+      db.prepare(`INSERT INTO scoped_executions
+        (execution_key, host_id, run_id, task_id, dispatch_id, raw_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(execution_key) DO NOTHING`).run(
+        key, input.hostId, input.runId, dispatch.taskId,
+        dispatch.dispatchId, dispatch.dispatchId,
+      );
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    try { db.exec('ROLLBACK'); } catch { /* ignore */ }
+    throw err;
+  }
+}
+
 export function verifierIdentityHash(verifier: string): string {
   return verifierHash(verifier);
 }

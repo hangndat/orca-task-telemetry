@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import { suggestSessionLinks } from '../attribution/suggest.js';
 import { linkSessionToIssue } from '../attribution/link.js';
+import { sessionKey } from '../contracts.js';
 import { loadConfig } from '../config.js';
 import { importGitHubRecords } from '../db/repository.js';
 import { openTelemetryDatabase } from '../db/index.js';
@@ -129,6 +130,35 @@ async function runSuggestLinksApply(
     gitRoot: resolved.gitRoot,
   });
   try {
+    importGitHubRecords(handle.db, {
+      issues: [githubIssue],
+      memberships: [],
+    });
+
+    const key = sessionKey(values.provider, 'agent-top', values.session);
+    const existing = handle.db
+      .prepare('SELECT issue_node_id FROM session_links WHERE session_key = ?')
+      .get(key) as { issue_node_id: string } | undefined;
+    if (existing?.issue_node_id === githubIssue.issueNodeId) {
+      const data = {
+        kind: 'suggest_links_apply',
+        outcome: 'unchanged' as const,
+        issueNodeId: githubIssue.issueNodeId,
+        provider: values.provider,
+        session: values.session,
+        linked: true,
+      };
+      if (options.json) return { kind: 'ok', data };
+      return {
+        kind: 'text',
+        write: () => {
+          process.stdout.write(
+            `Linked unchanged: ${values.provider} session ${sanitizeDisplayText(values.session!)} → ${githubIssue.repository.nameWithOwner}#${githubIssue.number}\n`,
+          );
+        },
+      };
+    }
+
     const suggestions = suggestSessionLinks(handle.db, profile.project.id);
     const ready = suggestions.find(
       (s) =>
@@ -147,10 +177,6 @@ async function runSuggestLinksApply(
       });
     }
 
-    importGitHubRecords(handle.db, {
-      issues: [githubIssue],
-      memberships: [],
-    });
     const result = linkSessionToIssue(handle.db, {
       provider: values.provider,
       source: 'agent-top',
