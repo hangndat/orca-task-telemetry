@@ -37,6 +37,7 @@ Xây dựng `orca-task-telemetry` thành một CLI Node.js/TypeScript có thể 
 - Review/fix đọc `.cursor/rules/orca-review-convergence.mdc`: stable finding IDs, tối đa hai lượt fix tự động xuyên session/SHA; checkpoint/chẩn đoán khi không tiến triển, không lặp vô hạn. Không dùng known gap bỏ gate bắt buộc.
 - Git/PR theo `.cursor/rules/git-workflow.mdc`: conventional commit sau validate; remote push/PR/merge cần nằm trong quyền task. GitHub Project chỉ đọc trong MVP; không tự cập nhật fields/status.
 - Code complete khác acceptance complete và MVP complete. Worker completion không thay review; phân biệt local/CI/fixture/live evidence.
+- Với mỗi milestone: code đủ các feature thuộc milestone đến feature-complete, rồi chạy independent review + DoD làm closing gate; chỉ bắt đầu milestone kế tiếp sau khi gate đóng bằng PASS (hoặc FAIL và dừng để xử lý).
 - Đây là contributor setup của chính repo này; không implement tính năng cài/sửa agent config trong target repositories (vẫn thuộc BACKLOG).
 
 ## Thứ tự triển khai
